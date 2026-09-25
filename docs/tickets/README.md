@@ -36,3 +36,4 @@ You are implementing one ticket of the kumo project.
 | T15 | Identity (kumo + model), short tone, tools (web fetch, ask user, subagents), web search options | T13 |
 | T16 | Modes: Plan/Build (Tab) × Ask/Auto/Full access (Shift+Tab), sandbox off, SAME tools in both modes | T15 |
 | T17 | Cache Hunter test: system+tools byte-identical, messages append-only | T16 |
+| **T18** | **HOTFIX: gate bypasses (12/13) + lockfile leak** | T17 |

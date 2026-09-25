@@ -62,5 +62,11 @@ describe("profile composition (T15)", () => {
       expect(out).toContain("dsh-subagent");
       // Search wiring (T15.3)
       expect(out).toContain("searchProvider");
+      // T26: kumo owns USER skills — skill-filesystem's agentsHome is repointed
+      // into $DSH_HOME (a dir kumo never fills), so ~/.agents/skills is no
+      // longer read implicitly.
+      expect(out).toMatch(
+        /id: skill-filesystem[\s\S]{0,120}agentsHome: !!js dshHomePath\('agents'\)/,
+      );
     }, 180_000);
 });

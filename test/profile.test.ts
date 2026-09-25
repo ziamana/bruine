@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path, { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -10,6 +10,7 @@ describe("profilePaths (T14.4)", () => {
     expect(p.dir).toBe("C:\\Users\\x\\profiles\\kumo");
     expect(p.packageJson).toBe("C:\\Users\\x\\profiles\\kumo\\package.json");
     expect(p.patchYml).toBe("C:\\Users\\x\\profiles\\kumo\\cordis.patch.yml");
+    expect(p.agentsDir).toBe("C:\\Users\\x\\agents");
   });
 
   test("posix home uses slash separators", () => {
@@ -57,6 +58,19 @@ describe("ensureProfile", () => {
 
     const patch = await readFile(patchPath, "utf8");
     expect(patch).toBe("# my custom overrides\n- foo\n");
+  });
+
+  test("T26: the empty $DSH_HOME/agents dir exists, also on upgrade", async () => {
+    const home = await mkdtemp(join(tmpdir(), "kumo-profile-"));
+    await ensureProfile(home);
+    expect((await stat(join(home, "agents"))).isDirectory()).toBe(true);
+
+    // An existing profile (created before T26): the next run must still get
+    // the dir the bundle patch points agentsHome at.
+    await rm(join(home, "agents"), { recursive: true });
+    const again = await ensureProfile(home);
+    expect(again.created).toBe(false);
+    expect((await stat(join(home, "agents"))).isDirectory()).toBe(true);
   });
 });
 

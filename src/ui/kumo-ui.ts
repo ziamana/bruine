@@ -22,6 +22,13 @@ import { CollapsedToolsComponent, groupRuns, turnSummary, type GroupedTool } fro
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import {
+  noticeForStartup,
+  readKumoJsonDoc,
+  readUpdateCache,
+  resolveDshHome,
+  updateCheckEnabled,
+} from "../update.js";
 
 export interface KumoUiHandlers {
   /** Enter on the editor (or the equivalent submit). */
@@ -145,6 +152,7 @@ export class KumoUi {
   #animation: ReturnType<typeof setInterval> | undefined;
   #closed = false;
   #noticeTimer: ReturnType<typeof setTimeout> | undefined;
+  #persistentNotice: Component | undefined;
   #confirming = false;
   #animTimer: ReturnType<typeof setInterval> | undefined;
   #cachedHost: string | undefined;
@@ -166,6 +174,11 @@ export class KumoUi {
     this.editor = new PlainGlyphEditor(this.tui, editorTheme);
     this.editor.onSubmit = (text) => {
       this.showWorking();
+      // T30: the update notice stays until the first prompt.
+      if (this.#persistentNotice !== undefined) {
+        this.noticeBox.removeChild(this.#persistentNotice);
+        this.#persistentNotice = undefined;
+      }
       handlers.onSubmit(text);
     };
     this.footer = new FooterComponent(icons);
@@ -194,6 +207,11 @@ export class KumoUi {
     this.tui.addChild(this.noticeBox);
     this.tui.addChild(this.editor);
     this.tui.addChild(this.footer);
+
+    // T30: the launcher ran the 24 h registry check in the background; the
+    // session only reads its cached result — never any network here, never
+    // any delay.
+    void this.#maybeUpdateNotice(version);
 
     this.tui.addInputListener((data: string) => {
       if (matchesKey(data, "ctrl+o")) {
@@ -460,8 +478,38 @@ export class KumoUi {
       clearTimeout(this.#noticeTimer);
       this.#noticeTimer = undefined;
     }
+    this.#persistentNotice = undefined;
     for (const child of [...this.noticeBox.children]) {
       this.noticeBox.removeChild(child);
+    }
+  }
+
+  /** A dim notice that stays (T30 update line) until the first prompt. */
+  showPersistentNotice(text: string): void {
+    if (this.#closed) return;
+    this.clearNoticeBox();
+    const line = new Text(ansi.dim(text), 1, 0);
+    this.#persistentNotice = line;
+    this.noticeBox.addChild(line);
+    this.requestRender();
+  }
+
+  /**
+   * T30: read the cached update check (written by the launcher's background
+   * check) and show the one-line notice when a newer version is known.
+   * Gated by the same off switches; any failure stays silent.
+   */
+  async #maybeUpdateNotice(version: string): Promise<void> {
+    try {
+      const home = resolveDshHome();
+      const doc = await readKumoJsonDoc(home);
+      // The TUI shell only exists on an interactive terminal, so the TTY
+      // gate was already passed by the launcher.
+      if (!updateCheckEnabled({ doc, isTTY: true })) return;
+      const text = noticeForStartup({ cache: await readUpdateCache(home), current: version });
+      if (text !== undefined) this.showPersistentNotice(text);
+    } catch {
+      // an update notice must never break the session
     }
   }
 

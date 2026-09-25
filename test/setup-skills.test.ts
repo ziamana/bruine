@@ -44,23 +44,44 @@ describe("syncSkills (T21.6)", () => {
     const bundled = await fakeBundled();
     const home = await mkdtemp(join(tmpdir(), "kumo-home-"));
     const dir = join(home, "skills");
+    // an empty user home: only the bundled roots exist here (T26 scan is a no-op)
+    const userHome = join(home, "userhome");
 
-    const r1 = await syncSkills({ homeSkillsDir: dir, bundledRoot: bundled, chosen: ["alpha"] });
-    expect(r1).toEqual({ installed: ["alpha"], removed: [] });
+    const r1 = await syncSkills({
+      homeSkillsDir: dir,
+      bundledRoot: bundled,
+      chosen: ["alpha"],
+      home: userHome,
+    });
+    expect(r1).toEqual({ installed: ["alpha"], removed: [], copied: [] });
     expect(existsSync(join(dir, "alpha", "SKILL.md"))).toBe(true);
     const manifest = JSON.parse(await readFile(join(dir, ".kumo-installed.json"), "utf8"));
-    expect(manifest).toEqual({ alpha: ["SKILL.md"] });
+    // T26: entries carry kind + source, not the T21 file list.
+    expect(manifest).toEqual({
+      alpha: { name: "alpha", kind: "shipped", source: join(bundled, "alpha") },
+    });
 
     // a hand-made skill kumo must never remove
     await mkdir(join(dir, "mine"), { recursive: true });
     await writeFile(join(dir, "mine", "SKILL.md"), "mine\n");
 
-    const r2 = await syncSkills({ homeSkillsDir: dir, bundledRoot: bundled, chosen: ["alpha", "beta"] });
-    expect(r2.installed).toEqual(["alpha", "beta"]);
+    const r2 = await syncSkills({
+      homeSkillsDir: dir,
+      bundledRoot: bundled,
+      chosen: ["alpha", "beta"],
+      home: userHome,
+    });
+    // T26: an identical installed entry is left in place (protects user edits)
+    expect(r2.installed).toEqual(["beta"]);
     expect(existsSync(join(dir, "beta", "SKILL.md"))).toBe(true);
 
-    const r3 = await syncSkills({ homeSkillsDir: dir, bundledRoot: bundled, chosen: ["beta"] });
-    expect(r3).toEqual({ installed: ["beta"], removed: ["alpha"] });
+    const r3 = await syncSkills({
+      homeSkillsDir: dir,
+      bundledRoot: bundled,
+      chosen: ["beta"],
+      home: userHome,
+    });
+    expect(r3).toEqual({ installed: [], removed: ["alpha"], copied: [] });
     expect(existsSync(join(dir, "alpha"))).toBe(false);
     expect(existsSync(join(dir, "beta", "SKILL.md"))).toBe(true);
     expect(existsSync(join(dir, "mine", "SKILL.md"))).toBe(true); // untouched

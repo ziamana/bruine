@@ -21,6 +21,16 @@
     searchProvider: kumo
     fetchProvider: http
 
+# T26: kumo owns the USER skills root. Setup links/copies the chosen skills
+# into $DSH_HOME/skills (dsh's dshHome root, unchanged), so repoint
+# agentsHome at a kumo-owned empty directory: `~/.agents/skills` is no longer
+# read implicitly. Project skills (`.agents/skills`, `.dsh/skills` in the
+# workspace) keep working; `dshHomePath` resolves $DSH_HOME at boot, exactly
+# like the dsh-base rows for sessions/storages.
+- id: skill-filesystem
+  config:
+    agentsHome: !!js dshHomePath('agents')
+
 # T16: safety comes from kumo's own gate, not dsh's sandbox — commands really
 # run on the machine. The sandbox is left fully open; kumo's pre-tool gate is
 # the only permission layer, so dsh escalation never fires.

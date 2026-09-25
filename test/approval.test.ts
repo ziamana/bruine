@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { apply, buildQuestion, parseAnswer } from "../src/plugins/approval.js";
+import { approvalTitle, apply, buildQuestion, parseAnswer } from "../src/plugins/approval.js";
 import { createUi } from "../src/plugins/render.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
 import { fakeCtx, FakeScreen, strip } from "./fakes.js";
@@ -48,7 +48,7 @@ describe("approval plugin apply", () => {
     };
     const fake = fakeCtx();
     apply(fake.ctx as any);
-    for (const { cb } of fake.injected) cb({ kumoRepl: repl, kumoRender: ui });
+    for (const { cb } of fake.injected) cb({ kumoRepl: repl, kumoRender: { screen: ui } });
     const request = (req: Record<string, unknown>, next = async () => "unavailable" as const) =>
       fake.emit("approval/request", { agent, toolName: "bash", ...req }, next) as Promise<string>;
     return { screen, ui, agent, questions, request, nextSpy: async () => "unavailable" as const };
@@ -90,5 +90,58 @@ describe("approval plugin apply", () => {
     const { request } = setup("y");
     const outcome = await request({ signal: { aborted: true } });
     expect(outcome).toBe("cancelled");
+  });
+
+  // T13d — TUI mode: approval becomes a pi-tui select.
+
+  function setupTui(choice: number) {
+    const agent = { session: {} };
+    const asked: Array<{ title: string; labels: string[] }> = [];
+    const repl = {
+      agent,
+      ui: {
+        askChoice: async (title: string, items: Array<{ value: string; label: string }>) => {
+          asked.push({ title, labels: items.map((i) => i.label) });
+          return choice;
+        },
+      },
+    };
+    const describe = (id: string) =>
+      id === "t1" ? { tool: "bash", summary: "rm -rf dist" } : undefined;
+    const fake = fakeCtx();
+    apply(fake.ctx as any);
+    for (const { cb } of fake.injected) cb({ kumoRepl: repl, kumoRender: { describe } });
+    return {
+      asked,
+      request: (req: Record<string, unknown>) =>
+        fake.emit("approval/request", { agent, toolName: "bash", ...req }, async () => "unavailable") as Promise<string>,
+    };
+  }
+
+  test("TUI: Allow once selection allows and shows a two-item select", async () => {
+    const { asked, request } = setupTui(0);
+    expect(await request({ callId: "t1" })).toBe("allowed-once");
+    expect(asked).toHaveLength(1);
+    expect(asked[0].title).toBe("? Allow bash: rm -rf dist");
+    expect(asked[0].labels).toEqual(["Allow once", "Reject"]);
+  });
+
+  test("TUI: second option rejects", async () => {
+    const { request } = setupTui(1);
+    expect(await request({ callId: "t1" })).toBe("rejected");
+  });
+
+  test("TUI: cancel (-1) rejects", async () => {
+    const { request } = setupTui(-1);
+    expect(await request({})).toBe("rejected");
+  });
+});
+
+describe("approvalTitle", () => {
+  test("is the question without the y/N suffix", () => {
+    expect(
+      approvalTitle({ agent: {}, toolName: "bash", callId: "t1" }, () => ({ tool: "bash", summary: "ls" })),
+    ).toBe("? Allow bash: ls");
+    expect(approvalTitle({ agent: {}, toolName: "bash" })).toBe("? Allow bash");
   });
 });

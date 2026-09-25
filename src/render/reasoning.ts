@@ -15,6 +15,33 @@ export function sanitize(s: string): string {
   return s.replace(/[\x00-\x09\x0b-\x1f\x7f\x80-\x9f]/g, " ");
 }
 
+/**
+ * Shared reasoning-line state transition (T12 rules), used by both the
+ * screen renderer and the pi-tui component: every "\n" in the delta finishes
+ * a line; only the last segment continues the current one.
+ */
+export function splitReasoningSegments(
+  current: string,
+  lastFinished: string,
+  delta: string,
+): { current: string; lastFinished: string; finishedAny: boolean } {
+  const segments = delta.split("\n");
+  let finishedAny = false;
+  let finished = lastFinished;
+  for (const seg of segments.slice(0, -1)) {
+    const trimmed = sanitize(seg).replace(/^ +/, "");
+    if (trimmed !== "") {
+      finished = trimmed;
+      finishedAny = true;
+    }
+  }
+  return {
+    current: current + sanitize(segments[segments.length - 1]),
+    lastFinished: finished,
+    finishedAny,
+  };
+}
+
 const CLEAR = "\r\x1b[2K";
 const NOWRAP = "\x1b[?7l";
 const WRAP = "\x1b[?7h";
@@ -73,12 +100,9 @@ export class ReasoningLine {
 
     // Every "\n" in the delta finishes a line; only the last segment
     // continues the current one.
-    const segments = delta.split("\n");
-    for (const finished of segments.slice(0, -1)) {
-      const trimmed = sanitize(finished).replace(/^ +/, "");
-      if (trimmed !== "") this.#lastFinished = trimmed;
-    }
-    this.#current += sanitize(segments[segments.length - 1]);
+    const split = splitReasoningSegments(this.#current, this.#lastFinished, delta);
+    this.#current = split.current;
+    this.#lastFinished = split.lastFinished;
 
     // Right after a "\n" the next line has not started yet: keep showing the
     // finished line (no blank flicker) until new text arrives.

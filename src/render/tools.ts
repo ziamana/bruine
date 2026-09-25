@@ -25,6 +25,34 @@ function truncate(s: string, max: number): string {
   return `${s.slice(0, max - 1)}…`;
 }
 
+/**
+ * Header summary for streamed tool arguments: the first known key's value,
+ * compact JSON, or "…" while unparseable. Shared by the screen renderer and
+ * the pi-tui component.
+ */
+export function toolSummary(rawArgs: string, tool: string, columns: number): string {
+  const max = columns - tool.length - 6;
+  if (rawArgs === "") return "";
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawArgs);
+  } catch {
+    // Arguments are still streaming in.
+    return "…";
+  }
+
+  let text: string;
+  if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const obj = parsed as Record<string, unknown>;
+    const key = SUMMARY_KEYS.find((k) => k in obj);
+    text = key !== undefined ? String(obj[key]) : JSON.stringify(parsed);
+  } else {
+    text = JSON.stringify(parsed);
+  }
+  return truncate(text, max);
+}
+
 export class ToolCallView {
   #screen: Screen;
   #now: () => number;
@@ -83,26 +111,7 @@ export class ToolCallView {
   }
 
   #summary(call: Call): string {
-    const max = this.#screen.columns - call.tool.length - 6;
-    if (call.rawArgs === "") return "";
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(call.rawArgs);
-    } catch {
-      // Arguments are still streaming in.
-      return "…";
-    }
-
-    let text: string;
-    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const obj = parsed as Record<string, unknown>;
-      const key = SUMMARY_KEYS.find((k) => k in obj);
-      text = key !== undefined ? String(obj[key]) : JSON.stringify(parsed);
-    } else {
-      text = JSON.stringify(parsed);
-    }
-    return truncate(text, max);
+    return toolSummary(call.rawArgs, call.tool, this.#screen.columns);
   }
 
   #header(call: Call, summary: string): string {

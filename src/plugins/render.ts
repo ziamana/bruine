@@ -1,8 +1,14 @@
+import { Text } from "@earendil-works/pi-tui";
 import { ReasoningLine, dim, type Screen } from "../render/reasoning.js";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { TextStream } from "../render/text.js";
 import { ToolCallView } from "../render/tools.js";
-import type { DshContext } from "./ctx.js";
+import { ReasoningComponent } from "../ui/reasoning-component.js";
+import { ToolCallComponent } from "../ui/tool-call-component.js";
+import { AssistantTextComponent, userMessageComponent } from "../ui/assistant-text.js";
+import { TpsMeter } from "../ui/tps.js";
+import { ansi } from "../ui/theme.js";
+import type { DshContext, KumoRepl } from "./ctx.js";
 
 /** Stable Cordis plugin name. */
 export const name = "kumo-render";
@@ -10,13 +16,19 @@ export const name = "kumo-render";
 /** The service provided by this plugin and injected by kumo-approval. */
 export const KUMO_RENDER_SERVICE = "kumoRender";
 
-/** The drawing surface kumo owns for the whole session. */
-export interface KumoUi {
+/** The screen-drawing surface kumo owns for non-TTY (piped) output. */
+export interface ScreenUi {
   screen: Screen;
   icons: KumoIcons;
   reasoning: ReasoningLine;
   text: TextStream;
   tools: ToolCallView;
+}
+
+/** What kumo-approval can ask this service. */
+export interface RenderService {
+  screen?: ScreenUi;
+  describe?: (callId: string) => { tool: string; summary: string } | undefined;
 }
 
 /** Live view of the controlling terminal. */
@@ -29,7 +41,7 @@ export function stdoutScreen(): Screen {
   };
 }
 
-export function createUi(screen: Screen, icons: KumoIcons = kumoIcons()): KumoUi {
+export function createUi(screen: Screen, icons: KumoIcons = kumoIcons()): ScreenUi {
   return {
     screen,
     icons,
@@ -41,6 +53,7 @@ export function createUi(screen: Screen, icons: KumoIcons = kumoIcons()): KumoUi
 
 interface StreamFrame {
   type: "start" | "chunk" | "end";
+  time?: number;
   chunk?: any;
 }
 
@@ -50,13 +63,189 @@ interface SessionEvent {
 }
 
 /**
- * Wire the live stream and the durable session log onto the renderers.
- * Pure event wiring: exported so tests can drive it with fake events.
+ * Wire the live stream and the durable session log onto the pi-tui chat
+ * components (T13a-d). Exported so tests can drive it with fake events.
+ */
+export function attachTui(
+  ctx: Pick<DshContext, "on">,
+  agent: { session: any },
+  ui: NonNullable<KumoRepl["ui"]>,
+  service: RenderService,
+): () => void {
+  const tps = new TpsMeter();
+  const tools = new Map<string, ToolCallComponent>();
+  let reasoning: ReasoningComponent | undefined;
+  let text: AssistantTextComponent | undefined;
+  let lastInputTokens = 0;
+  let lastOutputTokens = 0;
+
+  service.describe = (callId: string) => {
+    const comp = tools.get(callId);
+    if (comp === undefined) return undefined;
+    return { tool: comp.tool, summary: comp.summary(80) };
+  };
+
+  const closeLive = (): void => {
+    if (reasoning !== undefined) {
+      reasoning.end();
+      reasoning = undefined;
+      ui.requestRender();
+    }
+    if (text !== undefined) {
+      text.finish();
+      text = undefined;
+    }
+  };
+
+  const ensureReasoning = (): ReasoningComponent => {
+    if (reasoning === undefined) {
+      reasoning = new ReasoningComponent();
+      ui.addChat(reasoning);
+    }
+    return reasoning;
+  };
+
+  const ensureText = (): AssistantTextComponent => {
+    if (text === undefined) {
+      text = new AssistantTextComponent();
+      ui.addChat(text);
+    }
+    return text;
+  };
+
+  const ensureTool = (id: string, toolName: string): ToolCallComponent => {
+    let comp = tools.get(id);
+    if (comp === undefined) {
+      comp = new ToolCallComponent(toolName);
+      tools.set(id, comp);
+      ui.addChat(comp);
+    }
+    return comp;
+  };
+
+  const offStream = ctx.on("agent/assistant-stream", ({ agent: subject, frame }: any) => {
+    if (subject !== agent) return;
+    const f = frame as StreamFrame;
+    if (f.type === "start" || f.type === "end") {
+      closeLive();
+      return;
+    }
+    const chunk = f.chunk;
+    if (chunk === undefined) return;
+    switch (chunk.type) {
+      case "reasoning-delta":
+        ensureReasoning().push(chunk.text);
+        ui.requestRender();
+        return;
+      case "text-delta":
+        ensureText().push(chunk.text);
+        ui.requestRender();
+        return;
+      case "block-start":
+        if (chunk.blockType !== "reasoning") closeLive();
+        return;
+      case "block-end":
+        if (chunk.block.type === "reasoning") {
+          reasoning?.end();
+          reasoning = undefined;
+          ui.requestRender();
+        } else if (chunk.block.type === "text") {
+          text?.finish();
+          text = undefined;
+        }
+        return;
+      case "tool-call-delta": {
+        const id = String(chunk.id);
+        if (chunk.name !== undefined) ensureTool(id, chunk.name);
+        tools.get(id)?.args(chunk.argumentsDelta ?? "");
+        ui.requestRender();
+        return;
+      }
+      case "usage": {
+        const tokens = Number(chunk.usage?.outputTokens ?? 0);
+        lastOutputTokens = tokens;
+        lastInputTokens = Number(chunk.usage?.inputTokens ?? lastInputTokens);
+        if (f.time !== undefined) tps.sample(f.time, tokens);
+        ui.footer.set({ tps: tps.tps });
+        ui.requestRender();
+        return;
+      }
+      case "finish":
+        closeLive();
+        return;
+      default:
+        return;
+    }
+  });
+
+  const offSession = ctx.on("session/event", (session: unknown, event: SessionEvent) => {
+    if (session !== agent.session) return;
+    switch (event.type) {
+      case "user/message": {
+        // Only echo real user input; dsh injects reminders as plugin/system
+        // user-messages that must not clutter the transcript.
+        if (event.data.source?.kind !== "user") return;
+        const blocks = (event.data.content ?? []).filter((b: any) => b.type === "text");
+        const content = blocks.map((b: any) => b.text).join(" ");
+        if (content.trim() !== "") ui.addChat(userMessageComponent(content.trim()));
+        return;
+      }
+      case "turn/start":
+        tps.reset();
+        ui.footer.set({ tps: 0 });
+        return;
+      case "tool/call": {
+        const id = String(event.data.callId);
+        const comp = ensureTool(id, event.data.name);
+        if (event.data.arguments) comp.args(event.data.arguments);
+        ui.requestRender();
+        return;
+      }
+      case "tool/result": {
+        const block = event.data.message?.content?.[0];
+        if (block === undefined || block.type !== "tool-result") return;
+        const output = block.content
+          .filter((b: any) => b.type === "text")
+          .map((b: any) => b.text)
+          .join("\n");
+        tools.get(String(block.toolCallId))?.result(block.isError !== true, output);
+        ui.requestRender();
+        return;
+      }
+      case "turn/end": {
+        closeLive();
+        const window = agent.session?.requestContext?.()?.contextWindow;
+        if (typeof window === "number" && window > 0) {
+          ui.footer.set({ contextUsed: lastInputTokens + lastOutputTokens, contextWindow: window });
+        }
+        const reason = event.data.reason;
+        if (reason?.kind === "error") {
+          ui.addChat(new Text(ansi.red(`${ui.icons.fail} ${reason.error.code}: ${reason.error.message}`), 1, 0));
+        } else if (reason?.kind === "aborted") {
+          ui.addChat(new Text(dim("- cancelled"), 1, 0));
+        }
+        ui.requestRender();
+        return;
+      }
+      default:
+        return;
+    }
+  });
+
+  return () => {
+    offStream();
+    offSession();
+  };
+}
+
+/**
+ * Screen wiring for non-TTY (piped) runs: raw-ANSI renderers. Kept for
+ * `echo "x" | kumo` usage and CI smoke tests.
  */
 export function attach(
   ctx: Pick<DshContext, "on">,
   agent: { session: unknown },
-  ui: KumoUi,
+  ui: ScreenUi,
 ): () => void {
   const started = new Set<string>();
 
@@ -64,7 +253,6 @@ export function attach(
     if (subject !== agent) return;
     const f = frame as StreamFrame;
     if (f.type === "start") {
-      // A new attempt closes any dangling reasoning from a previous one.
       ui.reasoning.end();
       return;
     }
@@ -150,10 +338,23 @@ export function attach(
 }
 
 export function apply(ctx: DshContext): void {
+  const service: RenderService = {};
+  if (process.stdin.isTTY === true && process.stdout.isTTY === true) {
+    // TUI mode: components only; the screen service stays empty.
+    ctx.provide(KUMO_RENDER_SERVICE, service);
+    ctx.inject(["kumoRepl"], (c: any) => {
+      const repl: KumoRepl | undefined = c.kumoRepl;
+      if (repl?.agent !== undefined && repl.ui !== undefined) {
+        attachTui(ctx, repl.agent, repl.ui, service);
+      }
+    });
+    return;
+  }
   const ui = createUi(stdoutScreen());
-  ctx.provide(KUMO_RENDER_SERVICE, ui);
+  service.screen = ui;
+  ctx.provide(KUMO_RENDER_SERVICE, service);
   ctx.inject(["kumoRepl"], (c: any) => {
-    const repl = c.kumoRepl;
+    const repl: KumoRepl | undefined = c.kumoRepl;
     if (repl?.agent !== undefined) attach(ctx, repl.agent, ui);
   });
 }

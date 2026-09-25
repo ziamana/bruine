@@ -23,6 +23,14 @@ export interface KumoStartup {
 /** The service published by kumo-repl once its agent exists. */
 export interface KumoRepl {
   agent: any;
-  /** Ask the user one line question on the REPL terminal. */
-  ask(question: string): Promise<string>;
+  /** Non-TTY mode: ask one line on the readline interface. */
+  ask?: (question: string) => Promise<string>;
+  /** TTY mode: the pi-tui shell (askChoice, addChat, footer). */
+  ui?: {
+    askChoice(title: string, items: Array<{ value: string; label: string }>): Promise<number>;
+    addChat(component: any): void;
+    footer: { set(next: Record<string, unknown>): void; tpsReset?(): void };
+    requestRender(): void;
+    icons: { think: string; prompt: string; ok: string; fail: string; bullet: string; spark: string };
+  };
 }

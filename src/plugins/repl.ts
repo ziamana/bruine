@@ -1,10 +1,15 @@
+import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { kumoIcons } from "../render/chars.js";
+import { KumoUi } from "../ui/kumo-ui.js";
 import type { DshContext, KumoRepl, KumoStartup } from "./ctx.js";
+
+const require = createRequire(import.meta.url);
+const pkg = require("../../package.json") as { version: string };
 
 /** Stable Cordis plugin name. */
 export const name = "kumo-repl";
@@ -15,7 +20,6 @@ export const inject = ["agentDefaultModel", "agents", "sessions"];
 /** The service provided by this plugin and injected by render/approval. */
 export const KUMO_REPL_SERVICE = "kumoRepl";
 
-const promptText = (): string => `${kumoIcons().prompt} `;
 const EXIT_COMMANDS = new Set(["/exit", "/quit"]);
 
 /** The terminal line source the loop drives; readline in production, fakes in tests. */
@@ -104,7 +108,7 @@ export class Repl {
   }
 
   #onSigint(): void {
-    // Ctrl+C during a turn cancels the turn, never the app.
+    // Escape / Ctrl+C during a turn cancels the turn, never the app.
     if (this.#inTurn) this.#deps.agent.cancel({ kind: "user" });
   }
 
@@ -130,9 +134,36 @@ export class Repl {
   }
 }
 
-/** Wrap a node:readline interface as a {@link LineSource}. */
+/** Fan-out hub feeding a {@link LineSource} from UI events. */
+export class LineEmitter {
+  #lines: Array<(line: string) => void> = [];
+  #closes: Array<() => void> = [];
+  #sigints: Array<() => void> = [];
+
+  source(): LineSource {
+    return {
+      onLine: (cb) => this.#lines.push(cb),
+      onClose: (cb) => this.#closes.push(cb),
+      onSigint: (cb) => this.#sigints.push(cb),
+      pause: () => {},
+      resume: () => {},
+    };
+  }
+
+  emitLine(line: string): void {
+    for (const cb of this.#lines) cb(line);
+  }
+  emitClose(): void {
+    for (const cb of this.#closes) cb();
+  }
+  emitSigint(): void {
+    for (const cb of this.#sigints) cb();
+  }
+}
+
+/** Wrap a node:readline interface as a {@link LineSource} (non-TTY mode). */
 export function readlineSource(rl: ReadlineInterface): LineSource {
-  rl.setPrompt(promptText());
+  rl.setPrompt(`${kumoIcons().prompt} `);
   return {
     onLine: (cb) => rl.on("line", cb),
     onClose: (cb) => rl.on("close", cb),
@@ -156,14 +187,10 @@ export function askViaReadline(rl: ReadlineInterface, question: string): Promise
   });
 }
 
-async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<void> {
-  await ctx.get("loader")?.await();
+async function createAgent(ctx: DshContext): Promise<{ agent: any; selection: any } | undefined> {
   const agents = ctx.get("agents");
   const defaultModel = ctx.get("agentDefaultModel");
-  const sessions = ctx.get("sessions");
-  const startup: KumoStartup | undefined = ctx.get("kumoStartup");
-  if (agents === undefined || defaultModel === undefined || sessions === undefined) return;
-
+  if (agents === undefined || defaultModel === undefined) return undefined;
   const selection = defaultModel.currentSelection();
   const { agent } = await agents.create({
     sessionId: SessionId(`session-${randomUUID()}`),
@@ -176,29 +203,79 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     },
   });
   await agent.whenIdle();
+  return { agent, selection };
+}
 
+async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<void> {
+  await ctx.get("loader")?.await();
+  const sessions = ctx.get("sessions");
+  const startup: KumoStartup | undefined = ctx.get("kumoStartup");
+  if (sessions === undefined) return;
+  const created = await createAgent(ctx);
+  if (created === undefined) return;
+  const { agent, selection } = created;
+
+  const followup = (text: string): void => {
+    agent.followup(
+      createUserMessage({
+        content: [{ type: "text", text }],
+        source: { kind: "user" },
+      }),
+    );
+  };
+  const flush = (session: unknown): Promise<unknown> => sessions.flush(session);
+
+  const isTTY = process.stdin.isTTY === true && process.stdout.isTTY === true;
+
+  if (isTTY) {
+    // pi-tui shell (T13a): header / chat / editor / footer.
+    const emitter = new LineEmitter();
+    let ui: KumoUi | undefined;
+    ui = new KumoUi(
+      pkg.version,
+      {
+        onSubmit: (text) => {
+          if (text.trim() !== "" && ui !== undefined) ui.rememberHistory(text);
+          emitter.emitLine(text);
+        },
+        onEscape: () => emitter.emitSigint(),
+        onQuit: () => emitter.emitClose(),
+      },
+      undefined,
+      kumoIcons(),
+    );
+    ui.footer.set({ model: selection.model, provider: selection.provider });
+    const repl = new Repl({
+      agent,
+      followup,
+      flush,
+      appExit: (code) => {
+        void ui?.shutdown().finally(() => exit(code));
+      },
+      lines: emitter.source(),
+    });
+    const service: KumoRepl = { agent, ui };
+    ctx.provide(KUMO_REPL_SERVICE, service);
+    ui.start();
+    await repl.run(startup?.initialPrompt);
+    return;
+  }
+
+  // Non-TTY (piped) mode: plain readline.
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
-    terminal: process.stdin.isTTY === true,
+    terminal: false,
   });
-
   const service: KumoRepl = {
     agent,
     ask: (question) => askViaReadline(rl, question),
   };
   ctx.provide(KUMO_REPL_SERVICE, service);
-
   const repl = new Repl({
     agent,
-    followup: (text) =>
-      agent.followup(
-        createUserMessage({
-          content: [{ type: "text", text }],
-          source: { kind: "user" },
-        }),
-      ),
-    flush: (session) => sessions.flush(session),
+    followup,
+    flush,
     appExit: exit,
     lines: readlineSource(rl),
   });

@@ -85,6 +85,9 @@ export function pickModel(models: string[]): string {
 
 export type SettingsDoc = Record<string, unknown>;
 
+/** pi-ai requires a key on every route; local servers ignore its value. */
+export const LOCAL_API_KEY_ENV = "KUMO_LOCAL_API_KEY";
+
 export function localServerSettings(hit: ProbeHit, model: string): SettingsDoc {
   return {
     "llm-pi-ai": {
@@ -93,6 +96,7 @@ export function localServerSettings(hit: ProbeHit, model: string): SettingsDoc {
           displayName: "Local Server",
           api: "openai-completions",
           baseURL: hit.baseUrl,
+          apiKeyEnv: LOCAL_API_KEY_ENV,
           models: [{ id: model, name: model }],
         },
       },
@@ -228,6 +232,7 @@ export async function simpleSetup(
   if (hit !== undefined) {
     const model = pickModel(hit.models);
     await writeAtomic(settingsPath, renderSettingsYaml(localServerSettings(hit, model)), 0o600);
+    await writeEnvVar(join(dshHome, ".env"), LOCAL_API_KEY_ENV, "local");
     io.write(`Found a local model server on port ${hit.port}. Using model: ${model}\n`);
     return { kind: "local", port: hit.port, model };
   }

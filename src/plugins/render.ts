@@ -81,6 +81,11 @@ export function attachTui(
   let working: WorkingComponent | undefined;
   let lastInputTokens = 0;
   let lastOutputTokens = 0;
+  let turnStartWall = Date.now();
+  let turnOutput = 0;
+  let turnToolIds: string[] = [];
+  let turnBreaks = new Set<string>();
+  let needBreak = false;
 
   service.describe = (callId: string) => {
     const comp = tools.get(callId);
@@ -137,6 +142,11 @@ export function attachTui(
     if (comp === undefined) {
       comp = new ToolCallComponent(toolName, Date.now, ui.icons);
       tools.set(id, comp);
+      if (needBreak) {
+        turnBreaks.add(id);
+        needBreak = false;
+      }
+      turnToolIds.push(id);
       ui.addChat(comp);
     }
     return comp;
@@ -154,7 +164,7 @@ export function attachTui(
     }
     if (f.type === "end") {
       tps.endCall();
-      ui.footer.set({ tps: tps.tps, pp: tps.pp });
+      ui.footer.set({ tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
       hideWorking();
       closeLive();
       ui.requestRender();
@@ -164,7 +174,7 @@ export function attachTui(
     if (chunk === undefined) return;
     const trackDelta = (): void => {
       tps.delta(now);
-      ui.footer.set({ tps: tps.tps, pp: tps.pp });
+      ui.footer.set({ tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
     };
     hideWorking();
     switch (chunk.type) {
@@ -175,6 +185,7 @@ export function attachTui(
         return;
       case "text-delta":
         trackDelta();
+        needBreak = true;
         ensureText().push(chunk.text);
         ui.requestRender();
         return;
@@ -204,20 +215,22 @@ export function attachTui(
         const tokens = Number(u.outputTokens ?? 0);
         lastOutputTokens = tokens;
         lastInputTokens = Number(u.inputTokens ?? lastInputTokens);
+        if (Number.isFinite(tokens)) turnOutput += Math.max(0, tokens);
+        const details = (u.prompt_tokens_details ?? u.promptTokensDetails ?? {}) as Record<string, unknown>;
         tps.usage(now, {
           outputTokens: Number(u.outputTokens ?? NaN),
           inputTokens: Number(u.inputTokens ?? NaN),
           cacheReadTokens: Number(
-            u.cacheReadTokens ?? u.cachedTokens ?? u.cache_read ?? NaN,
+            u.cacheReadTokens ?? u.cachedTokens ?? u.cache_read ?? details.cached_tokens ?? NaN,
           ),
         });
-        ui.footer.set({ tps: tps.tps, pp: tps.pp });
+        ui.footer.set({ tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
         ui.requestRender();
         return;
       }
       case "finish":
         tps.endCall();
-        ui.footer.set({ tps: tps.tps, pp: tps.pp });
+        ui.footer.set({ tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
         closeLive();
         ui.requestRender();
         return;
@@ -244,7 +257,12 @@ export function attachTui(
       }
       case "turn/start":
         tps.reset();
-        ui.footer.set({ tps: 0, pp: undefined });
+        ui.footer.set({ tps: 0, pp: undefined, cachePct: undefined, cacheFirst: false });
+        turnStartWall = Date.now();
+        turnOutput = 0;
+        turnToolIds = [];
+        turnBreaks = new Set<string>();
+        needBreak = false;
         showWorking();
         return;
       case "tool/call": {
@@ -275,11 +293,50 @@ export function attachTui(
           ui.footer.set({ contextUsed: lastInputTokens + lastOutputTokens, contextWindow: window });
         }
         const reason = event.data.reason;
+        const wallSec = Math.max(0, (Date.now() - turnStartWall) / 1000);
         if (reason?.kind === "error") {
           ui.addChat(new Text(ansi.red(`${ui.icons.fail} ${reason.error.code}: ${reason.error.message}`), 0, 0));
+          (ui as unknown as { onTurnEnd?: (i: unknown) => void }).onTurnEnd?.({
+            tools: [],
+            wallSec,
+            outputTokens: turnOutput,
+            cancelled: false,
+            error: true,
+          });
         } else if (reason?.kind === "aborted") {
-          ui.addChat(new Text(dim("- cancelled"), 0, 0));
+          (ui as unknown as { onTurnEnd?: (i: unknown) => void }).onTurnEnd?.({
+            tools: [],
+            wallSec,
+            outputTokens: 0,
+            cancelled: true,
+            error: false,
+          });
+        } else {
+          const ordered = turnToolIds
+            .map((id) => {
+              const comp = tools.get(id);
+              if (comp === undefined) return undefined;
+              return {
+                tool: comp.tool,
+                ok: comp.doneOk ?? false,
+                seconds: comp.seconds ?? 0,
+                comp: comp as unknown,
+                breakBefore: turnBreaks.has(id),
+              };
+            })
+            .filter((t) => t !== undefined);
+          (ui as unknown as { onTurnEnd?: (i: unknown) => void }).onTurnEnd?.({
+            tools: ordered,
+            wallSec,
+            outputTokens: turnOutput,
+            cancelled: false,
+            error: false,
+          });
         }
+        turnToolIds = [];
+        turnBreaks = new Set<string>();
+        needBreak = false;
+        turnOutput = 0;
         ui.requestRender();
         return;
       }

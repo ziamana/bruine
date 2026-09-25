@@ -11,6 +11,8 @@ export interface FooterState {
   effort?: string;
   tps?: number;
   pp?: number;
+  cachePct?: number;
+  cacheFirst?: boolean;
   /** Mode badges (PLAN / FULL ACCESS), set by the modes layer (T16). */
   badges?: string[];
 }
@@ -82,6 +84,19 @@ export class FooterComponent implements Component {
     }
     if (s.pp !== undefined && s.pp > 0) {
       parts.push(ansi.dim(`pp ${formatK(Math.round(s.pp * 10) / 10)} tok/s`));
+    }
+    if (s.cachePct !== undefined) {
+      const pct = Math.round(s.cachePct);
+      const label = `cache ${String(pct)}%`;
+      const colored =
+        s.cacheFirst === true
+          ? ansi.gray(label)
+          : pct >= 80
+            ? ansi.green(label)
+            : pct >= 30
+              ? ansi.yellow(label)
+              : ansi.red(label);
+      parts.push(colored);
     }
     parts.push(model, effort);
     // Modes come first so a narrow window or long model name cannot hide them.

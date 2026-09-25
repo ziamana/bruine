@@ -14,6 +14,7 @@ export interface Script {
   chunks: Chunk[];
   finish?: "stop" | "tool_calls";
   finishDelayMs?: number;
+  usage?: { outputTokens?: number; inputTokens?: number; cachedTokens?: number };
 }
 export interface RecordedRequest {
   body: RequestBody;
@@ -83,11 +84,25 @@ export async function startServer(scripts: Script[]) {
         id: `chatcmpl-e2e-${requests.length}`, object: "chat.completion.chunk", created: 1,
         model: "e2e-model", choices: [{ index: 0, delta, finish_reason: finish }],
       })}\n\n`);
+      const usageChunk = (u: NonNullable<Script["usage"]>) => res.write(`data: ${JSON.stringify({
+        id: `chatcmpl-e2e-${requests.length}`, object: "chat.completion.chunk", created: 1,
+        model: "e2e-model", choices: [{ index: 0, delta: {}, finish_reason: null }],
+        usage: {
+          prompt_tokens: u.inputTokens ?? 0,
+          completion_tokens: u.outputTokens ?? 0,
+          total_tokens: (u.inputTokens ?? 0) + (u.outputTokens ?? 0),
+          prompt_tokens_details: { cached_tokens: u.cachedTokens ?? 0 },
+        },
+      })}\n\n`);
       chunk({ role: "assistant", content: "" });
       for (const part of script.chunks) {
         await delay(part.delayMs ?? 0, undefined, { signal: abort.signal });
         if (res.destroyed) return;
         chunk(part.delta);
+      }
+      if (script.usage !== undefined) {
+        await delay(50, undefined, { signal: abort.signal });
+        if (!res.destroyed) usageChunk(script.usage);
       }
       await delay(script.finishDelayMs ?? 0, undefined, { signal: abort.signal });
       chunk({}, script.finish ?? "stop");

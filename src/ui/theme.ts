@@ -5,11 +5,13 @@ export const ansi = {
   dim: (s: string): string => `\x1b[2m${s}\x1b[22m`,
   gray: (s: string): string => `\x1b[90m${s}\x1b[39m`,
   cyan: (s: string): string => `\x1b[36m${s}\x1b[39m`,
+  blue: (s: string): string => `\x1b[34m${s}\x1b[39m`,
   green: (s: string): string => `\x1b[32m${s}\x1b[39m`,
   red: (s: string): string => `\x1b[31m${s}\x1b[39m`,
   yellow: (s: string): string => `\x1b[33m${s}\x1b[39m`,
   bold: (s: string): string => `\x1b[1m${s}\x1b[22m`,
   italic: (s: string): string => `\x1b[3m${s}\x1b[23m`,
+  chip: (s: string): string => `\x1b[46m\x1b[30m${s}\x1b[39m\x1b[49m`,
 };
 
 

@@ -81,17 +81,58 @@ describe("ReasoningComponent (T25.3 word by word)", () => {
   });
 });
 
-describe("ToolCallComponent (T13c)", () => {
+describe("ToolCallComponent (T27.2 aligned + rail)", () => {
   test("streams one header line, then result + preview", () => {
     const t = new ToolCallComponent("bash", () => 0, UNICODE_ICONS);
-    expect(strip(t.render(60)[0])).toBe("· bash");
+    expect(t.rail).toBe("blue");
+    expect(strip(t.render(60)[0])).toBe("· bash   ");
     t.args('{"command":"ls -la"}');
-    expect(strip(t.render(60)[0])).toBe("· bash  ls -la");
+    expect(strip(t.render(60)[0])).toBe("· bash     ls -la");
     t.result(true, "a\nb");
+    expect(t.rail).toBe("blue");
     const lines = t.render(60).map(strip);
-    expect(lines[0]).toBe("✓ bash  ls -la  0.0s");
+    expect(lines[0].startsWith("✓ bash   ")).toBe(true);
+    expect(lines[0]).toContain("ls -la");
+    expect(lines[0].endsWith("0.0s")).toBe(true);
     expect(lines[1].trim()).toBe("⎿ a");
     expect(lines[2].trim()).toBe("b");
+  });
+
+  test("failed tool has red rail", () => {
+    const t = new ToolCallComponent("read", () => 0, UNICODE_ICONS);
+    t.result(false, "boom");
+    expect(t.rail).toBe("red");
+  });
+
+  test("4 consecutive reads → 2 lines + collapsed +2, failed breaks (T27.2)", async () => {
+    const { groupRuns, CollapsedToolsComponent } = await import("../src/ui/tool-group.js");
+    const tools = [
+      { tool: "read", ok: true, seconds: 0.1 },
+      { tool: "read", ok: true, seconds: 0.1 },
+      { tool: "read", ok: true, seconds: 0.1 },
+      { tool: "read", ok: true, seconds: 0.1 },
+    ];
+    const runs = groupRuns(tools);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ tool: "read", start: 0, count: 4 });
+    const c = new CollapsedToolsComponent("read", 2, 0.2, UNICODE_ICONS);
+    expect(c.rail).toBe("blue");
+    expect(strip(c.render(60)[0])).toContain("+2 files");
+    const mixed = [
+      { tool: "read", ok: true, seconds: 0.1 },
+      { tool: "read", ok: false, seconds: 0.1 },
+      { tool: "read", ok: true, seconds: 0.1 },
+    ];
+    expect(groupRuns(mixed)).toHaveLength(3);
+  });
+
+  test("turn summary lines (T27.3)", async () => {
+    const { turnSummary } = await import("../src/ui/tool-group.js");
+    expect(turnSummary({ tools: 5, wallSec: 41, outputTokens: 1200, cancelled: false })).toBe(
+      "✓ 5 tools · 41s · 1.2k tokens",
+    );
+    expect(turnSummary({ tools: 0, wallSec: 12, outputTokens: 340, cancelled: false })).toBe("✓ 12s · 340 tokens");
+    expect(turnSummary({ tools: 0, wallSec: 12, outputTokens: 0, cancelled: true })).toBe("· cancelled after 12s");
   });
 
   test("caps the output preview and counts the rest", () => {
@@ -127,6 +168,19 @@ describe("AssistantTextComponent (T13c)", () => {
     const text = a.render(40).map(strip).join("\n");
     expect(text).toContain("Développement & code");
     expect(text).not.toContain("*");
+  });
+
+  test("paste chip in chat echo, full text for model untouched (T27.5)", async () => {
+    const { pasteChip, chipMarkers } = await import("../src/ui/chat-layout.js");
+    const { userMessageComponent } = await import("../src/ui/assistant-text.js");
+    const big = Array.from({ length: 22 }, (_, i) => `line${String(i + 1)}`).join("\n");
+    expect(pasteChip(big)).toContain("[Pasted 22 lines]");
+    expect(pasteChip("short")).toBeUndefined();
+    expect(chipMarkers("[paste #1 +22 lines]")).toContain("[Pasted 22 lines]");
+    const comp = userMessageComponent(big) as { render(w: number): string[] };
+    const rendered = comp.render(80).map(strip).join("\n");
+    expect(rendered).toContain("[Pasted 22 lines]");
+    expect(rendered).not.toContain("line22");
   });
 });
 
@@ -169,6 +223,28 @@ describe("TpsMeter (T25.1, honest per-call numbers)", () => {
     expect(m.tps).toBeGreaterThan(9);
     expect(m.tps).toBeLessThan(12);
   });
+
+  test("cache 9700/10000 → 97%, first call gray, unknown hidden (T27.1)", () => {
+    const m = new TpsMeter();
+    m.startCall(0);
+    m.delta(3000);
+    m.delta(4000);
+    m.usage(4100, { outputTokens: 10, inputTokens: 10000, cacheReadTokens: 9700 });
+    expect(m.cachePct).toBeGreaterThan(96.9);
+    expect(m.cachePct).toBeLessThan(97.1);
+    expect(m.cacheFirst).toBe(true);
+    m.endCall();
+    m.startCall(5000);
+    m.delta(6000);
+    m.delta(7000);
+    m.usage(7100, { outputTokens: 10, inputTokens: 10000, cacheReadTokens: 9700 });
+    expect(m.cacheFirst).toBe(false);
+    const n = new TpsMeter();
+    n.startCall(0);
+    n.delta(1000);
+    n.usage(1100, { outputTokens: 5, inputTokens: 100 });
+    expect(n.cachePct).toBeUndefined();
+  });
 });
 
 describe("FooterComponent (T25.2)", () => {
@@ -210,6 +286,35 @@ describe("FooterComponent (T25.2)", () => {
     const line = f.render(80).map(strip)[0]!;
     expect(line).toContain("ctx 0% of ?");
     expect(line).not.toContain("(auto)");
+  });
+
+  test("cache colors and order: 97% green, first gray, unknown hidden (T27.1)", () => {
+    const f = new FooterComponent(UNICODE_ICONS);
+    f.set({ cachePct: 97, cacheFirst: false, tps: 52, model: "m", provider: "local" });
+    const line = f.render(120).map(strip)[0]!;
+    expect(line).toContain("cache 97%");
+    expect(line.indexOf("tok/s") < line.indexOf("cache")).toBe(true);
+    expect(line.indexOf("cache") < line.indexOf("(local)")).toBe(true);
+    const cell = ((): number => {
+      const row = f.render(120)[0]!;
+      return row.indexOf("cache 97%");
+    })();
+    expect(cell).toBeGreaterThanOrEqual(0);
+    const green = new FooterComponent(UNICODE_ICONS);
+    green.set({ cachePct: 97 });
+    expect(green.render(80)[0]).toContain("\x1b[32m");
+    const yellow = new FooterComponent(UNICODE_ICONS);
+    yellow.set({ cachePct: 50 });
+    expect(yellow.render(80)[0]).toContain("\x1b[33m");
+    const red = new FooterComponent(UNICODE_ICONS);
+    red.set({ cachePct: 10 });
+    expect(red.render(80)[0]).toContain("\x1b[31m");
+    const first = new FooterComponent(UNICODE_ICONS);
+    first.set({ cachePct: 97, cacheFirst: true });
+    expect(first.render(80)[0]).toContain("\x1b[90m");
+    const unknown = new FooterComponent(UNICODE_ICONS);
+    unknown.set({ model: "m" });
+    expect(unknown.render(80).map(strip)[0]).not.toContain("cache");
   });
 });
 
@@ -257,7 +362,8 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     const { ui } = makeUi();
     const lines = ui.tui.render(60).map(strip);
     const text = lines.join("\n");
-    expect(text).toContain("kumo v0.2.0");
+    expect(text).toContain("kumo");
+    expect(text).toContain("v0.2.0");
     expect(text).toContain("escape interrupt");
     expect(text).toContain("ctx 0% of ?");
   });
@@ -275,6 +381,103 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       .map(strip)
       .join("\n");
     expect(text).toContain("hello from chat");
+  });
+
+  test("tool rail in chat padding, blue then red (T27.2)", () => {
+    const { ui } = makeUi();
+    const ok = new ToolCallComponent("read", () => 0, UNICODE_ICONS);
+    ok.setArgs('{"path":"a"}');
+    ok.result(true, "x");
+    const bad = new ToolCallComponent("grep", () => 0, UNICODE_ICONS);
+    bad.setArgs('{"pattern":"p"}');
+    bad.result(false, "nope");
+    ui.addChat(ok);
+    ui.addChat(bad);
+    const text = ui.tui.render(80).join("\n");
+    expect(text).toContain("│");
+    expect(text).toContain("\x1b[34m");
+    expect(text).toContain("\x1b[31m");
+  });
+
+  test("header shows model and host, animation frames are block/braille without emoji (T27.4)", async () => {
+    const { ui } = makeUi();
+    ui.footer.set({ model: "Ornith 1.5 9B", provider: "local", modelName: "Ornith 1.5 9B" });
+    ui.updateHeader();
+    const text = ui.tui.render(80).map(strip).join("\n");
+    expect(text).toContain("kumo");
+    expect(text).toContain("Ornith 1.5 9B");
+    const { STARTUP_FRAMES, shouldAnimateStartup, headerHost } = await import("../src/ui/kumo-ui.js");
+    expect(STARTUP_FRAMES).toHaveLength(6);
+    expect(STARTUP_FRAMES.join("")).not.toMatch(/\p{Extended_Pictographic}/u);
+    expect(shouldAnimateStartup({ stdoutTTY: false })).toBe(false);
+    expect(shouldAnimateStartup({ stdoutTTY: true, env: { CI: "1" } })).toBe(false);
+    expect(shouldAnimateStartup({ stdoutTTY: true, env: { KUMO_NO_ANIMATION: "1" } })).toBe(false);
+    expect(shouldAnimateStartup({ stdoutTTY: true, env: {}, ascii: false })).toBe(true);
+    expect(headerHost({ models: { main: { baseUrl: "http://192.168.1.64:8081/v1" } } }, "local")).toBe("192.168.1.64");
+    expect(headerHost({ models: { main: { provider: "openrouter" } } }, undefined)).toBe("openrouter");
+  });
+
+  test("ctrl+o toggles tools collapsed flag (T27.2)", async () => {
+    const terminal = new FakeTerminal();
+    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
+    ui.start();
+    expect(ui.toolsCollapsed).toBe(true);
+    terminal.onInput?.("\x0f");
+    expect(ui.toolsCollapsed).toBe(false);
+    terminal.onInput?.("\x0f");
+    expect(ui.toolsCollapsed).toBe(true);
+    await ui.shutdown();
+  });
+
+  test("onTurnEnd collapses 4 reads to 2 plus summary (T27.2+3)", () => {
+    const { ui } = makeUi();
+    const comps = ["a", "b", "c", "d"].map((f) => {
+      const t = new ToolCallComponent("read", () => 0, UNICODE_ICONS);
+      t.setArgs(JSON.stringify({ file_path: f }));
+      t.result(true, "x");
+      ui.addChat(t);
+      return t;
+    });
+    ui.onTurnEnd({
+      tools: comps.map((c) => ({ tool: "read", ok: true, seconds: 0.1, comp: c })),
+      wallSec: 2,
+      outputTokens: 100,
+      cancelled: false,
+      error: false,
+    });
+    const text = ui.tui.render(100).map(strip).join("\n");
+    expect(text).toContain("+2 files");
+    expect(text).toMatch(/✓ 4 tools/);
+    expect(text).toContain("2s");
+    expect(text).toContain("100 tokens");
+  });
+
+  test("ctrl+o expands collapsed groups and collapses back (T27.2)", async () => {
+    const terminal = new FakeTerminal();
+    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
+    ui.start();
+    const comps = ["a", "b", "c", "d"].map((f) => {
+      const t = new ToolCallComponent("read", () => 0, UNICODE_ICONS);
+      t.setArgs(JSON.stringify({ file_path: f }));
+      t.result(true, "x");
+      ui.addChat(t);
+      return t;
+    });
+    ui.onTurnEnd({
+      tools: comps.map((c) => ({ tool: "read", ok: true, seconds: 0.1, comp: c })),
+      wallSec: 2,
+      outputTokens: 100,
+      cancelled: false,
+      error: false,
+    });
+    expect(ui.tui.render(100).map(strip).join("\n")).toContain("+2 files");
+    terminal.onInput?.("\x0f");
+    const expanded = ui.tui.render(100).map(strip).join("\n");
+    expect(expanded).not.toContain("+2 files");
+    expect(expanded.match(/read/g)?.length).toBeGreaterThanOrEqual(4);
+    terminal.onInput?.("\x0f");
+    expect(ui.tui.render(100).map(strip).join("\n")).toContain("+2 files");
+    await ui.shutdown();
   });
 });
 
@@ -345,7 +548,8 @@ describe("attachTui wiring", () => {
       step: 0,
       message: { content: [{ type: "tool-result", toolCallId: "t1", content: [{ type: "text", text: "out" }], isError: false }] },
     });
-    expect(rendered(chats[0])).toContain("✓ bash  ls");
+    expect(rendered(chats[0])).toContain("✓ bash");
+    expect(rendered(chats[0])).toContain("ls");
     expect(rendered(chats[0])).toContain("out");
   });
 

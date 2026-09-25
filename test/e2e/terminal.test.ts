@@ -28,9 +28,10 @@ const reasoning = (): Script => ({ chunks: [
   }),
   { delta: { content: "REASONING_DONE" }, delayMs: 150 },
 ] });
-const footer = (h: Harness) => h.screen().find(line => line.includes("e2e-model")) ?? "";
+const footer = (h: Harness) => [...h.screen()].reverse().find(line => line.includes("e2e-model")) ?? "";
 const footerCell = (h: Harness, label: string) => {
-  const row = h.screen().findIndex(line => line.includes("e2e-model"));
+  const rows = h.screen().map((line, i) => ({ line, i })).filter(({ line }) => line.includes("e2e-model"));
+  const row = rows.at(-1)!.i;
   const col = h.screen()[row]!.indexOf(label);
   expect(col).toBeGreaterThanOrEqual(0);
   return h.term.buffer.active.getLine(h.term.buffer.active.viewportY + row)!.getCell(col)!;
@@ -119,14 +120,17 @@ test("escape: abort stream within one second and accept another turn", async () 
 test("tool call: read note.txt and send the real tool result back", async () => {
   await scenario("tool-call", [toolScript("read", { file_path: "note.txt" }), textScript("READ_FINISHED")], async (h) => {
     await h.prompt("Read note.txt");
-    await h.until(() => h.screen().some(line => /^\s*[·✢✺✶✻✽] read  note.txt/.test(line)));
+    await h.until(() => h.screen().some(line => /[·✢✺✶✻✽]/.test(line) && line.includes("read") && line.includes("note.txt")));
     await h.dump("t23-after-tool-running");
     const frames = new Set<string>();
     const deadline = Date.now() + 2000;
     while (!h.screen().join("\n").includes("✓ read")) {
       await h.flush();
-      const line = h.screen().find(line => /^\s*[·✢✺✶✻✽] read/.test(line));
-      if (line) frames.add(line.trim()[0]!);
+      const line = h.screen().find(line => /[·✢✺✶✻✽]/.test(line) && line.includes("read"));
+      if (line) {
+        const m = line.match(/[·✢✺✶✻✽]/);
+        if (m) frames.add(m[0]);
+      }
       expect(Date.now()).toBeLessThan(deadline);
       await delay(50);
     }
@@ -134,11 +138,12 @@ test("tool call: read note.txt and send the real tool result back", async () => 
     await h.waitFor("✓ read");
     await h.waitFor("READ_FINISHED");
     await h.dump("t23-after-tool-done");
-    expect(h.screen().join("\n")).toContain("✓ read  note.txt");
+    expect(h.screen().join("\n")).toContain("✓ read");
+    expect(h.screen().join("\n")).toContain("note.txt");
     const header = h.screen().findIndex(line => line.includes("✓ read"));
-    expect(h.screen()[header]).toMatch(/^  ✓/);
+    expect(h.screen()[header]).toMatch(/^  │ ✓/);
     expect(h.screen()[header - 1]?.trim()).toBe("");
-    expect(h.screen()[header + 1]).toMatch(/^    ⎿ /);
+    expect(h.screen()[header + 1]).toContain("⎿");
     expect(h.screen().find(line => line.includes("READ_FINISHED"))).toMatch(/^  READ_FINISHED/);
     const prompt = h.screen().findIndex(line => line.includes("› Read note.txt"));
     expect(h.screen()[prompt]).toMatch(/^  › /);
@@ -297,13 +302,13 @@ test.each(["reasoning", "tool"] as const)("Escape stops the %s spinner and leave
     : { ...toolScript("read", { file_path: "note.txt" }), finishDelayMs: 20000 };
   await scenario(`cancel-${kind}`, [script], async h => {
     await h.prompt("Start work");
-    await h.until(() => h.screen().some(line => kind === "reasoning" ? runningThought(line) : /^\s*[·✢✺✶✻✽] read/.test(line)));
+    await h.until(() => h.screen().some(line => kind === "reasoning" ? runningThought(line) : (/[·✢✺✶✻✽]/.test(line) && line.includes("read"))));
     await delay(300);
     h.press("escape");
     await h.until(() => h.server.mainRequests()[0]!.disconnected, 1000, "stream cancelled");
     await h.waitFor("cancelled");
     await h.waitStable(350, 1000);
-    expect(h.screen().some(line => /^\s*[·✢✺✶✻✽] (Thinking|read)/.test(line))).toBe(false);
+    expect(h.screen().some(line => /[·✢✺✶✻✽]/.test(line) && /Thinking|read/.test(line))).toBe(false);
     await h.dump(`t23-after-cancel-${kind}`);
   });
 });
@@ -316,7 +321,7 @@ test("tool error stops its spinner and renders a red failure marker", async () =
     expect(row).toBeGreaterThanOrEqual(0);
     const cell = h.term.buffer.active.getLine(h.term.buffer.active.viewportY + row)!.getCell(2)!;
     expect(cell.getFgColor()).toBe(1);
-    expect(h.screen().some(line => /^\s*[·✢✺✶✻✽] read/.test(line))).toBe(false);
+    expect(h.screen().some(line => /[·✢✺✶✻✽]/.test(line) && line.includes("read"))).toBe(false);
     await h.waitStable(350, 1000);
     await h.dump("t23-after-tool-error");
   });
@@ -358,8 +363,42 @@ test("ASCII fallback animates with - backslash bar slash and finishes without Un
     expect(h.screen().join("\n")).toContain("* Thought for");
     await h.prompt("Read note.txt");
     await h.waitFor("ASCII_READ_DONE");
-    expect(h.screen().join("\n")).toContain("v read  note.txt");
+    expect(h.screen().join("\n")).toContain("v read");
+    expect(h.screen().join("\n")).toContain("note.txt");
     expect(h.screen().join("\n")).not.toMatch(/[∴✓✗✢✺✶✻✽⎿›]/);
     await h.dump("t23-after-ascii");
   }, true);
+});
+
+test("grouping: 4 grep collapse to +2, failed grep stays, ctrl+o expands (T27.2+3)", async () => {
+  const gp = (id: string) => toolScript("grep", { pattern: "SENTINEL", path: "note.txt" }, id);
+  await scenario("grouping", [
+    gp("g1"), gp("g2"), gp("g3"), gp("g4"),
+    toolScript("grep", {}, "g5"),
+    { chunks: [{ delta: { content: "GROUP_DONE" } }], usage: { outputTokens: 100, inputTokens: 10000, cachedTokens: 9700 } },
+  ], async (h) => {
+    await h.prompt("Run grouped tools");
+    await h.waitFor("GROUP_DONE");
+    await h.waitStable(400, 2000);
+    const collapsed = h.screen().join("\n");
+    expect(collapsed).toContain("+2 files");
+    expect(collapsed).toContain("✗ grep");
+    expect(collapsed).toContain("│");
+    expect(collapsed).toContain("cache 97%");
+    expect(collapsed).toMatch(/✓ 5 tools/);
+    expect(collapsed).toContain("tokens");
+    await h.dump("t27-collapsed");
+    h.press("ctrlO");
+    await h.until(() => !h.screen().join("\n").includes("+2 files"), 2000, "expanded");
+    const full = (() => {
+      const buf = h.term.buffer.active;
+      const out: string[] = [];
+      for (let i = 0; i < buf.length; i++) out.push(buf.getLine(i)?.translateToString(true) ?? "");
+      return out.join("\n");
+    })();
+    expect(full.match(/✓ grep/g)?.length).toBeGreaterThanOrEqual(4);
+    await h.dump("t27-expanded");
+    h.press("ctrlO");
+    await h.waitFor("+2 files");
+  });
 });

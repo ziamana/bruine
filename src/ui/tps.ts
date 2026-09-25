@@ -12,6 +12,17 @@ export interface TpsUsage {
   cacheReadTokens?: number;
 }
 
+/** Share of prompt reused (T27.1): cached / total, handling both include styles. */
+export function cachePercent(cached: number, totalInput: number): number | undefined {
+  if (!Number.isFinite(cached) || !Number.isFinite(totalInput)) return undefined;
+  if (cached < 0 || totalInput <= 0) return undefined;
+  // llama.cpp/OpenAI: inputTokens includes cached (total). If cached > input,
+  // the server excluded it and total is input + cached.
+  const total = cached <= totalInput ? totalInput : totalInput + cached;
+  if (total <= 0) return undefined;
+  return Math.min(100, Math.max(0, (cached / total) * 100));
+}
+
 export class TpsMeter {
   #callStart: number | undefined;
   #t0: number | undefined;
@@ -19,6 +30,9 @@ export class TpsMeter {
   #deltas = 0;
   #tps = 0;
   #pp: number | undefined;
+  #cachePct: number | undefined;
+  #cacheFirst = false;
+  #calls = 0;
 
   /** Kept for compatibility; prefer startCall/delta/usage/endCall. */
   sample(timeMs: number, outputTokens: number): void {
@@ -69,6 +83,14 @@ export class TpsMeter {
       const fresh = Math.max(0, inp - (Number.isFinite(cached) ? cached : 0));
       this.#pp = preDt > 0 && fresh > 0 ? fresh / preDt : undefined;
     }
+    const cachedRaw = Number(usage.cacheReadTokens ?? NaN);
+    if (Number.isFinite(cachedRaw) && Number.isFinite(inp)) {
+      this.#cachePct = cachePercent(cachedRaw, inp);
+      this.#cacheFirst = this.#calls === 0;
+    } else {
+      this.#cachePct = undefined;
+      this.#cacheFirst = false;
+    }
   }
 
   /** Frame end: when no usage arrived, estimate from delta count. */
@@ -82,6 +104,7 @@ export class TpsMeter {
         this.#tps = dt > 0 ? this.#deltas / dt : 0;
       }
     }
+    this.#calls += 1;
     this.#callStart = undefined;
     this.#t0 = undefined;
     this.#t1 = undefined;
@@ -95,6 +118,8 @@ export class TpsMeter {
     this.#deltas = 0;
     this.#tps = 0;
     this.#pp = undefined;
+    this.#cachePct = undefined;
+    this.#cacheFirst = false;
   }
 
   get tps(): number {
@@ -103,5 +128,13 @@ export class TpsMeter {
 
   get pp(): number | undefined {
     return this.#pp;
+  }
+
+  get cachePct(): number | undefined {
+    return this.#cachePct;
+  }
+
+  get cacheFirst(): boolean {
+    return this.#cacheFirst;
   }
 }

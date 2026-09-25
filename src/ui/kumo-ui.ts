@@ -16,6 +16,11 @@ import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi, editorTheme, selectListTheme } from "./theme.js";
 import { ChatTranscript, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
+import { displayModel } from "./footer.js";
+import { CollapsedToolsComponent, groupRuns, turnSummary, type GroupedTool } from "./tool-group.js";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 export interface KumoUiHandlers {
   /** Enter on the editor (or the equivalent submit). */
@@ -59,6 +64,63 @@ class NoticeBox extends Container {
   }
 }
 
+/** Startup cloud frames (T27.4): block/braille `kumo`, no emoji. */
+export const STARTUP_FRAMES = [
+  "░ kumo",
+  "▒ kumo",
+  "▓ kumo",
+  "█ kumo",
+  "⡿ kumo ⡿",
+  "⣿ kumo ⣿",
+];
+
+export function shouldAnimateStartup(opts: {
+  stdoutTTY?: boolean;
+  env?: NodeJS.ProcessEnv;
+  ascii?: boolean;
+} = {}): boolean {
+  const env = opts.env ?? process.env;
+  const tty = opts.stdoutTTY ?? process.stdout.isTTY === true;
+  if (!tty) return false;
+  if (opts.ascii === true) return false;
+  if (env.KUMO_ASCII === "1") return false;
+  if (env.CI === "1") return false;
+  if (env.KUMO_NO_ANIMATION === "1") return false;
+  return true;
+}
+
+/** Host for header (T27.4): base URL hostname, or provider for cloud. */
+export function headerHost(
+  kumoJson?: { models?: { main?: { baseUrl?: string; provider?: string } } },
+  fallbackProvider?: string,
+): string {
+  const main = kumoJson?.models?.main;
+  if (typeof main?.baseUrl === "string" && main.baseUrl !== "") {
+    try {
+      return new URL(main.baseUrl).hostname;
+    } catch {
+      // fall through
+    }
+  }
+  if (typeof main?.provider === "string" && main.provider !== "") return main.provider;
+  if (typeof fallbackProvider === "string" && fallbackProvider !== "") {
+    if (fallbackProvider === "local") return "local";
+    return fallbackProvider;
+  }
+  return "?";
+}
+
+export function readKumoJsonForHeader(dshHome?: string): { models?: { main?: { baseUrl?: string; provider?: string } } } | undefined {
+  try {
+    const home = dshHome ?? process.env.DSH_HOME ?? join(homedir(), ".kumo");
+    const p = join(home, "kumo.json");
+    if (!existsSync(p)) return undefined;
+    return JSON.parse(readFileSync(p, "utf8")) as { models?: { main?: { baseUrl?: string; provider?: string } } };
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * The kumo TUI shell (T13a), pi-tui main-screen mode: header, chat
  * transcript, bordered multi-line editor, footer. Replaces readline while a
@@ -72,11 +134,16 @@ export class KumoUi {
   readonly footer: FooterComponent;
   readonly icons: KumoIcons;
   readonly noticeBox: NoticeBox;
+  readonly header: Text;
+  readonly version: string;
   #lastCtrlC = 0;
   #animation: ReturnType<typeof setInterval> | undefined;
   #closed = false;
   #noticeTimer: ReturnType<typeof setTimeout> | undefined;
   #confirming = false;
+  #animTimer: ReturnType<typeof setInterval> | undefined;
+  #cachedHost: string | undefined;
+  #toolsCollapsed = true;
 
   constructor(
     version: string,
@@ -87,27 +154,30 @@ export class KumoUi {
     this.icons = icons;
     this.terminal = terminal ?? new ProcessTerminal();
     this.tui = new TuiMainScreen(this.terminal);
+    this.version = version;
 
-    const header = new Text(
-      `${ansi.bold(`kumo v${version}`)}\n${ansi.gray(
-        "escape interrupt · ctrl+c clear · ctrl+d exit · / commands",
-      )}`,
-      1,
-      0,
-    );
-    this.chat = new ChatTranscript();
+    this.header = new Text("", 1, 0);
+    this.chat = new ChatTranscript(icons);
     this.editor = new PlainGlyphEditor(this.tui, editorTheme);
     this.editor.onSubmit = (text) => handlers.onSubmit(text);
     this.footer = new FooterComponent(icons);
     this.noticeBox = new NoticeBox();
+    this.updateHeader();
 
-    this.tui.addChild(header);
+    this.tui.addChild(this.header);
     this.tui.addChild(this.chat);
     this.tui.addChild(this.noticeBox);
     this.tui.addChild(this.editor);
     this.tui.addChild(this.footer);
 
     this.tui.addInputListener((data: string) => {
+      if (matchesKey(data, "ctrl+o")) {
+        if (this.#confirming) return { consume: true };
+        this.#toolsCollapsed = !this.#toolsCollapsed;
+        this.applyToolsCollapsed();
+        this.requestRender();
+        return { consume: true };
+      }
       if (this.#confirming) {
         if (matchesKey(data, "tab") || matchesKey(data, "shift+tab")) {
           return { consume: true };
@@ -158,10 +228,35 @@ export class KumoUi {
   start(): void {
     this.tui.setFocus(this.editor);
     this.tui.start();
+    if (shouldAnimateStartup({ ascii: this.icons.think === "*" })) {
+      let i = 0;
+      this.#animTimer = setInterval(() => {
+        if (this.#closed) {
+          if (this.#animTimer !== undefined) clearInterval(this.#animTimer);
+          this.#animTimer = undefined;
+          return;
+        }
+        if (i < STARTUP_FRAMES.length) {
+          const frame = STARTUP_FRAMES[i]!;
+          this.header.setText(
+            `${frame}\n${ansi.gray("escape interrupt · ctrl+c clear · ctrl+d exit · / commands")}`,
+          );
+          this.requestRender();
+          i += 1;
+        } else {
+          if (this.#animTimer !== undefined) clearInterval(this.#animTimer);
+          this.#animTimer = undefined;
+          this.updateHeader();
+          this.requestRender();
+        }
+      }, 83);
+      this.#animTimer.unref?.();
+    }
   }
 
   requestRender(): void {
     if (this.#closed) return;
+    this.updateHeader();
     this.tui.requestRender();
     const active = this.chat.children.some((c) => (c as Component & { active?: boolean }).active);
     if (active && this.#animation === undefined) {
@@ -185,6 +280,127 @@ export class KumoUi {
 
   rememberHistory(text: string): void {
     this.editor.addToHistory(text);
+  }
+
+  /** Header first line (T27.4): `kumo  ·  <model>  ·  <host>` + dim version. */
+  headerFirstLine(): string {
+    const st = this.footer.state;
+    const model = displayModel(st.model, st.modelName);
+    if (this.#cachedHost === undefined) {
+      const doc = readKumoJsonForHeader();
+      this.#cachedHost = headerHost(doc, st.provider);
+    }
+    const host = this.#cachedHost ?? "?";
+    const sep = this.icons.think === "*" ? "-" : "·";
+    return `${ansi.bold("kumo")}  ${sep}  ${model}  ${sep}  ${host}  ${ansi.dim(`v${this.version}`)}`;
+  }
+
+  updateHeader(): void {
+    if (this.#closed) return;
+    if (this.#animTimer !== undefined) return;
+    this.header.setText(
+      `${this.headerFirstLine()}\n${ansi.gray("escape interrupt · ctrl+c clear · ctrl+d exit · / commands")}`,
+    );
+  }
+
+  get toolsCollapsed(): boolean {
+    return this.#toolsCollapsed;
+  }
+
+  #collapsedGroups: Array<{
+    collapsed: CollapsedToolsComponent;
+    excess: Array<{ comp: unknown }>;
+    index: number;
+  }> = [];
+
+  /** Collapse/expand all tool groups for ctrl+o (T27.2). */
+  applyToolsCollapsed(): void {
+    for (const g of this.#collapsedGroups) {
+      const inChat = this.chat.children.includes(g.collapsed as never);
+      if (this.#toolsCollapsed && !inChat) {
+        for (const e of g.excess) this.chat.removeChild(e.comp as never);
+        this.chat.children.splice(Math.min(Math.max(0, g.index), this.chat.children.length), 0, g.collapsed as never);
+      } else if (!this.#toolsCollapsed && inChat) {
+        this.chat.removeChild(g.collapsed as never);
+        g.excess.forEach((e, k) => {
+          this.chat.children.splice(
+            Math.min(Math.max(0, g.index + k), this.chat.children.length),
+            0,
+            e.comp as never,
+          );
+        });
+      }
+    }
+    this.requestRender();
+  }
+
+  /** Turn end from render (T27.2+3): collapse groups + summary line. */
+  onTurnEnd(info: {
+    tools: Array<{ tool: string; ok: boolean; seconds: number; comp: unknown; breakBefore?: boolean }>;
+    wallSec: number;
+    outputTokens: number;
+    cancelled: boolean;
+    error: boolean;
+  }): void {
+    if (this.#closed) return;
+    const ascii = this.icons.think === "*";
+    if (info.cancelled) {
+      const line = turnSummary({
+        tools: 0,
+        wallSec: info.wallSec,
+        outputTokens: 0,
+        cancelled: true,
+        okMark: ascii ? "v" : "✓",
+        cancelMark: ascii ? "-" : "·",
+      });
+      if (line !== undefined) this.addChat(new Text(ansi.dim(line), 1, 0));
+      return;
+    }
+    if (info.error) return;
+    let offset = 0;
+    let segment: Array<{ tool: string; ok: boolean; seconds: number }> = [];
+    let segStart = 0;
+    const flushSegment = (): void => {
+      for (const run of groupRuns(segment)) {
+        if (run.count > 2) {
+          const gStart = segStart + run.start;
+          const comps = info.tools.slice(gStart, gStart + run.count).map((t) => t.comp);
+          const excess = comps.slice(2).map((comp) => ({ comp }));
+          const excessSecs = info.tools
+            .slice(gStart + 2, gStart + run.count)
+            .reduce((a, t) => a + t.seconds, 0);
+          const collapsed = new CollapsedToolsComponent(run.tool, run.count - 2, excessSecs, this.icons);
+          const firstExcess = excess[0]?.comp;
+          const index =
+            firstExcess !== undefined ? this.chat.children.indexOf(firstExcess as never) : this.chat.children.length;
+          const at = Math.max(0, Math.min(index < 0 ? this.chat.children.length : index, this.chat.children.length));
+          if (this.#toolsCollapsed) {
+            for (const e of excess) this.chat.removeChild(e.comp as never);
+            this.chat.children.splice(at, 0, collapsed as never);
+          }
+          this.#collapsedGroups.push({ collapsed, excess, index: at });
+        }
+      }
+    };
+    for (const t of info.tools) {
+      if (t.breakBefore === true && segment.length > 0) {
+        flushSegment();
+        segment = [];
+        segStart = offset;
+      }
+      segment.push({ tool: t.tool, ok: t.ok, seconds: t.seconds });
+      offset += 1;
+    }
+    flushSegment();
+    const line = turnSummary({
+      tools: info.tools.length,
+      wallSec: info.wallSec,
+      outputTokens: info.outputTokens,
+      cancelled: false,
+      okMark: ascii ? "v" : "✓",
+      cancelMark: ascii ? "-" : "·",
+    });
+    if (line !== undefined) this.addChat(new Text(ansi.dim(line), 1, 0));
   }
 
   /** Transient dim (or red) notice directly above the editor for 3 s (T24.4). */
@@ -277,6 +493,10 @@ export class KumoUi {
     this.#closed = true;
     clearInterval(this.#animation);
     this.#animation = undefined;
+    if (this.#animTimer !== undefined) {
+      clearInterval(this.#animTimer);
+      this.#animTimer = undefined;
+    }
     if (this.#noticeTimer !== undefined) {
       clearTimeout(this.#noticeTimer);
       this.#noticeTimer = undefined;

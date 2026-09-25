@@ -1,10 +1,17 @@
 import type { Component } from "@earendil-works/pi-tui";
+import stringWidth from "string-width";
 import { clipCells, dim, sanitize, spinnerFrame } from "../render/reasoning.js";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 
 const SUMMARY_KEYS = ["command", "cmd", "path", "file_path", "url", "query", "pattern"];
 const MAX_OUTPUT_LINES = 5;
+
+function padCells(text: string, width: number): string {
+  const w = stringWidth(text);
+  if (w >= width) return text;
+  return text + " ".repeat(width - w);
+}
 
 export class ToolCallComponent implements Component {
   #rawArgs = "";
@@ -14,6 +21,9 @@ export class ToolCallComponent implements Component {
     this.#startTime = now();
   }
   get active(): boolean { return this.#done === undefined; }
+  get rail(): "blue" | "red" { return this.#done !== undefined && !this.#done.ok ? "red" : "blue"; }
+  get doneOk(): boolean | undefined { return this.#done?.ok; }
+  get seconds(): number | undefined { return this.#done?.seconds; }
   args(delta: string): void { this.#rawArgs += delta; }
   /** The durable event replaces streamed JSON, it must never be appended twice. */
   setArgs(json: string): void { this.#rawArgs = json; }
@@ -34,12 +44,20 @@ export class ToolCallComponent implements Component {
     } catch { return this.icons.think === "*" ? "..." : "…"; }
   }
   render(width: number): string[] {
-    const summary = this.summary();
-    const detail = summary ? `  ${summary}` : "";
-    if (!this.#done) return [clipCells(`${spinnerFrame(this.now() - this.#startTime, this.icons)} ${this.tool}${detail}`, width)];
+    const toolPad = padCells(this.tool, 7);
+    if (!this.#done) {
+      const summary = this.summary(width);
+      const detail = summary ? `  ${summary}` : "";
+      return [clipCells(`${spinnerFrame(this.now() - this.#startTime, this.icons)} ${toolPad}${detail}`, width)];
+    }
     const mark = this.#done.ok ? ansi.green(this.icons.ok) : ansi.red(this.icons.fail);
-    const tail = clipCells(` ${this.tool}${detail}  ${this.#done.seconds.toFixed(1)}s`, Math.max(0, width - 1));
-    const out = [width > 0 ? mark + tail : ""];
+    const dur = `${this.#done.seconds.toFixed(1)}s`;
+    const prefixCells = 1 + 1 + 7 + 2;
+    const avail = Math.max(0, width - prefixCells - 2 - stringWidth(dur));
+    const rawSummary = this.summary(Math.min(60, Math.max(0, avail)));
+    const summaryPadded = padCells(rawSummary, avail);
+    const head = width > 0 ? mark + clipCells(` ${toolPad}  ${summaryPadded}  ${dur}`, Math.max(0, width - 1)) : "";
+    const out = [head];
     const branch = this.icons.think === "*" ? ">" : "⎿";
     this.#done.lines.forEach((line, i) => out.push(dim(clipCells(`${i === 0 ? `  ${branch} ` : "    "}${line}`, width))));
     if (this.#done.rest > 0) out.push(dim(clipCells(`    ${this.icons.think === "*" ? "..." : "…"} ${this.#done.rest} more lines`, width)));

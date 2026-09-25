@@ -81,6 +81,7 @@ export function attachTui(
   let working: WorkingComponent | undefined;
   let lastInputTokens = 0;
   let lastOutputTokens = 0;
+  let lastCacheTokens = 0;
   let turnStartWall = Date.now();
   let turnOutput = 0;
   let turnToolIds: string[] = [];
@@ -94,14 +95,29 @@ export function attachTui(
   };
 
   const hideWorking = (): void => {
+    const chat = (ui as unknown as { chat?: { children: unknown[]; removeChild(c: unknown): void } }).chat;
+    if (chat !== undefined) {
+      for (const child of [...chat.children]) {
+        if ((child as { constructor?: { name?: string } }).constructor?.name === "WorkingComponent") {
+          chat.removeChild(child);
+        }
+      }
+    }
     if (working !== undefined) {
       (ui as unknown as { removeChat?: (c: unknown) => void }).removeChat?.(working);
       working = undefined;
-      ui.requestRender();
     }
+    ui.requestRender();
   };
 
   const showWorking = (): void => {
+    const chat = (ui as unknown as { chat?: { children: unknown[] } }).chat;
+    if (
+      chat !== undefined &&
+      chat.children.some((c) => (c as { constructor?: { name?: string } }).constructor?.name === "WorkingComponent")
+    ) {
+      return;
+    }
     if (working === undefined && reasoning === undefined && text === undefined) {
       working = new WorkingComponent(Date.now, ui.icons);
       ui.addChat(working);
@@ -217,12 +233,14 @@ export function attachTui(
         lastInputTokens = Number(u.inputTokens ?? lastInputTokens);
         if (Number.isFinite(tokens)) turnOutput += Math.max(0, tokens);
         const details = (u.prompt_tokens_details ?? u.promptTokensDetails ?? {}) as Record<string, unknown>;
+        const cached = Number(
+          u.cacheReadTokens ?? u.cachedTokens ?? u.cache_read ?? details.cached_tokens ?? NaN,
+        );
+        if (Number.isFinite(cached)) lastCacheTokens = Math.max(0, cached);
         tps.usage(now, {
           outputTokens: Number(u.outputTokens ?? NaN),
           inputTokens: Number(u.inputTokens ?? NaN),
-          cacheReadTokens: Number(
-            u.cacheReadTokens ?? u.cachedTokens ?? u.cache_read ?? details.cached_tokens ?? NaN,
-          ),
+          cacheReadTokens: cached,
         });
         ui.footer.set({ tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
         ui.requestRender();
@@ -290,7 +308,10 @@ export function attachTui(
         for (const comp of tools.values()) comp.cancel();
         const window = agent.session?.requestContext?.()?.contextWindow;
         if (typeof window === "number" && window > 0) {
-          ui.footer.set({ contextUsed: lastInputTokens + lastOutputTokens, contextWindow: window });
+          ui.footer.set({
+            contextUsed: lastInputTokens + lastCacheTokens + lastOutputTokens,
+            contextWindow: window,
+          });
         }
         const reason = event.data.reason;
         const wallSec = Math.max(0, (Date.now() - turnStartWall) / 1000);

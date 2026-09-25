@@ -80,7 +80,13 @@ export class TpsMeter {
     ) {
       const preDt = (this.#t0 - this.#callStart) / 1000;
       const cached = Number(usage.cacheReadTokens ?? 0);
-      const fresh = Math.max(0, inp - (Number.isFinite(cached) ? cached : 0));
+      // pi-ai inputTokens EXCLUDES cached (BOS real capture): fresh = inp.
+      // If a server includes cached (cached <= input), fresh = input - cached.
+      const fresh = Number.isFinite(cached)
+        ? cached > inp
+          ? Math.max(0, inp)
+          : Math.max(0, inp - cached)
+        : Math.max(0, inp);
       this.#pp = preDt > 0 && fresh > 0 ? fresh / preDt : undefined;
     }
     const cachedRaw = Number(usage.cacheReadTokens ?? NaN);

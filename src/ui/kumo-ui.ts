@@ -17,6 +17,7 @@ import { ansi, editorTheme, selectListTheme } from "./theme.js";
 import { ChatTranscript, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
 import { displayModel } from "./footer.js";
+import { WorkingComponent } from "./working.js";
 import { CollapsedToolsComponent, groupRuns, turnSummary, type GroupedTool } from "./tool-group.js";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -110,12 +111,16 @@ export function headerHost(
   return "?";
 }
 
-export function readKumoJsonForHeader(dshHome?: string): { models?: { main?: { baseUrl?: string; provider?: string } } } | undefined {
+export function readKumoJsonForHeader(dshHome?: string): {
+  models?: { main?: { baseUrl?: string; provider?: string; model?: string; name?: string; contextWindow?: number } };
+} | undefined {
   try {
     const home = dshHome ?? process.env.DSH_HOME ?? join(homedir(), ".kumo");
     const p = join(home, "kumo.json");
     if (!existsSync(p)) return undefined;
-    return JSON.parse(readFileSync(p, "utf8")) as { models?: { main?: { baseUrl?: string; provider?: string } } };
+    return JSON.parse(readFileSync(p, "utf8")) as {
+      models?: { main?: { baseUrl?: string; provider?: string; model?: string; name?: string; contextWindow?: number } };
+    };
   } catch {
     return undefined;
   }
@@ -159,9 +164,29 @@ export class KumoUi {
     this.header = new Text("", 1, 0);
     this.chat = new ChatTranscript(icons);
     this.editor = new PlainGlyphEditor(this.tui, editorTheme);
-    this.editor.onSubmit = (text) => handlers.onSubmit(text);
+    this.editor.onSubmit = (text) => {
+      this.showWorking();
+      handlers.onSubmit(text);
+    };
     this.footer = new FooterComponent(icons);
     this.noticeBox = new NoticeBox();
+    try {
+      const doc = readKumoJsonForHeader();
+      const main = doc?.models?.main;
+      if (main !== undefined) {
+        const init: Record<string, unknown> = {};
+        if (typeof main.model === "string" && main.model !== "") init.model = main.model;
+        if (typeof main.name === "string" && main.name !== "") init.modelName = main.name;
+        if (typeof main.provider === "string" && main.provider !== "") init.provider = main.provider;
+        if (typeof main.contextWindow === "number" && main.contextWindow > 0) {
+          init.contextWindow = main.contextWindow;
+          init.contextUsed = 0;
+        }
+        if (Object.keys(init).length > 0) this.footer.set(init as never);
+      }
+    } catch {
+      // startup footer is best effort; repl sets model/provider shortly after
+    }
     this.updateHeader();
 
     this.tui.addChild(this.header);
@@ -280,6 +305,17 @@ export class KumoUi {
 
   rememberHistory(text: string): void {
     this.editor.addToHistory(text);
+  }
+
+  /** Show Working immediately on submit (T27b.5), removed on first chunk. */
+  showWorking(): void {
+    if (this.#closed) return;
+    const has = this.chat.children.some(
+      (c) => (c as { constructor?: { name?: string } }).constructor?.name === "WorkingComponent",
+    );
+    if (has) return;
+    this.chat.addChild(new WorkingComponent(Date.now, this.icons));
+    this.requestRender();
   }
 
   /** Header first line (T27.4): `kumo  ·  <model>  ·  <host>` + dim version. */
@@ -466,25 +502,30 @@ export class KumoUi {
   }
 
   /**
-   * A pi-tui select shown as a modal overlay (T13d). Resolves with the
-   * chosen index, or -1 on cancel (escape / ctrl+c).
+   * A pi-tui select above the editor (T27b.1, never over chat lines).
+   * Resolves with the chosen index, or -1 on cancel (escape).
    */
   askChoice(title: string, items: SelectItem[]): Promise<number> {
+    if (this.#closed) return Promise.resolve(-1);
+    this.clearNoticeBox();
+    this.#confirming = true;
+    const titleText = new Text(ansi.yellow(title), 1, 0);
+    const list = new SelectList(items, Math.max(items.length, 5), selectListTheme);
+    this.noticeBox.addChild(titleText);
+    this.noticeBox.addChild(list);
+    this.requestRender();
     return new Promise((resolve) => {
-      const titleText = new Text(ansi.yellow(title), 1, 0);
-      const list = new SelectList(items, Math.max(items.length, 5), selectListTheme);
-      const overlay: ChoiceOverlay = new ChoiceOverlay(titleText, list);
-      let handle: OverlayHandle | undefined;
       const finish = (index: number) => {
-        if (handle !== undefined) handle.hide();
+        this.#confirming = false;
+        this.clearNoticeBox();
         this.tui.setFocus(this.editor);
         this.requestRender();
         resolve(index);
       };
       list.onSelect = (item) => finish(items.indexOf(item));
       list.onCancel = () => finish(-1);
-      handle = this.tui.showOverlay(overlay);
-      handle.focus();
+      this.tui.setFocus(list);
+      this.requestRender();
     });
   }
 

@@ -39,7 +39,22 @@ export class Harness {
     try {
       await writeFile(join(home, "settings.yaml"), renderSettingsYaml(localServerSettings({ baseUrl: server.url, models: ["e2e-model"] }, "e2e-model")));
       await writeFile(join(home, ".env"), "KUMO_LOCAL_API_KEY=e2e\n");
-      await writeFile(join(home, "kumo.json"), JSON.stringify({ permissionMode, search: { provider: "none" } }));
+      await writeFile(
+        join(home, "kumo.json"),
+        JSON.stringify({
+          permissionMode,
+          search: { provider: "none" },
+          models: {
+            main: {
+              provider: "local",
+              model: "e2e-model",
+              name: "e2e-model Pretty",
+              baseUrl: server.url,
+              contextWindow: 100000,
+            },
+          },
+        }),
+      );
       await writeFile(join(project, "note.txt"), "E2E_READ_SENTINEL\n");
       const { dir } = await ensureProfile(home);
       // Reuse the installed bundles offline. Windows junctions need no symlink privilege.

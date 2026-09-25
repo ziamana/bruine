@@ -1,5 +1,6 @@
 import type { Component } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
+import { isAbsolute, relative } from "node:path";
 import { clipCells, dim, sanitize, spinnerFrame } from "../render/reasoning.js";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
@@ -11,6 +12,20 @@ function padCells(text: string, width: number): string {
   const w = stringWidth(text);
   if (w >= width) return text;
   return text + " ".repeat(width - w);
+}
+
+/** Display absolute paths inside the project relative to the cwd (T27b minor). */
+export function relCwd(p: string): string {
+  if (p === "") return p;
+  try {
+    if (!isAbsolute(p)) return p;
+    const rel = relative(process.cwd(), p);
+    if (rel === "" ) return ".";
+    if (rel.startsWith("..") || isAbsolute(rel)) return p;
+    return rel;
+  } catch {
+    return p;
+  }
 }
 
 export class ToolCallComponent implements Component {
@@ -39,7 +54,8 @@ export class ToolCallComponent implements Component {
       const parsed: unknown = JSON.parse(this.#rawArgs);
       const obj = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
       const key = obj && SUMMARY_KEYS.find((k) => k in obj);
-      const text = key ? String(obj![key]) : JSON.stringify(parsed);
+      let text = key ? String(obj![key]) : JSON.stringify(parsed);
+      if (key === "path" || key === "file_path") text = relCwd(text);
       return clipCells(sanitize(text).replace(/\n/g, " "), Math.min(60, width), this.icons.think === "*" ? "..." : "…");
     } catch { return this.icons.think === "*" ? "..." : "…"; }
   }

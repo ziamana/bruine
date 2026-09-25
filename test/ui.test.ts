@@ -148,6 +148,14 @@ describe("ToolCallComponent (T27.2 aligned + rail)", () => {
     t.args('{"command":"rm -rf dist"}');
     expect(t.summary(80)).toBe("rm -rf dist");
   });
+
+  test("absolute paths inside cwd shown relative (T27b minor)", async () => {
+    const { relCwd } = await import("../src/ui/tool-call-component.js");
+    const { join } = await import("node:path");
+    expect(relCwd("note.txt")).toBe("note.txt");
+    expect(relCwd(join(process.cwd(), "note.txt"))).toBe("note.txt");
+    expect(relCwd("/etc/hosts")).toBe("/etc/hosts");
+  });
 });
 
 describe("AssistantTextComponent (T13c)", () => {
@@ -279,6 +287,12 @@ describe("FooterComponent (T25.2)", () => {
     expect(f.render(100).map(strip)[0]).not.toContain("/etc");
     f.set({ contextUsed: 12_300, contextWindow: 100_000 });
     expect(f.render(100).map(strip)[0]).toContain("ctx 12% of 100k");
+  });
+
+  test("ctx includes cached: 9000 + 100 + 0 over 100k → 9.1% (T27b.2)", () => {
+    const f = new FooterComponent(UNICODE_ICONS);
+    f.set({ contextUsed: 9100, contextWindow: 100000, model: "m" });
+    expect(f.render(100).map(strip)[0]).toContain("ctx 9.1% of 100k");
   });
 
   test("renders placeholder state", () => {

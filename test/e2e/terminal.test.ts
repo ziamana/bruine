@@ -220,16 +220,40 @@ test("modes: keys change actual tool permissions as well as colored labels", asy
   });
 });
 
-test("working: delayed first chunk shows Working within 200ms (T24.3)", async () => {
-  await scenario("working", [{ chunks: [{ delta: { content: "WORKING_DONE" }, delayMs: 1500 }] }], async (h) => {
+test("working: delayed first chunk shows Working within 200ms (T24.3, T27b.5)", async () => {
+  await scenario("working", [{ chunks: [{ delta: { content: "WORKING_DONE" }, delayMs: 3000 }] }], async (h) => {
     h.type("Start delayed work");
     await h.waitFor("Start delayed work");
     const start = Date.now();
     h.press("enter");
     await h.until(() => h.screen().join("\n").includes("Working"), 2000, "Working visible");
-    expect(Date.now() - start).toBeLessThan(2000);
+    expect(Date.now() - start).toBeLessThan(1500);
     await h.waitFor("WORKING_DONE");
     await h.dump("working");
+  });
+});
+
+test("startup: header host and window known before first answer, pretty name (T27b.3+4)", async () => {
+  await scenario("startup", [], async (h) => {
+    const head = h.screen().join("\n");
+    expect(head).toContain("127.0.0.1");
+    expect(head).toContain("e2e-model Pretty");
+    expect(footer(h)).toContain("100k");
+    expect(footer(h)).not.toContain("?");
+  });
+});
+
+test("cache-context: cached 9000/input 100 counts cached in ctx (T27b.2)", async () => {
+  await scenario("cachectx", [
+    // OpenAI total prompt 9100 = 100 new + 9000 cached; pi-ai input excludes cached (100).
+    { chunks: [{ delta: { content: "CTX_DONE" } }], usage: { outputTokens: 50, inputTokens: 9100, cachedTokens: 9000 } },
+  ], async (h) => {
+    await h.prompt("Check context");
+    await h.waitFor("CTX_DONE");
+    await h.waitStable(400, 2000);
+    // 100 + 9000 + 50 = 9150 / 262k ≈ 3.5% (old input+output only would show 0.1%)
+    expect(footer(h)).toContain("3.5%");
+    expect(footer(h)).toContain("cache");
   });
 });
 
@@ -284,6 +308,8 @@ test("approval: Down Down Enter rejects write without creating the file", async 
     await h.waitFor("Allow once");
     await h.waitFor("Always");
     await h.waitFor("Reject");
+    // T27b.1: approval sits above the editor, never over chat: prompt stays visible.
+    expect(h.screen().join("\n")).toContain("› Write rejected.txt");
     await h.dump("approval-select");
     h.press("down");
     await delay(50);

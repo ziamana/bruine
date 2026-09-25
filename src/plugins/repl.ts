@@ -3,6 +3,7 @@ import { createInterface, type Interface as ReadlineInterface } from "node:readl
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
+import { kumoIcons } from "../render/chars.js";
 import type { DshContext, KumoRepl, KumoStartup } from "./ctx.js";
 
 /** Stable Cordis plugin name. */
@@ -14,7 +15,7 @@ export const inject = ["agentDefaultModel", "agents", "sessions"];
 /** The service provided by this plugin and injected by render/approval. */
 export const KUMO_REPL_SERVICE = "kumoRepl";
 
-const PROMPT = "› ";
+const promptText = (): string => `${kumoIcons().prompt} `;
 const EXIT_COMMANDS = new Set(["/exit", "/quit"]);
 
 /** The terminal line source the loop drives; readline in production, fakes in tests. */
@@ -131,7 +132,7 @@ export class Repl {
 
 /** Wrap a node:readline interface as a {@link LineSource}. */
 export function readlineSource(rl: ReadlineInterface): LineSource {
-  rl.setPrompt(PROMPT);
+  rl.setPrompt(promptText());
   return {
     onLine: (cb) => rl.on("line", cb),
     onClose: (cb) => rl.on("close", cb),

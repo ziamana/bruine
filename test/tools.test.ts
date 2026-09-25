@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { ToolCallView } from "../src/render/tools.js";
+import { UNICODE_ICONS } from "../src/render/chars.js";
 import type { Screen } from "../src/render/reasoning.js";
 
 class FakeScreen implements Screen {
@@ -32,7 +33,7 @@ describe("ToolCallView", () => {
   test("1. full lifecycle: header fills in, result shows summary and output", () => {
     const s = new FakeScreen();
     const clock = fakeClock(0);
-    const v = new ToolCallView(s, clock.now);
+    const v = new ToolCallView(s, clock.now, UNICODE_ICONS);
 
     v.start("1", "bash");
     expect(s.last).toBe("● bash");
@@ -54,7 +55,7 @@ describe("ToolCallView", () => {
 
   test("2. long output: 5 lines shown + more-lines hint", () => {
     const s = new FakeScreen();
-    const v = new ToolCallView(s, fakeClock(0).now);
+    const v = new ToolCallView(s, fakeClock(0).now, UNICODE_ICONS);
     v.start("1", "bash");
     const twelve = Array.from({ length: 12 }, (_, i) => `l${i + 1}`).join("\n");
     v.result("1", true, twelve);
@@ -69,7 +70,7 @@ describe("ToolCallView", () => {
 
   test("3. path argument becomes the summary", () => {
     const s = new FakeScreen();
-    const v = new ToolCallView(s, fakeClock(0).now);
+    const v = new ToolCallView(s, fakeClock(0).now, UNICODE_ICONS);
     v.start("1", "read");
     v.args("1", '{"path":"src/x.ts"}');
     expect(strip(s.last)).toBe("● read  src/x.ts");
@@ -77,7 +78,7 @@ describe("ToolCallView", () => {
 
   test("4. failed result starts with ✗", () => {
     const s = new FakeScreen();
-    const v = new ToolCallView(s, fakeClock(0).now);
+    const v = new ToolCallView(s, fakeClock(0).now, UNICODE_ICONS);
     v.start("1", "bash");
     v.result("1", false, "boom");
     expect(strip(s.writes[s.writes.length - 2]).startsWith("✗")).toBe(true);
@@ -85,7 +86,7 @@ describe("ToolCallView", () => {
 
   test("5. unknown id is ignored silently", () => {
     const s = new FakeScreen();
-    const v = new ToolCallView(s, fakeClock(0).now);
+    const v = new ToolCallView(s, fakeClock(0).now, UNICODE_ICONS);
     expect(() => v.args("nope", '{"a":1}')).not.toThrow();
     expect(() => v.result("nope", true, "x")).not.toThrow();
     expect(s.writes).toHaveLength(0);
@@ -93,7 +94,7 @@ describe("ToolCallView", () => {
 
   test("summary falls back to compact JSON when no known key", () => {
     const s = new FakeScreen();
-    const v = new ToolCallView(s, fakeClock(0).now);
+    const v = new ToolCallView(s, fakeClock(0).now, UNICODE_ICONS);
     v.start("1", "weather");
     v.args("1", '{"city":"Paris","days":2}');
     expect(strip(s.last)).toBe('● weather  {"city":"Paris","days":2}');
@@ -102,7 +103,7 @@ describe("ToolCallView", () => {
   test("summary is truncated to fit columns", () => {
     const s = new FakeScreen();
     s.columns = 30;
-    const v = new ToolCallView(s, fakeClock(0).now);
+    const v = new ToolCallView(s, fakeClock(0).now, UNICODE_ICONS);
     v.start("1", "bash");
     v.args("1", JSON.stringify({ command: "x".repeat(60) }));
     const text = strip(s.last).replace("● bash  ", "");
@@ -113,7 +114,7 @@ describe("ToolCallView", () => {
 
   test("describe exposes the current header info for approvals", () => {
     const s = new FakeScreen();
-    const v = new ToolCallView(s, fakeClock(0).now);
+    const v = new ToolCallView(s, fakeClock(0).now, UNICODE_ICONS);
     expect(v.describe("nope")).toBeUndefined();
     v.start("1", "bash");
     v.args("1", '{"command":"rm -rf dist"}');

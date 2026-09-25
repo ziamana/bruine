@@ -1,10 +1,11 @@
 import { describe, expect, test } from "vitest";
 import { attach, createUi } from "../src/plugins/render.js";
+import { UNICODE_ICONS } from "../src/render/chars.js";
 import { fakeCtx, FakeScreen, strip } from "./fakes.js";
 
 function setup() {
   const screen = new FakeScreen();
-  const ui = createUi(screen);
+  const ui = createUi(screen, UNICODE_ICONS);
   const fake = fakeCtx();
   const session = { id: "s1" };
   const agent = { session };
@@ -108,7 +109,7 @@ describe("render plugin", () => {
   test("turn/end aborted prints cancelled", () => {
     const { screen, event } = setup();
     event("turn/end", { turn: 1, reason: { kind: "aborted", reason: { kind: "user" } } });
-    expect(strip(screen.all)).toContain("— cancelled");
+    expect(strip(screen.all)).toContain("- cancelled");
   });
 
   test("events from another agent or session are ignored", () => {

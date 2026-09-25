@@ -1,9 +1,30 @@
 import { createRequire } from "node:module";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { name: string; version: string };
+
+export interface ProfilePaths {
+  dir: string;
+  packageJson: string;
+  patchYml: string;
+  cordisYml: string;
+}
+
+/** The profile layout as data; pathMod is injectable for win32 tests. */
+export function profilePaths(
+  dshHome: string,
+  pathMod: typeof path = path,
+): ProfilePaths {
+  const dir = pathMod.join(dshHome, "profiles", "kumo");
+  return {
+    dir,
+    packageJson: pathMod.join(dir, "package.json"),
+    patchYml: pathMod.join(dir, "cordis.patch.yml"),
+    cordisYml: pathMod.join(dir, "cordis.yml"),
+  };
+}
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -22,11 +43,12 @@ async function writeAtomic(path: string, content: string): Promise<void> {
 
 export async function ensureProfile(
   dshHome: string,
+  pathMod: typeof path = path,
 ): Promise<{ created: boolean; dir: string }> {
-  const dir = join(dshHome, "profiles", "kumo");
-  const packageJsonPath = join(dir, "package.json");
+  const p = profilePaths(dshHome, pathMod);
+  const dir = p.dir;
 
-  if (await exists(packageJsonPath)) {
+  if (await exists(p.packageJson)) {
     return { created: false, dir };
   }
 
@@ -46,13 +68,13 @@ export async function ensureProfile(
     },
   };
 
-  await writeAtomic(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+  await writeAtomic(p.packageJson, `${JSON.stringify(packageJson, null, 2)}\n`);
   await writeAtomic(
-    join(dir, "cordis.patch.yml"),
+    p.patchYml,
     "# kumo user overrides. Edit this file, not cordis.yml.\n[]\n",
   );
   await writeAtomic(
-    join(dir, "cordis.yml"),
+    p.cordisYml,
     "# managed by dsh, do not edit\n[]\n",
   );
 

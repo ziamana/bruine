@@ -1,17 +1,23 @@
 #!/usr/bin/env node
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import os from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { buildLaunch, flagMode } from "./launch.js";
+import { buildLaunch, flagMode, resolveDshEntry, runDsh } from "./launch.js";
 import { ensureProfile } from "./profile.js";
 import { simpleSetup, type SetupIO } from "./setup/simple.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { name: string; version: string };
+
+// Piping into a closed reader (`kumo --help | head`) must not print a stack.
+process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EPIPE") process.exit(0);
+  throw err;
+});
 
 const USAGE = `kumo — interactive terminal agent on top of DeepSeek Harness (dsh)
 
@@ -21,11 +27,13 @@ Usage:
   kumo --help        Print this help.
 
 Environment:
-  KUMO_HOME          Override the kumo home directory (default: ~/.kumo).
+  KUMO_HOME          Override the kumo home directory (default: .kumo
+                     inside your home directory).
+  KUMO_ASCII=1       Use plain-ASCII glyphs instead of emoji/symbols.
 `;
 
 const DSH_MISSING =
-  "kumo: DeepSeek Harness (dsh) not found. Install it: npm i -g @deepseek-ai/dsh";
+  "kumo: could not launch dsh (missing or broken install). Reinstall kumo.";
 
 /** The kumo-cli package directory this launcher runs from, when detectable. */
 function selfPackageRoot(): string | undefined {
@@ -41,24 +49,41 @@ function selfPackageRoot(): string | undefined {
 }
 
 /** The profile's bundle must be installed before dsh can boot it. */
-function ensureBundleInstalled(profileDir: string, env: Record<string, string>): void {
+function ensureBundleInstalled(
+  profileDir: string,
+  dshEntry: string | undefined,
+  env: Record<string, string>,
+): void {
   const marker = join(profileDir, "node_modules", pkg.name, "package.json");
   if (existsSync(marker)) return;
 
   const spec = selfPackageRoot() ?? `${pkg.name}@${pkg.version}`;
   console.log(`kumo: first run — installing the kumo bundle into ${profileDir}…`);
-  const result = spawnSync("dsh", ["plugin", "--profile", "kumo", "add", spec], {
-    stdio: "inherit",
+  const { status, error } = runDsh(
+    dshEntry,
+    ["plugin", "--profile", "kumo", "add", spec],
     env,
-  });
-  if (result.error) {
-    if ((result.error as NodeJS.ErrnoException).code === "ENOENT") console.error(DSH_MISSING);
-    else console.error(`kumo: ${result.error.message}`);
+  );
+  if (error) {
+    if (error.code === "ENOENT") console.error(DSH_MISSING);
+    else console.error(`kumo: ${error.message}`);
     process.exit(1);
   }
-  if (result.status !== 0) {
-    console.error(`kumo: could not install the kumo bundle (dsh plugin exited ${result.status}).`);
+  if (status !== 0) {
+    console.error(`kumo: could not install the kumo bundle (dsh plugin exited ${status}).`);
     process.exit(1);
+  }
+}
+
+interface KumoJson {
+  telemetry?: boolean;
+}
+
+function readKumoJson(dshHome: string): KumoJson {
+  try {
+    return JSON.parse(readFileSync(join(dshHome, "kumo.json"), "utf8")) as KumoJson;
+  } catch {
+    return {};
   }
 }
 
@@ -156,11 +181,15 @@ async function main(): Promise<void> {
   }
 
   const dshHome = process.env.KUMO_HOME ?? join(os.homedir(), ".kumo");
-  const { command, args, env } = buildLaunch(argv, process.env, os.homedir());
+  const dshEntry = resolveDshEntry();
+  const { command, args, env } = buildLaunch(argv, process.env, os.homedir(), {
+    dshEntry,
+    telemetry: readKumoJson(dshHome).telemetry,
+  });
 
   await simpleSetup(dshHome, terminalIO());
   const { dir } = await ensureProfile(dshHome);
-  ensureBundleInstalled(dir, env);
+  ensureBundleInstalled(dir, dshEntry, env);
 
   const child = spawn(command, args, { env, stdio: "inherit" });
 

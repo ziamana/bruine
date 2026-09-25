@@ -1,3 +1,4 @@
+import { kumoIcons, type KumoIcons } from "./chars.js";
 import { dim, type Screen } from "./reasoning.js";
 
 const CLEAR = "\r\x1b[2K";
@@ -27,16 +28,18 @@ function truncate(s: string, max: number): string {
 export class ToolCallView {
   #screen: Screen;
   #now: () => number;
+  #icons: KumoIcons;
   #calls = new Map<string, Call>();
 
-  constructor(screen: Screen, now: () => number = Date.now) {
+  constructor(screen: Screen, now: () => number = Date.now, icons: KumoIcons = kumoIcons()) {
     this.#screen = screen;
     this.#now = now;
+    this.#icons = icons;
   }
 
   start(id: string, toolName: string): void {
     this.#calls.set(id, { tool: toolName, rawArgs: "", startTime: this.#now() });
-    this.#screen.write(`● ${toolName}`);
+    this.#screen.write(`${this.#icons.bullet} ${toolName}`);
   }
 
   args(id: string, jsonDelta: string): void {
@@ -52,8 +55,9 @@ export class ToolCallView {
 
     const seconds = (this.#now() - call.startTime) / 1000;
     const summary = this.#summary(call);
+    const mark = ok ? this.#icons.ok : this.#icons.fail;
     const head =
-      `${ok ? "✓" : "✗"} ${call.tool}` +
+      `${mark} ${call.tool}` +
       (summary !== "" ? `  ${summary}` : "") +
       `  ${seconds.toFixed(1)}s\n`;
     this.#screen.write(CLEAR + head);

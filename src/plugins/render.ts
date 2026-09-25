@@ -1,4 +1,5 @@
 import { ReasoningLine, dim, type Screen } from "../render/reasoning.js";
+import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { TextStream } from "../render/text.js";
 import { ToolCallView } from "../render/tools.js";
 import type { DshContext } from "./ctx.js";
@@ -12,6 +13,7 @@ export const KUMO_RENDER_SERVICE = "kumoRender";
 /** The drawing surface kumo owns for the whole session. */
 export interface KumoUi {
   screen: Screen;
+  icons: KumoIcons;
   reasoning: ReasoningLine;
   text: TextStream;
   tools: ToolCallView;
@@ -27,12 +29,13 @@ export function stdoutScreen(): Screen {
   };
 }
 
-export function createUi(screen: Screen): KumoUi {
+export function createUi(screen: Screen, icons: KumoIcons = kumoIcons()): KumoUi {
   return {
     screen,
-    reasoning: new ReasoningLine(screen),
+    icons,
+    reasoning: new ReasoningLine(screen, Date.now, icons),
     text: new TextStream(screen),
-    tools: new ToolCallView(screen),
+    tools: new ToolCallView(screen, Date.now, icons),
   };
 }
 
@@ -129,9 +132,9 @@ export function attach(
         ui.text.end();
         const reason = event.data.reason;
         if (reason?.kind === "error") {
-          ui.screen.write(`\n✗ ${reason.error.code}: ${reason.error.message}\n`);
+          ui.screen.write(`\n${ui.icons.fail} ${reason.error.code}: ${reason.error.message}\n`);
         } else if (reason?.kind === "aborted") {
-          ui.screen.write(`\n${dim("— cancelled")}\n`);
+          ui.screen.write(`\n${dim("- cancelled")}\n`);
         }
         return;
       }

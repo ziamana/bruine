@@ -61,7 +61,10 @@ export function apply(ctx: DshContext): void {
       const ask = repl.ask;
       return ask(question).then((answer) => {
         const ok = parseAnswer(answer);
-        ui?.screen.write(`\r\x1b[2K${dim(ok ? "✓ allowed" : "✗ rejected")}\n`);
+        if (ui !== undefined) {
+          const mark = ok ? ui.icons.ok : ui.icons.fail;
+          ui.screen.write(`\r\x1b[2K${dim(`${mark} ${ok ? "allowed" : "rejected"}`)}\n`);
+        }
         return ok ? ("allowed-once" as const) : ("rejected" as const);
       });
     },

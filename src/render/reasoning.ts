@@ -1,4 +1,5 @@
 import stringWidth from "string-width";
+import { kumoIcons, type KumoIcons } from "./chars.js";
 
 export interface Screen {
   write(s: string): void;
@@ -14,7 +15,6 @@ export function sanitize(s: string): string {
   return s.replace(/[\x00-\x09\x0b-\x1f\x7f\x80-\x9f]/g, " ");
 }
 
-const PREFIX = "💭 ";
 const CLEAR = "\r\x1b[2K";
 const NOWRAP = "\x1b[?7l";
 const WRAP = "\x1b[?7h";
@@ -36,23 +36,25 @@ function truncateCells(s: string, budget: number): string {
 }
 
 /** The visible part of the reasoning line, within `columns - 1` cells total. */
-export function visible(s: string, columns: number): string {
+export function visible(s: string, columns: number, icons: KumoIcons = kumoIcons()): string {
   const text = s.replace(/^ +/, "");
-  const budget = columns - 1 - stringWidth(PREFIX);
+  const budget = columns - 1 - stringWidth(`${icons.think} `);
   return truncateCells(text, budget);
 }
 
 export class ReasoningLine {
   #screen: Screen;
   #now: () => number;
+  #icons: KumoIcons;
   #active = false;
   #current = "";
   #lastFinished = "";
   #startTime = 0;
 
-  constructor(screen: Screen, now: () => number = Date.now) {
+  constructor(screen: Screen, now: () => number = Date.now, icons: KumoIcons = kumoIcons()) {
     this.#screen = screen;
     this.#now = now;
+    this.#icons = icons;
   }
 
   get active(): boolean {
@@ -83,14 +85,14 @@ export class ReasoningLine {
     const show = this.#current !== "" ? this.#current : this.#lastFinished;
     if (show === "") return;
 
-    this.#draw(PREFIX + visible(show, this.#screen.columns));
+    this.#draw(`${this.#icons.think} ${visible(show, this.#screen.columns, this.#icons)}`);
   }
 
   end(): void {
     if (!this.#active) return;
     const seconds = (this.#now() - this.#startTime) / 1000;
     this.#screen.write(
-      CLEAR + NOWRAP + dim(`💭 thought for ${seconds.toFixed(1)}s`) + WRAP + "\n",
+      CLEAR + NOWRAP + dim(`${this.#icons.think} thought for ${seconds.toFixed(1)}s`) + WRAP + "\n",
     );
     this.#active = false;
     this.#current = "";

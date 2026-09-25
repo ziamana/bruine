@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { apply, buildQuestion, parseAnswer } from "../src/plugins/approval.js";
 import { createUi } from "../src/plugins/render.js";
+import { UNICODE_ICONS } from "../src/render/chars.js";
 import { fakeCtx, FakeScreen, strip } from "./fakes.js";
 
 describe("buildQuestion", () => {
@@ -35,7 +36,7 @@ describe("parseAnswer", () => {
 describe("approval plugin apply", () => {
   function setup(answer: string) {
     const screen = new FakeScreen();
-    const ui = createUi(screen);
+    const ui = createUi(screen, UNICODE_ICONS);
     const agent = { session: {} };
     const questions: string[] = [];
     const repl = {

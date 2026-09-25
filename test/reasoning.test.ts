@@ -1,6 +1,7 @@
 import stringWidth from "string-width";
 import { describe, expect, test } from "vitest";
 import { ReasoningLine } from "../src/render/reasoning.js";
+import { UNICODE_ICONS } from "../src/render/chars.js";
 import { FakeScreen, strip } from "./fakes.js";
 
 function fakeClock(start: number) {
@@ -16,7 +17,7 @@ function fakeClock(start: number) {
 describe("ReasoningLine", () => {
   test("1. deltas accumulate on one line", () => {
     const s = new FakeScreen();
-    const r = new ReasoningLine(s);
+    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
     r.push("Let me");
     r.push(" check");
     expect(s.last).toContain("💭 Let me check");
@@ -25,7 +26,7 @@ describe("ReasoningLine", () => {
 
   test("2. a newline finishes the line; only the new one shows", () => {
     const s = new FakeScreen();
-    const r = new ReasoningLine(s);
+    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
     r.push("line one\nline t");
     expect(s.last).toContain("💭 line t");
     expect(s.last).not.toContain("line one");
@@ -33,7 +34,7 @@ describe("ReasoningLine", () => {
 
   test("3. after a trailing newline the finished line stays visible", () => {
     const s = new FakeScreen();
-    const r = new ReasoningLine(s);
+    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
     r.push("done\n");
     expect(s.last).toContain("💭 done");
   });
@@ -41,7 +42,7 @@ describe("ReasoningLine", () => {
   test("4. long lines are truncated to columns, keeping the tail", () => {
     const s = new FakeScreen();
     s.columns = 20;
-    const r = new ReasoningLine(s);
+    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
     r.push("x".repeat(50));
     const text = strip(s.last).replace("💭 ", "");
     expect(text.length).toBeLessThanOrEqual(16);
@@ -51,7 +52,7 @@ describe("ReasoningLine", () => {
   test("5. end() shows the elapsed time with one decimal", () => {
     const s = new FakeScreen();
     const clock = fakeClock(1000);
-    const r = new ReasoningLine(s, clock.now);
+    const r = new ReasoningLine(s, clock.now, UNICODE_ICONS);
     r.push("thinking");
     clock.set(5200);
     r.end();
@@ -62,14 +63,14 @@ describe("ReasoningLine", () => {
 
   test("6. end() without any push writes nothing", () => {
     const s = new FakeScreen();
-    const r = new ReasoningLine(s);
+    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
     r.end();
     expect(s.writes).toHaveLength(0);
   });
 
   test("empty push writes nothing", () => {
     const s = new FakeScreen();
-    const r = new ReasoningLine(s);
+    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
     r.push("");
     expect(s.writes).toHaveLength(0);
     expect(r.active).toBe(false);
@@ -77,7 +78,7 @@ describe("ReasoningLine", () => {
 
   test("every redraw clears the line, is dim and guards autowrap", () => {
     const s = new FakeScreen();
-    const r = new ReasoningLine(s);
+    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
     r.push("hi");
     expect(s.last.startsWith("\r\x1b[2K")).toBe(true);
     expect(s.last).toContain("\x1b[2m");
@@ -90,7 +91,7 @@ describe("ReasoningLine", () => {
 
   test("T12.1 paragraph break: no write ever contains a raw newline", () => {
     const s = new FakeScreen();
-    const r = new ReasoningLine(s);
+    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
     r.push("a\n\nb");
     expect(s.writes.every((w) => !w.includes("\n"))).toBe(true);
     expect(strip(s.last)).toBe("💭 b");
@@ -98,7 +99,7 @@ describe("ReasoningLine", () => {
 
   test("T12.2 trailing blank segments keep the last finished line", () => {
     const s = new FakeScreen();
-    const r = new ReasoningLine(s);
+    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
     r.push("first\n\n");
     expect(s.writes.every((w) => !w.includes("\n"))).toBe(true);
     expect(strip(s.last)).toBe("💭 first");
@@ -106,7 +107,7 @@ describe("ReasoningLine", () => {
 
   test("T12.3 control characters are sanitized to spaces", () => {
     const s = new FakeScreen();
-    const r = new ReasoningLine(s);
+    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
     r.push("x\ty\rz");
     expect(strip(s.last)).toBe("💭 x y z");
   });
@@ -114,7 +115,7 @@ describe("ReasoningLine", () => {
   test("T12.4 emoji/CJK width is measured in display cells", () => {
     const s = new FakeScreen();
     s.columns = 20;
-    const r = new ReasoningLine(s);
+    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
     r.push("😀".repeat(10) + "あ".repeat(10) + "abc");
     expect(stringWidth(strip(s.last))).toBeLessThanOrEqual(19);
     expect(strip(s.last).startsWith("💭 ")).toBe(true);
@@ -122,7 +123,7 @@ describe("ReasoningLine", () => {
 
   test("T12.5 scripted 30-delta stream: the only newline comes from end()", () => {
     const s = new FakeScreen();
-    const r = new ReasoningLine(s);
+    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
     const deltas = [
       "Let me ",
       "think\n",

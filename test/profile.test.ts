@@ -1,8 +1,22 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path, { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { ensureProfile } from "../src/profile.js";
+import { ensureProfile, profilePaths } from "../src/profile.js";
+
+describe("profilePaths (T14.4)", () => {
+  test("win32 home uses backslash separators", () => {
+    const p = profilePaths("C:\\Users\\x", path.win32);
+    expect(p.dir).toBe("C:\\Users\\x\\profiles\\kumo");
+    expect(p.packageJson).toBe("C:\\Users\\x\\profiles\\kumo\\package.json");
+    expect(p.patchYml).toBe("C:\\Users\\x\\profiles\\kumo\\cordis.patch.yml");
+  });
+
+  test("posix home uses slash separators", () => {
+    const p = profilePaths("/home/x");
+    expect(p.cordisYml).toBe("/home/x/profiles/kumo/cordis.yml");
+  });
+});
 
 describe("ensureProfile", () => {
   test("creates the profile with 3 files on an empty home", async () => {

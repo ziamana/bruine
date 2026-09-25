@@ -23,6 +23,7 @@ const USAGE = `kumo — interactive terminal agent on top of DeepSeek Harness (d
 
 Usage:
   kumo [args]        Start kumo. Extra args are passed through to dsh.
+  kumo setup         (Re)run the setup wizard, pre-filled with current values.
   kumo --version     Print the kumo version.
   kumo --help        Print this help.
 
@@ -181,13 +182,44 @@ async function main(): Promise<void> {
   }
 
   const dshHome = process.env.KUMO_HOME ?? join(os.homedir(), ".kumo");
+
+  if (argv[0] === "setup") {
+    if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {
+      console.error("kumo setup needs an interactive terminal.");
+      process.exit(2);
+    }
+    const { runFullSetup, loadPrefill } = await import("./setup/full.js");
+    const out = await runFullSetup(dshHome, { prefill: loadPrefill(dshHome) });
+    console.log(
+      out === "saved"
+        ? "kumo: configuration saved."
+        : out === "simple"
+          ? "kumo: simple setup completed."
+          : "kumo setup canceled.",
+    );
+    process.exit(out === "quit" ? 1 : 0);
+  }
+
   const dshEntry = resolveDshEntry();
   const { command, args, env } = buildLaunch(argv, process.env, os.homedir(), {
     dshEntry,
     telemetry: readKumoJson(dshHome).telemetry,
   });
 
-  await simpleSetup(dshHome, terminalIO());
+  if (!existsSync(join(dshHome, "settings.yaml"))) {
+    if (process.stdin.isTTY === true && process.stdout.isTTY === true) {
+      // First run in a real terminal: the product wizard (entry screen picks
+      // simple or full). Files are written once, from its Save step.
+      const { runFullSetup } = await import("./setup/full.js");
+      const out = await runFullSetup(dshHome, {});
+      if (out === "quit") {
+        console.log("Setup canceled — run `kumo setup` when ready.");
+        process.exit(0);
+      }
+    } else {
+      await simpleSetup(dshHome, terminalIO());
+    }
+  }
   const { dir } = await ensureProfile(dshHome);
   ensureBundleInstalled(dir, dshEntry, env);
 

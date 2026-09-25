@@ -36,6 +36,7 @@
   "packageManager": "pnpm@12.4.2",
   "files": [
     "dist",
+    "skills",
     "cordis.patch.yml"
   ],
   "scripts": {

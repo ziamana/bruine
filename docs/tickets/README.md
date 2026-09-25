@@ -32,3 +32,4 @@ You are implementing one ticket of the kumo project.
 | T11 | Review fixes (key echo, --help, bundle link, server address) | T10 |
 | **T12** | **HOTFIX reasoning lines stacking** | T04 |
 | T13a-d | UI rebuilt on pi-tui (pi look, Escape, markdown, footer) | T12 |
+| T14 | Public groundwork: CI 3 OS, pinned dsh, telemetry off, paths, ASCII | T12 |

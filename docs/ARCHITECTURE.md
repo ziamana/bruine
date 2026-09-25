@@ -5,6 +5,20 @@ It is NOT a fork: it is a dsh **profile** plus a **bundle of plugins**, so dsh u
 
 All user-facing text is **English**. (A French locale may come later; never hardcode French.)
 
+## 0. Product constraints (read first)
+kumo is a **public product** for **Windows, macOS and Linux**, not a personal tool.
+
+| Rule | Consequence for every ticket |
+|---|---|
+| Cross-platform | `node:path` / `os.homedir()` only, never `/home/...` or `~` strings. No bash-only scripts in the product. Test paths with backslashes. |
+| UI library | **`@earendil-works/pi-tui`** (MIT, pure TS, no native deps, synchronized output, used by pi on all 3 OS). Ink rejected (flicker history in Gemini CLI / Qwen Code), OpenTUI rejected (native Zig; on Node only experimental, Windows tested with Bun only). |
+| dsh is a developer preview | **Pin an exact dsh version** in `package.json`. Upgrades are a deliberate ticket, never automatic. |
+| Privacy | dsh telemetry is ON by default: kumo sets `DSH_TELEMETRY_DISABLED=1` unless the user opts in during setup. Network discovery is **opt-in**, private ranges only (10/8, 172.16/12, 192.168/16, 100.64/10 Tailscale). |
+| Secrets | OS keyring (`@napi-rs/keyring`: Windows Credential Manager, macOS Keychain, Linux Secret Service). Fallback file chmod 600 (Linux/macOS) with a warning. Never echo a key. |
+| Terminals | Must work in Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal. Provide an ASCII fallback (`*` for `💭`, `>` for `›`) when `KUMO_ASCII=1` or the terminal is not UTF-8. |
+| CI | GitHub Actions matrix: ubuntu, windows, macos × Node 22 and 24. A ticket is done only when CI is green on all 3. |
+
+
 ---
 
 ## 1. How it runs

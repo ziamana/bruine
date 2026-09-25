@@ -16,6 +16,7 @@ import {
   type TUI,
 } from "@earendil-works/pi-tui";
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ansi, selectListTheme } from "../ui/theme.js";
@@ -42,7 +43,7 @@ import {
   type Discovered,
   type ScanOptions,
 } from "./discover.js";
-import { readBundledSkills, type SkillMeta } from "./skills.js";
+import { readBundledSkills, scanFoundSkills, scanProjectSkills, type FoundSkill, type SkillMeta } from "./skills.js";
 import {
   detectSearxng,
   normalizeServerUrl,
@@ -103,16 +104,33 @@ class LineInput implements Component {
   }
 }
 
+/** A CheckList row: `disabled` rows are group headers — no box, not toggleable. */
+export interface CheckItem {
+  value: string;
+  label: string;
+  description?: string;
+  disabled?: boolean;
+}
+
 /** Space toggles checkboxes, Enter confirms. */
 class CheckList implements Component {
   onDone?: (indices: number[]) => void;
   #cursor = 0;
   #top = 0;
   constructor(
-    private readonly items: SelectItem[],
+    private readonly items: CheckItem[],
     readonly checked: Set<number>,
     private readonly maxVisible = 10,
-  ) {}
+  ) {
+    this.#cursor = this.#nearest(0, 1) ?? 0;
+  }
+  /** Nearest selectable row at or after `from` stepping `dir`; undefined if none. */
+  #nearest(from: number, dir: number): number | undefined {
+    for (let i = from; i >= 0 && i < this.items.length; i += dir) {
+      if (this.items[i]?.disabled !== true) return i;
+    }
+    return undefined;
+  }
   render(width: number): string[] {
     if (this.#cursor >= this.items.length) this.#cursor = Math.max(0, this.items.length - 1);
     if (this.#cursor < this.#top) this.#top = this.#cursor;
@@ -120,24 +138,33 @@ class CheckList implements Component {
     const lines: string[] = [];
     for (let i = this.#top; i < Math.min(this.items.length, this.#top + this.maxVisible); i++) {
       const item = this.items[i]!;
+      // T26 item format: `name  ·  description`, cut to width.
+      const text =
+        item.description !== undefined && item.description !== ""
+          ? `${item.label}  ·  ${item.description}`
+          : item.label;
+      if (item.disabled === true) {
+        lines.push(ansi.bold(`  ${text}`.slice(0, Math.max(1, width))));
+        continue;
+      }
       const mark = this.checked.has(i) ? "[x] " : "[ ] ";
       const prefix = i === this.#cursor ? ansi.cyan("❯ ") : "  ";
-      const desc = item.description !== undefined ? ansi.gray(`: ${item.description}`) : "";
-      lines.push(`${prefix}${mark}${item.label}${desc}`.slice(0, Math.max(1, width)));
+      lines.push(`${prefix}${mark}${text}`.slice(0, Math.max(1, width)));
     }
     return lines;
   }
   invalidate(): void {}
   handleInput(data: string): void {
     if (matchesKey(data, "up")) {
-      this.#cursor = Math.max(0, this.#cursor - 1);
+      this.#cursor = this.#nearest(this.#cursor - 1, -1) ?? this.#cursor;
       return;
     }
     if (matchesKey(data, "down")) {
-      this.#cursor = Math.min(this.items.length - 1, this.#cursor + 1);
+      this.#cursor = this.#nearest(this.#cursor + 1, 1) ?? this.#cursor;
       return;
     }
     if (data === " ") {
+      if (this.items[this.#cursor]?.disabled === true) return;
       if (this.checked.has(this.#cursor)) this.checked.delete(this.#cursor);
       else this.checked.add(this.#cursor);
       return;
@@ -248,6 +275,43 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
   return answers;
 }
 
+/** ── T26 skills-step helpers (pure, unit-testable) ────────────────── */
+
+/** Skills persisted in kumo.json; `undefined` = never saved (pre-T26 install). */
+export function savedSkillsList(dshHome: string): string[] | undefined {
+  try {
+    const doc = JSON.parse(
+      readFileSync(join(dshHome, "kumo.json"), "utf8"),
+    ) as { skills?: unknown };
+    return Array.isArray(doc.skills) ? doc.skills.map((s) => String(s)) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Rows pre-checked when entering the skills step: the saved list when kumo
+ * knows one; otherwise the T26 migration default — every skill found in
+ * `.agents/skills` in the user home, the behavior dsh had before kumo took over USER skills.
+ * Same name shipped AND found: the shipped row wins (one entry per name).
+ */
+export function initialSkillChecks(
+  items: CheckItem[],
+  saved: string[] | undefined,
+  found: FoundSkill[],
+): Set<number> {
+  const checked = new Set<number>();
+  items.forEach((item, i) => {
+    if (item.disabled === true) return;
+    if (saved !== undefined) {
+      if (saved.includes(item.value)) checked.add(i);
+    } else if (found.some((f) => f.name === item.value && f.source === "agents")) {
+      checked.add(i);
+    }
+  });
+  return checked;
+}
+
 /** ── the wizard ──────────────────────────────────────────────────── */
 
 export async function runFullSetup(
@@ -267,6 +331,10 @@ export async function runFullSetup(
   tui.addChild(statusWidget);
 
   let activeResolve: ((o: Outcome<never>) => void) | null = null;
+  // T26 skills step: before the first submit the pre-checked rows come from
+  // kumo.json (or, for a pre-T26 first run, from the user-home `.agents` migration
+  // default); after it, from the answers kept across Esc/back.
+  let skillsSubmitted = false;
   tui.addInputListener((data: string) => {
     if (matchesKey(data, "ctrl+c")) {
       activeResolve?.(CANCEL);
@@ -352,7 +420,7 @@ export async function runFullSetup(
 
   const checkStep = (
     title: string,
-    items: SelectItem[],
+    items: CheckItem[],
     checked: Set<number>,
   ): Promise<Outcome<number[]>> =>
     interactive<number[]>(title, (finish) => {
@@ -683,18 +751,39 @@ export async function runFullSetup(
   }
 
   async function stepSkills(bundled: SkillMeta[]): Promise<StepResult> {
-    if (bundled.length === 0) {
-      const r = await selectStep("No skills are shipped with this build.", [{ value: "go", label: "Continue →" }], (i) => i);
+    // T26: three groups — shipped with kumo, found on this computer, and
+    // (read-only) skills in this project, which kumo never manages. A name
+    // both shipped and found keeps ONE row: the shipped one wins.
+    const allFound = await scanFoundSkills(homedir());
+    const shippedNames = new Set(bundled.map((s) => s.name));
+    const found = allFound.filter((s) => !shippedNames.has(s.name));
+    const project = await scanProjectSkills(process.cwd());
+    if (bundled.length === 0 && found.length === 0 && project.length === 0) {
+      const r = await selectStep("No skills are available.", [{ value: "go", label: "Continue →" }], (i) => i);
       if (r === BACK || r === CANCEL) return r;
-      return {};
+      return { skills: [] };
     }
-    const items = bundled.map((s) => ({ value: s.name, label: s.name, description: s.description }));
-    const checked = new Set(
-      bundled.map((s, i) => i).filter((i) => flow.answers.skills.includes(bundled[i]?.name ?? "")),
-    );
+    const items: CheckItem[] = [
+      { value: "#shipped", label: "Shipped with kumo", disabled: true },
+      ...bundled.map((s) => ({ value: s.name, label: s.name, description: s.description })),
+      { value: "#found", label: "Found on this computer", disabled: true },
+      ...found.map((s) => ({
+        value: s.name,
+        label: s.name,
+        description:
+          s.alsoIn.length > 0
+            ? `${s.description}  (also in: ${s.alsoIn.join(", ")})`.trim()
+            : s.description,
+      })),
+      { value: "#project", label: `In this project (always available: ${process.cwd()})`, disabled: true },
+      ...project.map((s) => ({ value: `#${s.name}`, label: s.name, description: s.description })),
+    ];
+    const saved = skillsSubmitted ? flow.answers.skills : savedSkillsList(dshHome);
+    const checked = initialSkillChecks(items, saved, found);
     const sel = await checkStep("Skills: Space toggles, Enter continues", items, checked);
     if (sel === BACK || sel === CANCEL) return sel;
-    return { skills: sel.map((i) => (items[i] as SelectItem).value) };
+    skillsSubmitted = true;
+    return { skills: sel.map((i) => (items[i] as CheckItem).value) };
   }
 
   async function stepTheme(): Promise<StepResult> {

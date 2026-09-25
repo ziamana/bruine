@@ -24,6 +24,7 @@ const USAGE = `kumo: interactive terminal agent on top of DeepSeek Harness (dsh)
 Usage:
   kumo [args]        Start kumo. Extra args are passed through to dsh.
   kumo setup         (Re)run the setup wizard, pre-filled with current values.
+  kumo skills        List the skills kumo has enabled (name, kind, source).
   kumo --version     Print the kumo version.
   kumo --help        Print this help.
 
@@ -85,6 +86,24 @@ function readKumoJson(dshHome: string): KumoJson {
     return JSON.parse(readFileSync(join(dshHome, "kumo.json"), "utf8")) as KumoJson;
   } catch {
     return {};
+  }
+}
+
+/**
+ * T26 `kumo skills`: print the enabled skills with kind and source only —
+ * never the skill content (some skills may hold server details).
+ */
+async function printSkills(dshHome: string): Promise<void> {
+  const { readInstalledSkills } = await import("./setup/skills.js");
+  const skills = await readInstalledSkills(join(dshHome, "skills"));
+  if (skills.length === 0) {
+    console.log("No skills enabled. Run `kumo setup` to pick skills.");
+    return;
+  }
+  console.log(`Skills enabled in ${join(dshHome, "skills")}:`);
+  for (const s of skills) {
+    const kind = s.copied === true ? "linked-copy" : s.kind;
+    console.log(`  ${s.name}  ${kind}${s.source !== "" ? `  ${s.source}` : ""}`);
   }
 }
 
@@ -182,6 +201,11 @@ async function main(): Promise<void> {
   }
 
   const dshHome = process.env.KUMO_HOME ?? join(os.homedir(), ".kumo");
+
+  if (argv[0] === "skills") {
+    await printSkills(dshHome);
+    process.exit(0);
+  }
 
   if (argv[0] === "setup") {
     if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {

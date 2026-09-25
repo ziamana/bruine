@@ -10,6 +10,8 @@ export interface ProfilePaths {
   packageJson: string;
   patchYml: string;
   cordisYml: string;
+  /** T26: the empty agentsHome kumo points skill-filesystem at (never filled). */
+  agentsDir: string;
 }
 
 /** The profile layout as data; pathMod is injectable for win32 tests. */
@@ -23,6 +25,7 @@ export function profilePaths(
     packageJson: pathMod.join(dir, "package.json"),
     patchYml: pathMod.join(dir, "cordis.patch.yml"),
     cordisYml: pathMod.join(dir, "cordis.yml"),
+    agentsDir: pathMod.join(dshHome, "agents"),
   };
 }
 
@@ -63,6 +66,11 @@ export async function ensureProfile(
 ): Promise<{ created: boolean; dir: string }> {
   const p = profilePaths(dshHome, pathMod);
   const dir = p.dir;
+
+  // T26: the bundle patch points skill-filesystem's agentsHome at this
+  // directory; it must exist and kumo never fills it (enabled skills live in
+  // $DSH_HOME/skills). Created on every run so existing homes catch up.
+  await mkdir(p.agentsDir, { recursive: true });
 
   if (await exists(p.packageJson)) {
     if (!(await isLegacyProfile(p.packageJson))) {

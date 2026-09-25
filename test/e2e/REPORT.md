@@ -333,3 +333,20 @@ Implemented by GPT-6 Sol (quota ran out during the final check), verified and co
 
 Known, not in T23: the Plan/mode announcement appended to the context is echoed in the chat as if the user typed it
 (`› Plan mode is on: …`). It should render as a dim system note.
+
+## T25 (Honest TPS, clean footer, word-by-word reasoning)
+
+Footer before:
+```text
+ask  0%/— (auto)  (local) e2e-model · off
+TPS: 55.9
+```
+
+Footer after:
+```text
+ask  ctx 0% of ?  ·  (local) e2e-model  ·  effort off
+ask  ctx 12% of 131k  ·  52 tok/s  ·  pp 1.2k tok/s  ·  (local) Ornith 1.5 9B  ·  effort low
+```
+
+TPS is now per LLM call (n / (t1 - t0), live deltas / (now - t0)), never the server figure.
+Reasoning grows word by word, subtitle on overflow, `✢ Thinking` before the first word.

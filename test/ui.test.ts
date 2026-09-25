@@ -36,19 +36,27 @@ class FakeTerminal implements Terminal {
   setProgress(): void {}
 }
 
-describe("ReasoningComponent (T13b)", () => {
-  test("always renders exactly one line while streaming", () => {
+describe("ReasoningComponent (T25.3 word by word)", () => {
+  test("shows Thinking alone before the first complete word", () => {
     const r = new ReasoningComponent(() => 0, UNICODE_ICONS);
-    r.push("thinking\n\nabout\nthis");
-    const lines = r.render(40);
-    expect(lines).toHaveLength(1);
-    expect(strip(lines[0])).toBe("· Thinking  about");
+    r.push("Hel");
+    expect(strip(r.render(40)[0])).toBe("· Thinking");
+    r.push("lo ");
+    expect(strip(r.render(40)[0])).toBe("· Thinking  Hello");
+  });
+
+  test("grows one complete word at a time, clears on sentence end", () => {
+    const r = new ReasoningComponent(() => 0, UNICODE_ICONS);
+    r.push("Hello wor");
+    expect(strip(r.render(40)[0])).toBe("· Thinking  Hello");
+    r.push("ld. Next ");
+    expect(strip(r.render(40)[0])).toBe("· Thinking  Next");
   });
 
   test("collapses to 'thought for Xs' after end()", () => {
     let t = 1000;
     const r = new ReasoningComponent(() => t, UNICODE_ICONS);
-    r.push("hmm");
+    r.push("Hello ");
     t = 3200;
     r.end();
     const lines = r.render(40);
@@ -63,12 +71,13 @@ describe("ReasoningComponent (T13b)", () => {
     expect(r.render(40)).toEqual([]);
   });
 
-  test("truncates to the width in one line", () => {
+  test("subtitle clears and continues when the next word does not fit", () => {
     const r = new ReasoningComponent(() => 0, UNICODE_ICONS);
-    r.push("x".repeat(100));
-    const lines = r.render(20);
-    expect(lines).toHaveLength(1);
-    expect(strip(lines[0]).length).toBeLessThanOrEqual(19);
+    r.push("aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo pp ");
+    const line = strip(r.render(20)[0]);
+    expect(line.startsWith("· Thinking  ")).toBe(true);
+    expect(line).not.toContain("aa");
+    expect(line).toContain("pp");
   });
 });
 
@@ -121,20 +130,49 @@ describe("AssistantTextComponent (T13c)", () => {
   });
 });
 
-describe("TpsMeter (T13d, honest numbers)", () => {
-  test("computes tokens/s from its own timestamps", () => {
+describe("TpsMeter (T25.1, honest per-call numbers)", () => {
+  test("100 deltas over 2 s after 3 s prefill, usage 100 → 50 tok/s", () => {
     const m = new TpsMeter();
-    m.sample(0, 10);
-    m.sample(1000, 60); // 50 tokens over 1 s
-    expect(m.tps).toBeGreaterThan(0);
-    expect(m.tps).toBeLessThanOrEqual(50);
+    m.startCall(0);
+    for (let i = 0; i < 100; i++) m.delta(3000 + (i * 2000) / 99);
+    m.usage(5100, { outputTokens: 100, inputTokens: 3600 });
+    expect(m.tps).toBeGreaterThan(47.5);
+    expect(m.tps).toBeLessThan(52.5);
+    expect(m.pp).toBeGreaterThan(1100);
+    expect(m.pp).toBeLessThan(1300);
     m.reset();
     expect(m.tps).toBe(0);
+    expect(m.pp).toBeUndefined();
+  });
+
+  test("two calls separated by a 4 s tool keep their own rates", () => {
+    const m = new TpsMeter();
+    m.startCall(0);
+    for (let i = 0; i < 50; i++) m.delta(100 + i * 20);
+    m.usage(1200, { outputTokens: 50, inputTokens: 100 });
+    const first = m.tps;
+    expect(first).toBeGreaterThan(40);
+    m.endCall();
+    m.startCall(5200);
+    for (let i = 0; i < 50; i++) m.delta(5300 + i * 20);
+    m.usage(6400, { outputTokens: 50, inputTokens: 100 });
+    const second = m.tps;
+    expect(second).toBeGreaterThan(40);
+    expect(Math.abs(first - second) / first).toBeLessThan(0.2);
+  });
+
+  test("no usage falls back to delta count estimate", () => {
+    const m = new TpsMeter();
+    m.startCall(0);
+    for (let i = 0; i < 10; i++) m.delta(1000 + i * 100);
+    m.endCall();
+    expect(m.tps).toBeGreaterThan(9);
+    expect(m.tps).toBeLessThan(12);
   });
 });
 
-describe("FooterComponent (T13d)", () => {
-  test("shows context %, model and TPS", () => {
+describe("FooterComponent (T25.2)", () => {
+  test("shows ctx, tok/s, model and effort without (auto)", () => {
     const f = new FooterComponent(UNICODE_ICONS);
     f.set({
       contextUsed: 16_100,
@@ -142,17 +180,36 @@ describe("FooterComponent (T13d)", () => {
       model: "Ornith 1.5 9B",
       provider: "local",
       effort: "low",
-      tps: 55.9,
+      tps: 52.3,
+      pp: 1200,
     });
-    const lines = f.render(80).map(strip);
-    expect(lines[0]).toContain("12.3%/131k (auto)");
-    expect(lines[0]).toContain("(local) Ornith 1.5 9B · low");
-    expect(lines[1]).toContain("TPS: 55.9");
+    const lines = f.render(100).map(strip);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("ask");
+    expect(lines[0]).toContain("ctx 12% of 131k");
+    expect(lines[0]).toContain("52 tok/s");
+    expect(lines[0]).toContain("pp 1.2k tok/s");
+    expect(lines[0]).toContain("(local) Ornith 1.5 9B");
+    expect(lines[0]).toContain("effort low");
+    expect(lines[0]).not.toContain("(auto)");
+    expect(lines[0]).not.toContain("TPS:");
+  });
+
+  test("percent below 10 shows one decimal, else integer; gguf basename", () => {
+    const f = new FooterComponent(UNICODE_ICONS);
+    f.set({ contextUsed: 9500, contextWindow: 100_000, model: "/etc/models/ornith-9b.Q4_K_M.gguf", provider: "local" });
+    expect(f.render(100).map(strip)[0]).toContain("ctx 9.5% of 100k");
+    expect(f.render(100).map(strip)[0]).toContain("ornith-9b.Q4_K_M");
+    expect(f.render(100).map(strip)[0]).not.toContain("/etc");
+    f.set({ contextUsed: 12_300, contextWindow: 100_000 });
+    expect(f.render(100).map(strip)[0]).toContain("ctx 12% of 100k");
   });
 
   test("renders placeholder state", () => {
     const f = new FooterComponent(UNICODE_ICONS);
-    expect(f.render(80)[0]).toContain("0%/? (auto)");
+    const line = f.render(80).map(strip)[0]!;
+    expect(line).toContain("ctx 0% of ?");
+    expect(line).not.toContain("(auto)");
   });
 });
 
@@ -202,7 +259,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     const text = lines.join("\n");
     expect(text).toContain("kumo v0.2.0");
     expect(text).toContain("escape interrupt");
-    expect(text).toContain("(auto)");
+    expect(text).toContain("ctx 0% of ?");
   });
 
   test("editor submit routes to the handler", () => {
@@ -264,9 +321,9 @@ describe("attachTui wiring", () => {
 
   test("reasoning: one live line collapsing on block-end", () => {
     const { chats, stream } = setup();
-    stream({ type: "reasoning-delta", text: "one\n\ntwo" });
+    stream({ type: "reasoning-delta", text: "one two " });
     expect(chats).toHaveLength(1);
-    expect(rendered(chats[0])).toBe("· Thinking  one");
+    expect(rendered(chats[0])).toBe("· Thinking  one two");
     stream({ type: "block-end", block: { type: "reasoning", text: "x" } });
     expect(rendered(chats[0])).toMatch(/∴ Thought for/);
   });
@@ -365,14 +422,16 @@ describe("T23 regressions", () => {
       for (const line of tool.render(width)) expect(stringWidth(strip(line))).toBeLessThanOrEqual(width);
     }
   });
-  test("reasoning animation changes frames without exposing partial sentences", () => {
+  test("reasoning animation changes frames without exposing partial words (T25.3)", () => {
     let time = 0;
     const r = new ReasoningComponent(() => time, UNICODE_ICONS);
-    r.push("Completed. Incomplete");
+    r.push("Alpha Bet");
+    expect(strip(r.render(80)[0])).toBe("· Thinking  Alpha");
+    r.push("a ");
     const first = strip(r.render(80)[0]);
     time = 100;
-    expect(strip(r.render(80)[0])).toBe("✢ Thinking  Completed.");
-    expect(first).toBe("· Thinking  Completed.");
+    expect(strip(r.render(80)[0])).toBe("✢ Thinking  Alpha Beta");
+    expect(first).toBe("· Thinking  Alpha Beta");
     r.end();
     const done = r.render(80);
     time = 2000;

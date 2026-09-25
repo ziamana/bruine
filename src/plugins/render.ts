@@ -145,20 +145,36 @@ export function attachTui(
   const offStream = ctx.on("agent/assistant-stream", ({ agent: subject, frame }: any) => {
     if (subject !== agent) return;
     const f = frame as StreamFrame;
-    if (f.type === "start" || f.type === "end") {
+    const now = typeof f.time === "number" ? f.time : Date.now();
+    if (f.type === "start") {
+      tps.startCall(now);
       hideWorking();
       closeLive();
       return;
     }
+    if (f.type === "end") {
+      tps.endCall();
+      ui.footer.set({ tps: tps.tps, pp: tps.pp });
+      hideWorking();
+      closeLive();
+      ui.requestRender();
+      return;
+    }
     const chunk = f.chunk;
     if (chunk === undefined) return;
+    const trackDelta = (): void => {
+      tps.delta(now);
+      ui.footer.set({ tps: tps.tps, pp: tps.pp });
+    };
     hideWorking();
     switch (chunk.type) {
       case "reasoning-delta":
+        trackDelta();
         ensureReasoning().push(chunk.text);
         ui.requestRender();
         return;
       case "text-delta":
+        trackDelta();
         ensureText().push(chunk.text);
         ui.requestRender();
         return;
@@ -176,6 +192,7 @@ export function attachTui(
         }
         return;
       case "tool-call-delta": {
+        trackDelta();
         const id = String(chunk.id);
         if (chunk.name !== undefined) ensureTool(id, chunk.name);
         tools.get(id)?.args(chunk.argumentsDelta ?? "");
@@ -183,16 +200,26 @@ export function attachTui(
         return;
       }
       case "usage": {
-        const tokens = Number(chunk.usage?.outputTokens ?? 0);
+        const u = chunk.usage ?? {};
+        const tokens = Number(u.outputTokens ?? 0);
         lastOutputTokens = tokens;
-        lastInputTokens = Number(chunk.usage?.inputTokens ?? lastInputTokens);
-        if (f.time !== undefined) tps.sample(f.time, tokens);
-        ui.footer.set({ tps: tps.tps });
+        lastInputTokens = Number(u.inputTokens ?? lastInputTokens);
+        tps.usage(now, {
+          outputTokens: Number(u.outputTokens ?? NaN),
+          inputTokens: Number(u.inputTokens ?? NaN),
+          cacheReadTokens: Number(
+            u.cacheReadTokens ?? u.cachedTokens ?? u.cache_read ?? NaN,
+          ),
+        });
+        ui.footer.set({ tps: tps.tps, pp: tps.pp });
         ui.requestRender();
         return;
       }
       case "finish":
+        tps.endCall();
+        ui.footer.set({ tps: tps.tps, pp: tps.pp });
         closeLive();
+        ui.requestRender();
         return;
       default:
         return;
@@ -217,7 +244,7 @@ export function attachTui(
       }
       case "turn/start":
         tps.reset();
-        ui.footer.set({ tps: 0 });
+        ui.footer.set({ tps: 0, pp: undefined });
         showWorking();
         return;
       case "tool/call": {

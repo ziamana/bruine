@@ -54,6 +54,31 @@ export function spinnerFrame(elapsed: number, icons: KumoIcons): string {
 export function thinkingText(sentence: string, columns: number, elapsed: number, icons: KumoIcons): string {
   return clipCells(`${spinnerFrame(elapsed, icons)} Thinking${sentence ? `  ${sentence}` : ""}`, columns, icons.think === "*" ? "..." : "…");
 }
+
+/** Complete words in the current sentence buffer (T25.3). */
+export function completeWords(current: string): string[] {
+  if (current.trim() === "") return [];
+  const endsWithSpace = /\s$/.test(current);
+  const parts = current.split(/\s+/).filter((p) => p !== "");
+  if (endsWithSpace) return parts;
+  return parts.slice(0, -1);
+}
+
+/** Subtitle style (T25.3): longest fitting suffix, never leading ellipsis. */
+export function thinkingWords(words: string[], columns: number, elapsed: number, icons: KumoIcons): string {
+  const prefix = `${spinnerFrame(elapsed, icons)} Thinking`;
+  const ellipsis = icons.think === "*" ? "..." : "…";
+  if (words.length === 0) return clipCells(prefix, columns, ellipsis);
+  for (let i = 0; i < words.length; i++) {
+    const candidate = words.slice(i).join(" ");
+    if (stringWidth(`${prefix}  ${candidate}`) <= columns) {
+      return `${prefix}  ${candidate}`;
+    }
+  }
+  const last = words.at(-1) ?? "";
+  const avail = Math.max(0, columns - stringWidth(`${prefix}  `));
+  return `${prefix}  ${clipCells(last, avail, ellipsis)}`;
+}
 /** Compatibility helper for callers needing a clipped reasoning sentence. */
 export function visible(s: string, columns: number, icons: KumoIcons = kumoIcons()): string {
   return clipCells(s.trimStart(), Math.max(0, columns - 1 - stringWidth(`${icons.think} `)));

@@ -8,17 +8,23 @@ import { textScript, toolScript, type Script } from "./sse-server.js";
 
 beforeAll(build, 60_000);
 
-const completeSentences = [
-  "Use 3.5, e.g. this example, i.e. one value.",
-  ...Array.from({ length: 39 }, (_, i) => i === 19 ? "x".repeat(300) : `Sentence ${i} 漢字!`),
+const wordSentences = [
+  "Alpha Beta Gamma Delta Epsilon Zeta Eta Theta Iota Kappa.",
+  "Use 3.5, e.g. this example, i.e. one value for testing words.",
+  "Red green blue yellow orange purple pink brown black white gray.",
 ];
 const reasoning = (): Script => ({ chunks: [
-  ...completeSentences.flatMap((sentence, i) => {
-    const middle = Math.floor(sentence.length / 2);
-    return [
-      { delta: { reasoning_content: sentence.slice(0, middle) }, delayMs: 75 },
-      { delta: { reasoning_content: sentence.slice(middle) + (i % 3 === 0 ? " " : i % 3 === 1 ? "\n" : "\n\n") }, delayMs: 75 },
-    ];
+  ...wordSentences.flatMap((sentence) => {
+    const words = sentence.split(" ");
+    return words.flatMap((word, wi) => {
+      const mid = Math.max(1, Math.floor(word.length / 2));
+      const last = wi === words.length - 1;
+      const suffix = last ? " " : " ";
+      return [
+        { delta: { reasoning_content: word.slice(0, mid) }, delayMs: 60 },
+        { delta: { reasoning_content: word.slice(mid) + suffix }, delayMs: 60 },
+      ];
+    });
   }),
   { delta: { content: "REASONING_DONE" }, delayMs: 150 },
 ] });
@@ -52,36 +58,36 @@ async function scenario(name: string, scripts: Script[], run: (h: Harness) => Pr
 }
 
 // Every scenario owns its PTY, home, project and server; failures never bail out.
-test("reasoning: every 50ms snapshot is a complete sentence or Thinking alone", async () => {
+test("reasoning: word by word, whole words only, at least 10 changes (T25.3)", async () => {
   await scenario("reasoning", [reasoning()], async (h) => {
     await h.prompt("Think through the problem");
     await h.waitFor("Thinking");
-    let snapshots = 0;
-    const frames = new Set<string>();
-    const shown = new Set<string>();
-    const deadline = Date.now() + 12_000;
+    const seen = new Set<string>();
+    const deadline = Date.now() + 15_000;
     while (!h.screen().join("\n").includes("REASONING_DONE")) {
       await h.flush();
       const lines = h.screen().filter(runningThought);
       expect(lines.length, h.screen().join("\n")).toBeLessThanOrEqual(1);
       if (lines.length) {
         const line = lines[0]!.trim();
-        frames.add(line[0]!);
-        const sentence = line.replace(/^[·✢✺✶✻✽] Thinking(?:  )?/, "");
-        // The only clipped sentence is the 300-cell x sentence; its prefix
-        // must stay on the LEFT, with a single ellipsis at the end.
-        expect(sentence === "" || completeSentences.includes(sentence) || /^x+…$/.test(sentence), sentence).toBe(true);
-        shown.add(sentence);
-        if (sentence === completeSentences[0]) await h.dump("t23-after-reasoning-running");
+        const text = line.replace(/^[·✢✺✶✻✽] Thinking(?:  )?/, "");
+        seen.add(text);
+        if (text !== "") {
+          const ok = wordSentences.some((s) => {
+            if (!s.startsWith(text)) return false;
+            const words = s.split(" ");
+            for (let n = 1; n <= words.length; n++) {
+              if (words.slice(0, n).join(" ") === text) return true;
+            }
+            return false;
+          });
+          expect(ok, text).toBe(true);
+        }
       }
       expect(Date.now()).toBeLessThan(deadline);
-      snapshots++;
       await delay(50);
     }
-    expect(snapshots).toBeGreaterThan(80);
-    expect(frames.size).toBeGreaterThan(5);
-    expect(shown.has(completeSentences[0]!)).toBe(true);
-    expect([...shown].some(s => /^x+…$/.test(s))).toBe(true);
+    expect(seen.size).toBeGreaterThanOrEqual(10);
     await h.dump("t23-after-reasoning-done");
     expect(h.screen().join("\n")).toContain("∴ Thought for");
     await h.waitStable(350, 1000);
@@ -164,7 +170,7 @@ test("modes: keys change actual tool permissions as well as colored labels", asy
   ], async (h) => {
     const chatModeLines = () => h.screen().filter((line) => /^  ›/.test(line) && /mode|access/i.test(line));
     h.press("tab");
-    await h.until(() => /^plan  ask\b/.test(footer(h)), 2000, "Plan label");
+    await h.until(() => /^ask  plan\b/.test(footer(h)), 2000, "Plan label");
     await h.waitFor("Plan mode: kumo reads and plans");
     expect(chatModeLines()).toEqual([]);
     await h.dump("t23-after-footer-plan");

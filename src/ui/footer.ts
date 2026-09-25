@@ -1,4 +1,4 @@
-import { truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
+import { truncateToWidth, type Component } from "@earendil-works/pi-tui";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 
@@ -6,9 +6,11 @@ export interface FooterState {
   contextUsed?: number;
   contextWindow?: number;
   model?: string;
+  modelName?: string;
   provider?: string;
   effort?: string;
   tps?: number;
+  pp?: number;
   /** Mode badges (PLAN / FULL ACCESS), set by the modes layer (T16). */
   badges?: string[];
 }
@@ -21,9 +23,22 @@ function formatK(n: number): string {
   return String(n);
 }
 
+function formatPct(used: number, window: number): string {
+  const pct = (used / window) * 100;
+  return pct < 10 ? `${pct.toFixed(1)}%` : `${String(Math.round(pct))}%`;
+}
+
+/** Display model: settings name, else basename without .gguf, never a full path. */
+export function displayModel(id?: string, name?: string): string {
+  if (name !== undefined && name.trim() !== "") return name;
+  if (id === undefined || id === "") return "no model";
+  const base = id.split(/[\\/]/).at(-1) ?? id;
+  return base.replace(/\.gguf$/i, "");
+}
+
 /**
- * Footer (T13d): context used / window on the left, model + effort on the
- * right, computed TPS underneath. All numbers come from kumo's own samples.
+ * Footer (T13d, T25.2): mode + plan badges, ctx, tok/s + pp, model, effort.
+ * All numbers come from kumo's own samples.
  */
 export class FooterComponent implements Component {
   #icons: KumoIcons;
@@ -39,23 +54,40 @@ export class FooterComponent implements Component {
 
   render(width: number): string[] {
     const s = this.state;
-    let left = "";
+    const badges = s.badges ?? ["ask"];
+    const modeName = badges.find((b) => b !== "plan") ?? "ask";
+    const planOn = badges.includes("plan");
+    const colorize = (b: string): string =>
+      b === "FULL ACCESS"
+        ? ansi.bold(ansi.red(b))
+        : b === "ask"
+          ? ansi.dim(b)
+          : ansi.yellow(b);
+    const mode = colorize(modeName);
+    const plan = planOn ? colorize("plan") : undefined;
+
+    let ctxPart: string;
     if (s.contextUsed !== undefined && s.contextWindow !== undefined && s.contextWindow > 0) {
-      const pct = ((s.contextUsed / s.contextWindow) * 100).toFixed(1);
-      left = `${pct}%/${formatK(s.contextWindow)} (auto)`;
+      ctxPart = `ctx ${formatPct(s.contextUsed, s.contextWindow)} of ${formatK(s.contextWindow)}`;
     } else {
-      left = "0%/? (auto)";
+      ctxPart = "ctx 0% of ?";
     }
-    const badges = (s.badges ?? ["ask"]).map((b) => b === "FULL ACCESS"
-      ? ansi.bold(ansi.red(b)) : b === "ask" ? ansi.dim(b) : ansi.yellow(b));
-    const model = `${s.provider === "local" ? "(local) " : ""}${s.model ?? "no model"}`;
+    const sep = this.#icons.think === "*" ? "-" : "·";
+    const modelName = displayModel(s.model, s.modelName);
+    const model = `${s.provider === "local" ? "(local) " : ""}${modelName}`;
+    const effort = `effort ${s.effort ?? "off"}`;
+    const parts: string[] = [ctxPart];
+    if (s.tps !== undefined && s.tps > 0) {
+      parts.push(`${String(Math.round(s.tps))} tok/s`);
+    }
+    if (s.pp !== undefined && s.pp > 0) {
+      parts.push(ansi.dim(`pp ${formatK(Math.round(s.pp * 10) / 10)} tok/s`));
+    }
+    parts.push(model, effort);
     // Modes come first so a narrow window or long model name cannot hide them.
-    const mode = badges.join("  ");
-    const detail = truncateToWidth(`${left}  ${model} ${this.#icons.think === "*" ? "-" : "·"} ${s.effort ?? "off"}`, Math.max(0, width - visibleWidth(mode) - 2));
-    const line1 = truncateToWidth(`${mode}  ${ansi.gray(detail)}`, width);
-    const spark = this.#icons.spark === "" ? "" : `${this.#icons.spark} `;
-    const tps = s.tps !== undefined && s.tps > 0 ? `${spark}TPS: ${s.tps.toFixed(1)}` : "";
-    return [line1, ansi.gray(tps)];
+    const head = plan === undefined ? mode : `${mode}  ${plan}`;
+    const detail = parts.join(`  ${sep}  `);
+    return [truncateToWidth(`${head}  ${ansi.gray(detail)}`, width)];
   }
 
   invalidate(): void {

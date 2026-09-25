@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createInterface } from "node:readline";
 import os from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -11,6 +11,7 @@ import { ensureProfile } from "./profile.js";
 import { simpleSetup, type SetupIO } from "./setup/simple.js";
 import { migrateAgentsSkills } from "./setup/skills.js";
 import { ansi } from "./ui/theme.js";
+import { checkForUpdate, detectInstallKind, updateCommand } from "./update.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { name: string; version: string };
@@ -27,6 +28,7 @@ Usage:
   kumo [args]        Start kumo. Extra args are passed through to dsh.
   kumo setup         (Re)run the setup wizard, pre-filled with current values.
   kumo skills        List the skills kumo has enabled (name, kind, source).
+  kumo update        Update kumo to the latest version (via its installer).
   kumo --version     Print the kumo version.
   kumo --help        Print this help.
 
@@ -34,6 +36,8 @@ Environment:
   KUMO_HOME          Override the kumo home directory (default: .kumo
                      inside your home directory).
   KUMO_ASCII=1       Use plain-ASCII glyphs instead of emoji/symbols.
+  KUMO_NO_UPDATE_CHECK=1
+                     Never contact the npm registry for an update check.
 `;
 
 const DSH_MISSING =
@@ -81,6 +85,7 @@ function ensureBundleInstalled(
 
 interface KumoJson {
   telemetry?: boolean;
+  updateCheck?: boolean;
 }
 
 function readKumoJson(dshHome: string): KumoJson {
@@ -107,6 +112,71 @@ async function printSkills(dshHome: string): Promise<void> {
     const kind = s.copied === true ? "linked-copy" : s.kind;
     console.log(`  ${s.name}  ${kind}${s.source !== "" ? `  ${s.source}` : ""}`);
   }
+}
+
+/**
+ * T30 `kumo update`: detect how kumo was installed from the real path of the
+ * running entry script, show the exact command, and run it only on an
+ * explicit yes. A developer install (git checkout / link) is never touched.
+ */
+async function runUpdate(): Promise<void> {
+  const entry = process.argv[1] ?? fileURLToPath(import.meta.url);
+  let real = entry;
+  try {
+    real = realpathSync(entry);
+  } catch {
+    // already a real path, or unreadable: detect from what we have
+  }
+  const cmd = updateCommand(detectInstallKind(real));
+  if (cmd === undefined) {
+    console.log("Developer install: run git pull && pnpm build");
+    return;
+  }
+  console.log(`kumo ${pkg.version} was installed with ${detectInstallKind(real)}.`);
+  console.log(`To update, kumo runs: ${cmd.join(" ")}`);
+  if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {
+    console.log("kumo update needs an interactive terminal to confirm. Run the command above yourself.");
+    return;
+  }
+  const answer = (await askLine("Update now? (y/N) ")).trim().toLowerCase();
+  if (answer !== "y" && answer !== "yes") {
+    console.log("kumo update: nothing changed.");
+    return;
+  }
+  const res = spawnSync(cmd[0] as string, cmd.slice(1), {
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
+  if (res.error) {
+    console.error(`kumo update: ${res.error.message}`);
+    return;
+  }
+  if (res.status !== 0) {
+    console.error(`kumo update: the command exited with ${String(res.status)}.`);
+    return;
+  }
+  // The new package.json is on disk already; report what it now says.
+  let version = "unknown";
+  try {
+    const manifest = JSON.parse(
+      readFileSync(join(dirname(real), "..", "package.json"), "utf8"),
+    ) as { version?: string };
+    version = manifest.version ?? "unknown";
+  } catch {
+    // the installer placed the package elsewhere; keep quiet about it
+  }
+  console.log(`kumo update: done. Now on version ${version} (was ${pkg.version}).`);
+}
+
+/** One visible line read from stdin (the update confirmation). */
+function askLine(q: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolveAnswer) => {
+    rl.question(q, (answer) => {
+      rl.close();
+      resolveAnswer(answer);
+    });
+  });
 }
 
 function terminalIO(): SetupIO {
@@ -209,6 +279,11 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  if (argv[0] === "update") {
+    await runUpdate();
+    process.exit(0);
+  }
+
   if (argv[0] === "setup") {
     if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {
       console.error("kumo setup needs an interactive terminal.");
@@ -264,6 +339,12 @@ async function main(): Promise<void> {
       `kumo: could not link ${String(migrated.copied.length)} of those skills; they were copied instead (sources: ${migrated.copied.join(", ")}).`,
     );
   }
+
+  // T30: the daily update check — fire-and-forget, so the UI is never
+  // delayed. The cached result drives the notice (T24 style) shown by the
+  // session; gated off by kumo.json updateCheck, KUMO_NO_UPDATE_CHECK, CI,
+  // or a non-TTY stdout.
+  void checkForUpdate({ dshHome }).catch(() => undefined);
 
   const child = spawn(command, args, { env, stdio: "inherit" });
 

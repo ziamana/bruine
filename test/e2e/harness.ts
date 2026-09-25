@@ -54,7 +54,7 @@ export class Harness {
       for (const [key, value] of Object.entries(process.env)) {
         if (value !== undefined && !/(API_KEY|TOKEN|SECRET|^DSH_|^KUMO_)/i.test(key)) env[key] = value;
       }
-      Object.assign(env, { KUMO_HOME: home, DSH_HOME: home, DSH_TELEMETRY_DISABLED: "1", KUMO_LOCAL_API_KEY: "e2e", KUMO_ASCII: ascii ? "1" : "0", TERM: "xterm-256color", LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" });
+      Object.assign(env, { KUMO_HOME: home, DSH_HOME: home, DSH_TELEMETRY_DISABLED: "1", KUMO_LOCAL_API_KEY: "e2e", KUMO_ASCII: ascii ? "1" : "0", KUMO_NO_UPDATE_CHECK: "1", TERM: "xterm-256color", LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" });
       h.child = pty.spawn(process.execPath, [join(root, "dist", "bin.js")], { name: "xterm-256color", cols: 100, rows: 30, cwd: project, env });
       h.child.onData((data) => {
         h.pending = h.pending.then(() => new Promise<void>((done) => h.term.write(data, () => {

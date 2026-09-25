@@ -51,6 +51,7 @@ import {
   type SearchChoice,
   type SetupIO,
 } from "./simple.js";
+import { readKumoJsonDoc, readUpdateCheckChoice, setUpdateCheck } from "../update.js";
 
 const BACK = Symbol("back");
 const CANCEL = Symbol("cancel");
@@ -335,6 +336,10 @@ export async function runFullSetup(
   // kumo.json (or, for a pre-T26 first run, from the user-home `.agents` migration
   // default); after it, from the answers kept across Esc/back.
   let skillsSubmitted = false;
+  // T30: the update-check toggle rides on the Telemetry step and is merged
+  // into kumo.json from the Summary's Save (flow.ts owns the other fields).
+  let updateCheckChoice = true;
+  let updateCheckLoaded = false;
   tui.addInputListener((data: string) => {
     if (matchesKey(data, "ctrl+c")) {
       activeResolve?.(CANCEL);
@@ -390,6 +395,8 @@ export async function runFullSetup(
   ): Promise<Outcome<T>> =>
     interactive<T>(title, (finish) => {
       const list = new SelectList(items, Math.min(items.length, 10), selectListTheme);
+      // Honor a previous answer when re-entering the step (Esc/back).
+      if (opts.initial !== undefined) list.setSelectedIndex(opts.initial);
       const previewHolder: { current: Component | null } = {
         current: opts.livePreview !== undefined ? opts.livePreview(opts.initial ?? 0) : null,
       };
@@ -808,11 +815,26 @@ export async function runFullSetup(
   }
 
   async function stepTelemetry(): Promise<StepResult> {
+    if (!updateCheckLoaded) {
+      updateCheckLoaded = true;
+      updateCheckChoice = readUpdateCheckChoice(await readKumoJsonDoc(dshHome)) ?? true;
+    }
     const sel = await selectStep("Share anonymous usage data with DeepSeek Harness?", [
       { value: "no", label: "No (default)" },
       { value: "yes", label: "Yes" },
-    ], (i) => i);
+    ], (i) => i, { initial: flow.answers.telemetry ? 1 : 0 });
     if (sel === BACK || sel === CANCEL) return sel;
+    const u = await selectStep(
+      "Check npm once a day for a newer kumo and note it at startup? (nothing is sent but the version query)",
+      [
+        { value: "yes", label: "Yes (recommended)" },
+        { value: "no", label: "No" },
+      ],
+      (i) => i,
+      { initial: updateCheckChoice ? 0 : 1 },
+    );
+    if (u === BACK || u === CANCEL) return u;
+    updateCheckChoice = u === 0;
     return { telemetry: sel === 1 };
   }
 
@@ -830,6 +852,7 @@ export async function runFullSetup(
       `  Skills   ${a.skills.length > 0 ? a.skills.join(", ") : "none"}`,
       `  Theme    ${a.theme}`,
       `  Telemetry ${a.telemetry ? "yes" : "no"}`,
+      `  Updates   ${updateCheckChoice ? "daily check on" : "check off"}`,
       "",
       `  writes: ${dshHome}/settings.yaml · kumo.json · .env · skills/`,
     ].join("\n");
@@ -847,6 +870,9 @@ export async function runFullSetup(
     if (choice === BACK || choice === CANCEL) return choice;
     if (choice === 0) {
       await flow.save({ dshHome, bundledSkillsRoot: bundledRoot, bundledSkills: bundled });
+      // T30: `updateCheck` lives in kumo.json next to the fields the flow
+      // owns; flow.buildPlan stays untouched, so merge it after the save.
+      await setUpdateCheck(dshHome, updateCheckChoice);
       return "saved";
     }
     if (choice === 1) return BACK;

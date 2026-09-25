@@ -98,6 +98,8 @@ describe("Cache Hunter (T17)", () => {
         ...(process.env as Record<string, string>),
         KUMO_HOME: home,
         DSH_TELEMETRY_DISABLED: "1",
+        // T30: the launch update check must never touch the network here.
+        KUMO_NO_UPDATE_CHECK: "1",
       };
       const child = spawn(process.execPath, [join(repoRoot, "dist", "bin.js")], {
         cwd: project,

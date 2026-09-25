@@ -1,4 +1,4 @@
-# The kumo-cli bundle patch: an interactive terminal agent over dsh-base.
+# The kumo-code bundle patch: an interactive terminal agent over dsh-base.
 # Inserts the kumo plugins (startup, repl, render, approval, web-search) and
 # the extra tool rows. Cache rule (ARCHITECTURE section 0): the system prompt
 # and the tools array are byte-identical all session long — modes are a
@@ -65,23 +65,23 @@
 
 - insert:
     - id: kumo-startup
-      name: 'kumo-cli/startup'
+      name: 'kumo-code/startup'
 
     - id: kumo-repl
-      name: 'kumo-cli/repl'
+      name: 'kumo-code/repl'
       inject: [kumoStartup]
 
     - id: kumo-render
-      name: 'kumo-cli/render'
+      name: 'kumo-code/render'
 
     - id: kumo-approval
-      name: 'kumo-cli/approval'
+      name: 'kumo-code/approval'
 
     - id: kumo-modes
-      name: 'kumo-cli/modes'
+      name: 'kumo-code/modes'
 
     - id: kumo-web-search
-      name: 'kumo-cli/web-search'
+      name: 'kumo-code/web-search'
 
     - id: tool-ask-user
       name: '@deepseek-ai/dsh-tool-ask-user'

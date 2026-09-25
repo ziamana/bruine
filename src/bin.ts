@@ -35,14 +35,14 @@ Environment:
 const DSH_MISSING =
   "kumo: could not launch dsh (missing or broken install). Reinstall kumo.";
 
-/** The kumo-cli package directory this launcher runs from, when detectable. */
+/** The kumo package directory this launcher runs from, when detectable. */
 function selfPackageRoot(): string | undefined {
   try {
     const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
     const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
       name?: string;
     };
-    return manifest.name === "kumo-cli" ? root : undefined;
+    return manifest.name === pkg.name ? root : undefined;
   } catch {
     return undefined;
   }

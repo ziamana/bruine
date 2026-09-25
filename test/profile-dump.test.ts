@@ -42,12 +42,12 @@ describe("profile composition (T15)", () => {
       expect(out).toContain("Your working directory is");
     // Plugins
     for (const needle of [
-      "kumo-cli/startup",
-      "kumo-cli/repl",
-      "kumo-cli/render",
-      "kumo-cli/approval",
-      "kumo-cli/modes",
-      "kumo-cli/web-search",
+      "kumo-code/startup",
+      "kumo-code/repl",
+      "kumo-code/render",
+      "kumo-code/approval",
+      "kumo-code/modes",
+      "kumo-code/web-search",
     ]) {
       expect(out).toContain(needle);
     }

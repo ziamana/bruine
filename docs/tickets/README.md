@@ -44,3 +44,4 @@ You are implementing one ticket of the kumo project.
 | T23 | UI polish: no emoji + animated spinner, sentence-by-sentence reasoning, spacing, tool args, mode label | T22 |
 | T24 | Finishing: no em-dash in UI/skills, mode notes not as user msgs, no spinner when piped, e2e screens out of git | T23 |
 | T25 | Honest TPS per LLM call, footer without duplicate auto, reasoning word by word inside sentences | T24 |
+| T26 | Reuse skills from Claude Code / OpenCode / pi / ~/.agents (linked, not copied), shown in setup | T21 |

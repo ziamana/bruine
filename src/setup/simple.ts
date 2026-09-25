@@ -9,8 +9,8 @@ export const PROBE_PORTS = [
 ];
 
 export interface ProbeHit {
-  port: number;
   baseUrl: string;
+  port?: number;
   models: string[];
 }
 
@@ -25,15 +25,13 @@ export interface ProbeOptions {
   fetchImpl?: FetchLike;
 }
 
-/** GET /v1/models on one port; resolves undefined on any failure. */
-export async function probePort(
-  port: number,
-  opts: ProbeOptions = {},
+/** GET {baseUrl}/models; resolves undefined on any failure. */
+export async function probeUrl(
+  baseUrl: string,
+  opts: { timeoutMs?: number; fetchImpl?: FetchLike } = {},
 ): Promise<ProbeHit | undefined> {
-  const host = opts.host ?? "127.0.0.1";
   const timeoutMs = opts.timeoutMs ?? 400;
   const doFetch = opts.fetchImpl ?? (fetch as unknown as FetchLike);
-  const baseUrl = `http://${host}:${port}/v1`;
   try {
     const res = await doFetch(`${baseUrl}/models`, {
       signal: AbortSignal.timeout(timeoutMs),
@@ -44,10 +42,22 @@ export async function probePort(
       ? body.data.map((m: any) => String(m?.id)).filter((id: string) => id !== "" && id !== "undefined")
       : [];
     if (models.length === 0) return undefined;
-    return { port, baseUrl, models };
+    let port: number | undefined;
+    try {
+      port = Number(new URL(baseUrl).port) || undefined;
+    } catch {
+      port = undefined;
+    }
+    return { baseUrl, port, models };
   } catch {
     return undefined;
   }
+}
+
+/** GET /v1/models on one port; resolves undefined on any failure. */
+export function probePort(port: number, opts: ProbeOptions = {}): Promise<ProbeHit | undefined> {
+  const host = opts.host ?? "127.0.0.1";
+  return probeUrl(`http://${host}:${port}/v1`, opts);
 }
 
 /** Probe every port at once; the first answer wins. */
@@ -81,6 +91,28 @@ export function discoverLocalServer(
 export function pickModel(models: string[]): string {
   const chat = models.find((id) => !/embed/i.test(id));
   return chat ?? models[0] ?? "";
+}
+
+/**
+ * Normalise a typed server address: add `http://` when missing and a trailing
+ * `/v1` when the path does not already end with one.
+ */
+export function normalizeServerUrl(input: string): string | undefined {
+  const raw = input.trim();
+  if (raw === "") return undefined;
+  let url: URL;
+  try {
+    url = new URL(raw.includes("://") ? raw : `http://${raw}`);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+  let path = url.pathname.replace(/\/+$/, "");
+  if (!/\/v1$/.test(path)) path = `${path}/v1`;
+  url.pathname = path;
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/$/, "");
 }
 
 export type SettingsDoc = Record<string, unknown>;
@@ -207,17 +239,68 @@ export interface SetupIO {
   isTTY: boolean;
   write(text: string): void;
   question(q: string): Promise<string>;
+  /** Read a secret (API key) WITHOUT echoing it. */
+  secret(q: string): Promise<string>;
 }
 
 export type SetupOutcome =
-  | { kind: "local"; port: number; model: string }
+  | { kind: "local"; baseUrl: string; model: string }
   | { kind: "deepseek" }
   | { kind: "openrouter" }
   | { kind: "skipped" };
 
+async function askProviderKey(
+  dshHome: string,
+  io: SetupIO,
+  provider: "deepseek" | "openrouter",
+): Promise<SetupOutcome> {
+  const keyLabel = provider === "deepseek" ? "DeepSeek" : "OpenRouter";
+  const key = (await io.secret(`${keyLabel} API key: `)).trim();
+  if (key === "") {
+    io.write("No key entered — skipping. You can add one later in the kumo home .env file\n");
+    return { kind: "skipped" };
+  }
+  const settingsPath = join(dshHome, "settings.yaml");
+  const doc = provider === "deepseek" ? deepseekSettings() : openrouterSettings();
+  await writeAtomic(settingsPath, renderSettingsYaml(doc), 0o600);
+  const envKey = provider === "deepseek" ? "DEEPSEEK_API_KEY" : "OPENROUTER_API_KEY";
+  await writeEnvVar(join(dshHome, ".env"), envKey, key);
+  io.write(`Saved. Your API key is stored in ${join(dshHome, ".env")} (owner-only).\n`);
+  return { kind: provider };
+}
+
+async function askServerAddress(
+  dshHome: string,
+  io: SetupIO,
+  opts: { fetchImpl?: FetchLike },
+): Promise<SetupOutcome | "retry"> {
+  const raw = await io.question("Server URL (e.g. http://192.168.1.64:8081): ");
+  const baseUrl = normalizeServerUrl(raw);
+  if (baseUrl === undefined) {
+    io.write("That is not a valid URL.\n");
+    return "retry";
+  }
+  const hit = await probeUrl(baseUrl, { ...opts, timeoutMs: 3000 });
+  if (hit === undefined) {
+    io.write(`Could not reach ${baseUrl} (no /v1/models answer).\n`);
+    return "retry";
+  }
+  io.write(`Models: ${hit.models.map((m, i) => `[${i + 1}] ${m}`).join("   ")}\n`);
+  const pick = await io.question("Model number [1]: ");
+  const n = Number.parseInt(pick.trim(), 10);
+  const index = Number.isNaN(n) ? 0 : Math.min(Math.max(n - 1, 0), hit.models.length - 1);
+  const model = hit.models[index] ?? "";
+  const settingsPath = join(dshHome, "settings.yaml");
+  await writeAtomic(settingsPath, renderSettingsYaml(localServerSettings(hit, model)), 0o600);
+  await writeEnvVar(join(dshHome, ".env"), LOCAL_API_KEY_ENV, "local");
+  io.write(`Using model: ${model} at ${baseUrl}\n`);
+  return { kind: "local", baseUrl, model };
+}
+
 /**
- * First-run setup: find a local OpenAI-compatible server, else ask for one
- * API key. Idempotent: an existing settings.yaml is never touched.
+ * First-run setup: find a local OpenAI-compatible server, else offer a manual
+ * server address or one API key. Idempotent: an existing settings.yaml is
+ * never touched.
  */
 export async function simpleSetup(
   dshHome: string,
@@ -233,33 +316,26 @@ export async function simpleSetup(
     const model = pickModel(hit.models);
     await writeAtomic(settingsPath, renderSettingsYaml(localServerSettings(hit, model)), 0o600);
     await writeEnvVar(join(dshHome, ".env"), LOCAL_API_KEY_ENV, "local");
-    io.write(`Found a local model server on port ${hit.port}. Using model: ${model}\n`);
-    return { kind: "local", port: hit.port, model };
+    io.write(`Found a local model server at ${hit.baseUrl}. Using model: ${model}\n`);
+    return { kind: "local", baseUrl: hit.baseUrl, model };
   }
 
   if (!io.isTTY) {
     io.write(
       "No local model server found. Start one (llama.cpp, ollama, LM Studio…),\n" +
-        "or run kumo in a terminal to configure an API key.\n",
+        "or run kumo in a terminal to configure a server or an API key.\n",
     );
     return { kind: "skipped" };
   }
 
   io.write("No local model server found.\n");
-  const choice = await io.question("Use which provider?  1) DeepSeek  2) OpenRouter  [1] ");
-  const provider = choice.trim().startsWith("2") ? "openrouter" : "deepseek";
-  const keyPrompt =
-    provider === "deepseek" ? "DeepSeek API key: " : "OpenRouter API key: ";
-  const key = (await io.question(keyPrompt)).trim();
-  if (key === "") {
-    io.write("No key entered — skipping. You can add one later in ~/.kumo/.env\n");
-    return { kind: "skipped" };
+  for (;;) {
+    const choice = (
+      await io.question("Setup:  1) Enter a server address   2) DeepSeek   3) OpenRouter   [1] ")
+    ).trim();
+    if (choice.startsWith("2")) return askProviderKey(dshHome, io, "deepseek");
+    if (choice.startsWith("3")) return askProviderKey(dshHome, io, "openrouter");
+    const result = await askServerAddress(dshHome, io, opts);
+    if (result !== "retry") return result;
   }
-
-  const doc = provider === "deepseek" ? deepseekSettings() : openrouterSettings();
-  await writeAtomic(settingsPath, renderSettingsYaml(doc), 0o600);
-  const envKey = provider === "deepseek" ? "DEEPSEEK_API_KEY" : "OPENROUTER_API_KEY";
-  await writeEnvVar(join(dshHome, ".env"), envKey, key);
-  io.write(`Saved. Your API key is stored in ${join(dshHome, ".env")} (owner-only).\n`);
-  return { kind: provider };
 }

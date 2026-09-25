@@ -1,12 +1,14 @@
+import { createServer } from "node:http";
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { describe, expect, test } from "vitest";
+import { afterAll, describe, expect, test } from "vitest";
 import {
   deepseekSettings,
   discoverLocalServer,
   localServerSettings,
+  normalizeServerUrl,
   openrouterSettings,
   pickModel,
   probePort,
@@ -25,18 +27,25 @@ const deadFetch: FetchLike = async () => {
   throw new Error("ECONNREFUSED");
 };
 
-function fakeIO(answers: string[], isTTY = true) {
+function fakeIO(opts: { answers?: string[]; secrets?: string[]; isTTY?: boolean } = {}) {
   const out: string[] = [];
   const asked: string[] = [];
+  const secretsAsked: string[] = [];
+  const answers = [...(opts.answers ?? [])];
+  const secrets = [...(opts.secrets ?? [])];
   const io: SetupIO = {
-    isTTY,
+    isTTY: opts.isTTY ?? true,
     write: (s) => out.push(s),
     question: async (q) => {
       asked.push(q);
       return answers.shift() ?? "";
     },
+    secret: async (q) => {
+      secretsAsked.push(q);
+      return secrets.shift() ?? "";
+    },
   };
-  return { io, out, asked };
+  return { io, out, asked, secretsAsked };
 }
 
 describe("probePort", () => {
@@ -99,9 +108,27 @@ describe("pickModel", () => {
   });
 });
 
+describe("normalizeServerUrl (T11.4)", () => {
+  test("adds scheme and /v1", () => {
+    expect(normalizeServerUrl("192.168.1.64:8081")).toBe("http://192.168.1.64:8081/v1");
+    expect(normalizeServerUrl("http://h:8000")).toBe("http://h:8000/v1");
+    expect(normalizeServerUrl("http://h:8000/v1")).toBe("http://h:8000/v1");
+    expect(normalizeServerUrl("https://h/v1/")).toBe("https://h/v1");
+    expect(normalizeServerUrl("http://h:8000/foo")).toBe("http://h:8000/foo/v1");
+  });
+  test("rejects empty and garbage", () => {
+    expect(normalizeServerUrl("   ")).toBeUndefined();
+    expect(normalizeServerUrl("not a url at all")).toBeUndefined();
+    expect(normalizeServerUrl("ftp://h")).toBeUndefined();
+  });
+});
+
 describe("renderSettingsYaml", () => {
   test("round-trips the local server document", () => {
-    const doc = localServerSettings({ port: 8080, baseUrl: "http://127.0.0.1:8080/v1", models: ["qwen2.5:latest"] }, "qwen2.5:latest");
+    const doc = localServerSettings(
+      { baseUrl: "http://127.0.0.1:8080/v1", port: 8080, models: ["qwen2.5:latest"] },
+      "qwen2.5:latest",
+    );
     const parsed = parseYaml(renderSettingsYaml(doc));
     expect(parsed).toEqual(doc);
     expect(parsed["agent-default-model"]).toEqual({ provider: "local", model: "qwen2.5:latest" });
@@ -138,12 +165,16 @@ describe("writeEnvVar", () => {
 describe("simpleSetup", () => {
   test("local server found → settings.yaml written, no questions", async () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
-    const { io, asked } = fakeIO([]);
+    const { io, asked } = fakeIO();
     const outcome = await simpleSetup(home, io, {
       ports: [8080],
       fetchImpl: okFetch([{ id: "nomic-embed" }, { id: "llama3" }]),
     });
-    expect(outcome).toEqual({ kind: "local", port: 8080, model: "llama3" });
+    expect(outcome).toEqual({
+      kind: "local",
+      baseUrl: "http://127.0.0.1:8080/v1",
+      model: "llama3",
+    });
     expect(asked).toEqual([]);
     const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
     expect(parsed["agent-default-model"]).toEqual({ provider: "local", model: "llama3" });
@@ -152,12 +183,15 @@ describe("simpleSetup", () => {
     expect(await readFile(join(home, ".env"), "utf8")).toBe("KUMO_LOCAL_API_KEY=local\n");
   });
 
-  test("no server, TTY → DeepSeek key flow", async () => {
+  // T11.1 — the key must NEVER go through the echoing question() prompt.
+  test("no server, TTY → DeepSeek: key is read via secret(), never question()", async () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
-    const { io, asked } = fakeIO(["1", "sk-abc"]);
+    const { io, asked, secretsAsked } = fakeIO({ answers: ["2"], secrets: ["sk-abc"] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "deepseek" });
-    expect(asked.length).toBe(2);
+    expect(asked.length).toBe(1); // only the menu
+    expect(asked.some((q) => /key/i.test(q))).toBe(false);
+    expect(secretsAsked).toEqual(["DeepSeek API key: "]);
     const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
     expect(parsed["agent-default-model"]).toEqual({
       provider: "deepseek-official",
@@ -166,11 +200,12 @@ describe("simpleSetup", () => {
     expect(await readFile(join(home, ".env"), "utf8")).toBe("DEEPSEEK_API_KEY=sk-abc\n");
   });
 
-  test("no server, TTY → OpenRouter key flow", async () => {
+  test("no server, TTY → OpenRouter key flow via secret()", async () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
-    const { io } = fakeIO(["2", "sk-or-1"]);
+    const { io, secretsAsked } = fakeIO({ answers: ["3"], secrets: ["sk-or-1"] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "openrouter" });
+    expect(secretsAsked).toEqual(["OpenRouter API key: "]);
     const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
     expect(parsed["agent-default-model"]).toEqual({ provider: "openrouter", model: "openrouter/auto" });
     expect(await readFile(join(home, ".env"), "utf8")).toBe("OPENROUTER_API_KEY=sk-or-1\n");
@@ -178,7 +213,7 @@ describe("simpleSetup", () => {
 
   test("empty key → skipped, nothing written", async () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
-    const { io } = fakeIO(["1", ""]);
+    const { io } = fakeIO({ answers: ["2"], secrets: [""] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "skipped" });
     await expect(stat(join(home, "settings.yaml"))).rejects.toThrow();
@@ -186,7 +221,7 @@ describe("simpleSetup", () => {
 
   test("no server, not a TTY → skipped with guidance", async () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
-    const { io, out, asked } = fakeIO([], false);
+    const { io, out, asked } = fakeIO({ isTTY: false });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "skipped" });
     expect(asked).toEqual([]);
@@ -197,7 +232,7 @@ describe("simpleSetup", () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
     await writeFile(join(home, "settings.yaml"), "agent-default-model:\n  provider: x\n  model: y\n");
     let probed = false;
-    const outcome = await simpleSetup(home, fakeIO([]).io, {
+    const outcome = await simpleSetup(home, fakeIO().io, {
       ports: [1],
       fetchImpl: async () => {
         probed = true;
@@ -207,5 +242,45 @@ describe("simpleSetup", () => {
     expect(outcome).toEqual({ kind: "skipped" });
     expect(probed).toBe(false);
     expect(await readFile(join(home, "settings.yaml"), "utf8")).toContain("provider: x");
+  });
+
+  // T11.4 — manual server address against a real local HTTP server.
+  test("manual server address: probes, lists models, writes local settings", async () => {
+    const server = createServer((req, res) => {
+      if (req.url === "/v1/models") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ data: [{ id: "model-a" }, { id: "model-b" }] }));
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+      // menu default (empty → 1), then the URL (without /v1), then pick model 2
+      const { io } = fakeIO({ answers: ["", `127.0.0.1:${port}`, "2"] });
+      const outcome = await simpleSetup(home, io, { ports: [] });
+      expect(outcome).toEqual({
+        kind: "local",
+        baseUrl: `http://127.0.0.1:${port}/v1`,
+        model: "model-b",
+      });
+      const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
+      expect(parsed["llm-pi-ai"].providers.local.baseURL).toBe(`http://127.0.0.1:${port}/v1`);
+      expect(parsed["agent-default-model"]).toEqual({ provider: "local", model: "model-b" });
+      expect(await readFile(join(home, ".env"), "utf8")).toBe("KUMO_LOCAL_API_KEY=local\n");
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
+  });
+
+  test("unreachable address → error, menu again, then a provider works", async () => {
+    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const { io, out } = fakeIO({ answers: ["1", "http://127.0.0.1:1", "2"], secrets: ["sk-1"] });
+    const outcome = await simpleSetup(home, io, { ports: [] });
+    expect(outcome).toEqual({ kind: "deepseek" });
+    expect(out.join("")).toContain("Could not reach");
   });
 });

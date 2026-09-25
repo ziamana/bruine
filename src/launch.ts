@@ -6,6 +6,17 @@ export interface Launch {
   env: Record<string, string>;
 }
 
+/**
+ * The launcher-only flags kumo answers itself. They count ONLY as the first
+ * argument, so `kumo "explain the --help flag"` reaches the model instead.
+ */
+export function flagMode(argv: string[]): "help" | "version" | null {
+  const first = argv[0];
+  if (first === "--help" || first === "-h") return "help";
+  if (first === "--version" || first === "-V") return "version";
+  return null;
+}
+
 export function buildLaunch(
   argv: string[],
   env: NodeJS.ProcessEnv,

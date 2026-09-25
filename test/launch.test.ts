@@ -1,6 +1,21 @@
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { buildLaunch } from "../src/launch.js";
+import { buildLaunch, flagMode } from "../src/launch.js";
+
+describe("flagMode (T11.2)", () => {
+  test("intercepts only as the FIRST argument", () => {
+    expect(flagMode(["--version"])).toBe("version");
+    expect(flagMode(["-V"])).toBe("version");
+    expect(flagMode(["--help"])).toBe("help");
+    expect(flagMode(["-h"])).toBe("help");
+  });
+
+  test("flags inside a prompt are not intercepted", () => {
+    expect(flagMode(["explain the --help flag"])).toBeNull();
+    expect(flagMode(["fix", "-V"])).toBeNull();
+    expect(flagMode([])).toBeNull();
+  });
+});
 
 describe("buildLaunch", () => {
   test("default home → DSH_HOME ends with /.kumo", () => {

@@ -6,7 +6,7 @@ import os from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { buildLaunch } from "./launch.js";
+import { buildLaunch, flagMode } from "./launch.js";
 import { ensureProfile } from "./profile.js";
 import { simpleSetup, type SetupIO } from "./setup/simple.js";
 
@@ -79,17 +79,78 @@ function terminalIO(): SetupIO {
           resolveAnswer(answer);
         });
       }),
+    secret: (q) => readSecret(q),
   };
+}
+
+/**
+ * Read a secret without ever echoing it: raw mode, one "*" per typed char,
+ * Backspace edits the value, Enter ends it, Ctrl+C exits 130, Escape cancels.
+ * On a non-TTY stdin, one line is read silently instead.
+ */
+function readSecret(prompt: string): Promise<string> {
+  process.stdout.write(prompt);
+  const stdin = process.stdin;
+  if (stdin.isTTY !== true) {
+    const rl = createInterface({ input: stdin, output: process.stdout });
+    return new Promise<string>((resolve) => {
+      rl.once("line", (line) => {
+        rl.close();
+        resolve(line);
+      });
+      rl.once("close", () => resolve(""));
+    });
+  }
+  return new Promise<string>((resolve) => {
+    const decoder = new TextDecoder("utf8");
+    let value = "";
+    const onData = (buf: Buffer) => {
+      for (const ch of decoder.decode(buf, { stream: true })) {
+        const code = ch.codePointAt(0) ?? 0;
+        if (code === 13 || code === 10 || code === 27) {
+          finish();
+          return;
+        }
+        if (code === 3) {
+          stdin.setRawMode(false);
+          process.stdout.write("\n");
+          process.exit(130);
+        }
+        if (code === 127 || code === 8) {
+          if (value.length > 0) {
+            value = value.slice(0, -1);
+            process.stdout.write("\b \b");
+          }
+          continue;
+        }
+        if (code >= 32) {
+          value += ch;
+          process.stdout.write("*");
+        }
+      }
+    };
+    const finish = () => {
+      stdin.setRawMode(false);
+      stdin.removeListener("data", onData);
+      stdin.pause();
+      process.stdout.write("\n");
+      resolve(value);
+    };
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.on("data", onData);
+  });
 }
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
 
-  if (argv.includes("--version") || argv.includes("-V")) {
+  const flag = flagMode(argv);
+  if (flag === "version") {
     console.log(`kumo ${pkg.version}`);
     process.exit(0);
   }
-  if (argv.includes("--help") || argv.includes("-h")) {
+  if (flag === "help") {
     console.log(USAGE);
     process.exit(0);
   }

@@ -15,7 +15,7 @@ export class FakeScreen implements Screen {
 }
 
 export const strip = (s: string): string =>
-  s.replace(/\r/g, "").replace(/\x1b\[[0-9]*[A-Za-z]/g, "");
+  s.replace(/\r/g, "").replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
 
 export function deferred<T = void>(): {
   promise: Promise<T>;

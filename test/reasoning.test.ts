@@ -1,16 +1,7 @@
+import stringWidth from "string-width";
 import { describe, expect, test } from "vitest";
-import { ReasoningLine, type Screen } from "../src/render/reasoning.js";
-
-class FakeScreen implements Screen {
-  writes: string[] = [];
-  columns = 80;
-  write(s: string): void {
-    this.writes.push(s);
-  }
-  get last(): string {
-    return this.writes[this.writes.length - 1] ?? "";
-  }
-}
+import { ReasoningLine } from "../src/render/reasoning.js";
+import { FakeScreen, strip } from "./fakes.js";
 
 function fakeClock(start: number) {
   let t = start;
@@ -51,13 +42,8 @@ describe("ReasoningLine", () => {
     const s = new FakeScreen();
     s.columns = 20;
     const r = new ReasoningLine(s);
-    const long = "x".repeat(50);
-    r.push(long);
-    // strip escape codes and the prefix
-    const text = s.last
-      .replace(/\r/g, "")
-      .replace(/\x1b\[[0-9]*[A-Za-z]/g, "")
-      .replace("💭 ", "");
+    r.push("x".repeat(50));
+    const text = strip(s.last).replace("💭 ", "");
     expect(text.length).toBeLessThanOrEqual(16);
     expect(text.startsWith("…")).toBe(true);
   });
@@ -89,12 +75,73 @@ describe("ReasoningLine", () => {
     expect(r.active).toBe(false);
   });
 
-  test("every redraw clears the line first and is dim", () => {
+  test("every redraw clears the line, is dim and guards autowrap", () => {
     const s = new FakeScreen();
     const r = new ReasoningLine(s);
     r.push("hi");
     expect(s.last.startsWith("\r\x1b[2K")).toBe(true);
     expect(s.last).toContain("\x1b[2m");
     expect(s.last).toContain("\x1b[22m");
+    expect(s.last).toContain("\x1b[?7l");
+    expect(s.last).toContain("\x1b[?7h");
+  });
+
+  // T12 — stacking hotfix acceptance
+
+  test("T12.1 paragraph break: no write ever contains a raw newline", () => {
+    const s = new FakeScreen();
+    const r = new ReasoningLine(s);
+    r.push("a\n\nb");
+    expect(s.writes.every((w) => !w.includes("\n"))).toBe(true);
+    expect(strip(s.last)).toBe("💭 b");
+  });
+
+  test("T12.2 trailing blank segments keep the last finished line", () => {
+    const s = new FakeScreen();
+    const r = new ReasoningLine(s);
+    r.push("first\n\n");
+    expect(s.writes.every((w) => !w.includes("\n"))).toBe(true);
+    expect(strip(s.last)).toBe("💭 first");
+  });
+
+  test("T12.3 control characters are sanitized to spaces", () => {
+    const s = new FakeScreen();
+    const r = new ReasoningLine(s);
+    r.push("x\ty\rz");
+    expect(strip(s.last)).toBe("💭 x y z");
+  });
+
+  test("T12.4 emoji/CJK width is measured in display cells", () => {
+    const s = new FakeScreen();
+    s.columns = 20;
+    const r = new ReasoningLine(s);
+    r.push("😀".repeat(10) + "あ".repeat(10) + "abc");
+    expect(stringWidth(strip(s.last))).toBeLessThanOrEqual(19);
+    expect(strip(s.last).startsWith("💭 ")).toBe(true);
+  });
+
+  test("T12.5 scripted 30-delta stream: the only newline comes from end()", () => {
+    const s = new FakeScreen();
+    const r = new ReasoningLine(s);
+    const deltas = [
+      "Let me ",
+      "think\n",
+      "about\n\n",
+      "this",
+      " paragraph\nbreaks\n",
+      "\n",
+      "a new",
+      " start\n",
+      "line one\nline two\nline three",
+      " more\n\n\n",
+      ...Array.from({ length: 20 }, (_, i) => `seg${i % 3} `),
+      "end\n",
+    ];
+    expect(deltas.length).toBeGreaterThanOrEqual(30);
+    for (const d of deltas) r.push(d);
+    expect(s.writes.every((w) => !w.includes("\n"))).toBe(true);
+    r.end();
+    expect(s.writes.filter((w) => w.includes("\n"))).toHaveLength(1);
+    expect(strip(s.writes[s.writes.length - 1]).endsWith("thought for 0.0s\n")).toBe(true);
   });
 });

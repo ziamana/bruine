@@ -19,8 +19,8 @@ kumo is a **public product** for **Windows, macOS and Linux**, not a personal to
 | CI | GitHub Actions matrix: ubuntu, windows, macos × Node 22 and 24. A ticket is done only when CI is green on all 3. |
 | **Prompt cache (critical for local models)** | The request prefix must stay byte-identical across a session. **Never** change the system prompt or the tools array mid-session (modes, skills, MCP, settings). New information (new skill, AGENTS.md change, mode switch) is **appended as a message at the end**. Compaction keeps the same system prompt and tools. No timestamps / token counts / mode badges in the prompt. Source: youtu.be/AkwItxJ9AbA (Cache Hunter test, 2026-09): dsh itself keeps the cache perfectly; Pi lost it by swapping tools on plan→build. |
 | Honest numbers | The footer's tok/s is computed by kumo from its own timestamps, never copied from dsh (the same test found dsh's figure overstated: 79 shown vs 60 real). |
-
-
+| Business model (Aron, 2026-09-25) | **Open source first (MIT), paid features later.** Everything that runs locally stays free and MIT forever. Future paid features must be hosted services (sync, team, cloud), never a lock on a local feature. Dependencies must stay MIT/BSD/Apache (checked 2026-09-25: dsh MIT, pi-tui MIT, all 147 deps MIT or BSD-3). |
+| Names | npm package **`kumo-code`** (T20), command `kumo`. |
 
 ---
 

@@ -38,3 +38,5 @@ You are implementing one ticket of the kumo project.
 | T17 | Cache Hunter test: system+tools byte-identical, messages append-only | T16 |
 | **T18** | **HOTFIX: gate bypasses (12/13) + lockfile leak** | T17 |
 | T19 | Judge really works on local models + 6 remaining gate holes | T18 |
+| T20 | Rename package to kumo-code (command stays kumo) | T19 |
+| T21 | Full setup v0.2 (LAN discovery, roles, keys, mode, skills, theme, telemetry) | T20 + Aron's UI test |

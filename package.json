@@ -7,6 +7,19 @@
   "bin": {
     "kumo": "dist/bin.js"
   },
+  "exports": {
+    "./startup": "./dist/plugins/startup.js",
+    "./repl": "./dist/plugins/repl.js",
+    "./render": "./dist/plugins/render.js",
+    "./approval": "./dist/plugins/approval.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
   "engines": {
     "node": ">=22"
   },
@@ -23,6 +36,14 @@
     "@types/node": "^24.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.5.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "yaml": "^2.9.1"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-agent": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-cmdline": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-llm": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-session": "0.1.5-rc.2",
+    "commander": "^15.0.0"
   }
 }

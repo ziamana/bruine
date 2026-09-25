@@ -1,0 +1,18 @@
+# The kumo-cli bundle patch: an interactive terminal agent over dsh-base.
+# Inserts the four kumo plugins: startup parses argv, repl owns the single
+# agent and the readline loop, render draws the live stream, approval answers
+# tool approvals with a y/n prompt.
+
+- insert:
+    - id: kumo-startup
+      name: 'kumo-cli/startup'
+
+    - id: kumo-repl
+      name: 'kumo-cli/repl'
+      inject: [kumoStartup]
+
+    - id: kumo-render
+      name: 'kumo-cli/render'
+
+    - id: kumo-approval
+      name: 'kumo-cli/approval'

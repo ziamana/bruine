@@ -1,0 +1,147 @@
+$ vitest run test/e2e
+
+ RUN  v3.2.7 /home/tu44/projets/kumo-e2e
+
+$ tsup
+CLI Building entry: {"bin":"src/bin.ts","plugins/startup":"src/plugins/startup.ts","plugins/repl":"src/plugins/repl.ts","plugins/render":"src/plugins/render.ts","plugins/approval":"src/plugins/approval.ts","plugins/modes":"src/plugins/modes.ts","plugins/web-search":"src/plugins/web-search.ts"}
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /home/tu44/projets/kumo-e2e/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+ESM dist/bin.js                19.63 KB
+ESM dist/plugins/repl.js       14.01 KB
+ESM dist/plugins/render.js     19.61 KB
+ESM dist/plugins/approval.js   2.65 KB
+ESM dist/plugins/startup.js    1.02 KB
+ESM dist/plugins/web-search.js 4.07 KB
+ESM dist/plugins/modes.js      16.21 KB
+ESM ⚡️ Build success in 14ms
+stderr | test/e2e/terminal.test.ts > modes: Tab Plan/Build, Shift+Tab Ask/Auto/confirmed red Full access
+SCENARIO FAILED: modes
+ kumo v0.0.1                                                                                        
+ escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+0%/— (auto)                                                                  (local) e2e-model • off
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ ❯ test/e2e/terminal.test.ts (7 tests | 1 failed) 28429ms
+   ✓ reasoning: only one visible thought line throughout 40 mixed lines  5910ms
+   ✓ escape: abort stream within one second and accept another turn  3253ms
+   ✓ tool call: read note.txt and send the real tool result back  2431ms
+   × modes: Tab Plan/Build, Shift+Tab Ask/Auto/confirmed red Full access 16536ms
+     → Timeout waiting for "Ask"; exit=undefined
+ kumo v0.0.1                                                                                        
+ escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+0%/— (auto)                                                                  (local) e2e-model • off
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   · keys: ctrl+c clears input and ctrl+d exits successfully
+   · resize: 60×20 during reasoning preserves one thought line
+   · approval: Down Down Enter rejects write without creating the file
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/e2e/terminal.test.ts > modes: Tab Plan/Build, Shift+Tab Ask/Auto/confirmed red Full access
+Error: Timeout waiting for "Ask"; exit=undefined
+ kumo v0.0.1                                                                                        
+ escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+0%/— (auto)                                                                  (local) e2e-model • off
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ ❯ Harness.until test/e2e/harness.ts:81:41
+     79|       await this.flush();
+     80|       if (predicate()) return;
+     81|       if (Date.now() >= deadline) throw new Error(`Timeout waiting for…
+       |                                         ^
+     82|       await delay(25);
+     83|     } while (true);
+ ❯ test/e2e/terminal.test.ts:96:5
+ ❯ scenario test/e2e/terminal.test.ts:22:5
+ ❯ test/e2e/terminal.test.ts:95:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (7)
+   Start at  21:39:26
+   Duration  28.66s (transform 51ms, setup 0ms, collect 94ms, tests 28.43s, environment 0ms, prepare 42ms)
+
+[ELIFECYCLE] Command failed with exit code 1.

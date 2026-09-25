@@ -1,0 +1,30 @@
+$ vitest run
+
+ RUN  v3.2.7 /home/tu44/projets/kumo-e2e
+
+ ✓ test/rules.test.ts (33 tests) 16ms
+ ✓ test/launch.test.ts (14 tests) 8ms
+ ✓ test/profile.test.ts (4 tests) 20ms
+ ✓ test/web-search.test.ts (8 tests) 5ms
+ ✓ test/chars.test.ts (5 tests) 5ms
+ ✓ test/tools.test.ts (8 tests) 8ms
+ ✓ test/reasoning.test.ts (13 tests) 51ms
+ ✓ test/simple.test.ts (27 tests) 124ms
+ ✓ test/repl.test.ts (10 tests) 8ms
+ ✓ test/approval.test.ts (16 tests) 10ms
+ ✓ test/render.test.ts (12 tests) 48ms
+ ✓ test/modes.test.ts (18 tests) 98ms
+ ✓ test/ui.test.ts (21 tests) 93ms
+ ✓ test/smoke.test.ts (1 test) 3ms
+ ✓ test/text.test.ts (6 tests) 5ms
+ ✓ test/startup.test.ts (4 tests) 6ms
+ ✓ test/profile-dump.test.ts (1 test) 445ms
+   ✓ profile composition (T15) > dsh --dump-config carries kumo's identity, plugins and tools  444ms
+ ✓ test/cache/cache.test.ts (1 test) 8862ms
+   ✓ Cache Hunter (T17) > system + tools byte-identical across mode flips, skills, AGENTS.md; history append-only  8537ms
+
+ Test Files  18 passed (18)
+      Tests  202 passed (202)
+   Start at  21:39:55
+   Duration  9.43s (transform 973ms, setup 0ms, collect 3.44s, tests 9.81s, environment 4ms, prepare 1.78s)
+

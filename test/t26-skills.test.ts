@@ -1,16 +1,19 @@
 /**
  * T26 — "kumo reuses the skills you already have": scanning foreign skill
  * dirs, link/copy install into $DSH_HOME/skills, the `.kumo-installed.json`
- * manifest, the wizard's pre-check migration, and the `kumo skills` command.
+ * manifest, the wizard's pre-check migration, the T26b migration at launch,
+ * and the `kumo skills` command.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { lstat, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { setTimeout as sleep } from "node:timers/promises";
 import { tmpdir } from "node:os";
 import path, { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
+  migrateAgentsSkills,
   readInstalledSkills,
   scanFoundSkills,
   scanProjectSkills,
@@ -260,6 +263,137 @@ describe("wizard skills-step defaults (T26)", () => {
     ];
     expect(initialSkillChecks(items, ["#h1", "alpha"], foundSkills)).toEqual(new Set([1]));
   });
+});
+
+describe("migrateAgentsSkills (T26b)", () => {
+  async function launchHomes(): Promise<{ userHome: string; skillsDir: string }> {
+    const base = await mkdtemp(join(tmpdir(), "kumo-t26b-"));
+    const userHome = join(base, "user");
+    for (const name of ["one", "two", "three"]) {
+      await putSkill(join(userHome, ".agents", "skills", name), name, `the ${name} skill`);
+    }
+    await putSkill(join(userHome, ".claude", "skills", "four"), "four", "claude only"); // not .agents
+    await mkdir(join(userHome, ".agents", "skills", "noname"), { recursive: true }); // not a skill
+    await writeFile(join(userHome, ".agents", "skills", "noname", "SKILL.md"), "---\ndescription: x\n---\n");
+    return { userHome, skillsDir: join(base, "kumo", "skills") };
+  }
+
+  test("accepted: no manifest + 3 valid .agents skills → 3 links + manifest", async () => {
+    const { userHome, skillsDir } = await launchHomes();
+    const r = await migrateAgentsSkills({ homeSkillsDir: skillsDir, home: userHome });
+    expect(r.linked.slice().sort()).toEqual(["one", "three", "two"]);
+    expect(r.copied).toEqual([]);
+    const entries = await readInstalledSkills(skillsDir);
+    expect(entries.map((e) => e.name)).toEqual(["one", "three", "two"]);
+    for (const e of entries) {
+      expect(e).toMatchObject({ kind: "linked", source: join(userHome, ".agents", "skills", e.name) });
+      expect((await lstat(join(skillsDir, e.name))).isSymbolicLink()).toBe(true);
+    }
+    // only what the user had in .agents: the claude-only folder stays out.
+    expect(existsSync(join(skillsDir, "four"))).toBe(false);
+    // second launch: the manifest is the marker — nothing runs, nothing changes.
+    const manifestBefore = await readFile(join(skillsDir, SKILLS_MANIFEST), "utf8");
+    const again = await migrateAgentsSkills({ homeSkillsDir: skillsDir, home: userHome });
+    expect(again).toEqual({ linked: [], copied: [] });
+    expect(await readFile(join(skillsDir, SKILLS_MANIFEST), "utf8")).toBe(manifestBefore);
+  });
+
+  test("manifest already present (even empty = user choice) → nothing linked", async () => {
+    const { userHome, skillsDir } = await launchHomes();
+    await mkdir(skillsDir, { recursive: true });
+    await writeFile(join(skillsDir, SKILLS_MANIFEST), "{}\n");
+    const r = await migrateAgentsSkills({ homeSkillsDir: skillsDir, home: userHome });
+    expect(r).toEqual({ linked: [], copied: [] });
+    expect(existsSync(join(skillsDir, "one"))).toBe(false);
+  });
+
+  test("no .agents skills and no manifest → nothing invented, no marker", async () => {
+    const base = await mkdtemp(join(tmpdir(), "kumo-t26b-none-"));
+    const skillsDir = join(base, "kumo", "skills");
+    const r = await migrateAgentsSkills({ homeSkillsDir: skillsDir, home: join(base, "empty-user") });
+    expect(r).toEqual({ linked: [], copied: [] });
+    expect(existsSync(join(skillsDir, SKILLS_MANIFEST))).toBe(false);
+  });
+
+  test("linking failure falls back to copies and says so", async () => {
+    const { userHome, skillsDir } = await launchHomes();
+    const r = await migrateAgentsSkills({
+      homeSkillsDir: skillsDir,
+      home: userHome,
+      link: async () => {
+        throw new Error("no symlinks on this mount");
+      },
+    });
+    expect(r.linked.slice().sort()).toEqual(["one", "three", "two"]);
+    expect(r.copied.slice().sort()).toEqual(["one", "three", "two"]);
+    expect((await lstat(join(skillsDir, "one"))).isSymbolicLink()).toBe(false);
+    expect(existsSync(join(skillsDir, "one", "SKILL.md"))).toBe(true);
+    for (const e of await readInstalledSkills(skillsDir)) expect(e).toMatchObject({ copied: true });
+  });
+});
+
+describe("kumo launch migration (T26b)", () => {
+  // The user-home scan runs on os.homedir(); POSIX honours $HOME overrides.
+  test.skipIf(process.platform === "win32")(
+    "kumo without a manifest links the .agents skills and says so once",
+    async () => {
+      const { localServerSettings, renderSettingsYaml } = await import("../src/setup/simple.js");
+      const base = await mkdtemp(join(tmpdir(), "kumo-t26b-launch-"));
+      const userHome = join(base, "user");
+      await putSkill(join(userHome, ".agents", "skills", "kept"), "kept", "keep me loaded");
+      const kumoHome = join(base, "kumo");
+      // Pre-bake settings so launch skips the first-run setup entirely.
+      await mkdir(kumoHome, { recursive: true });
+      const settings = localServerSettings(
+        { baseUrl: "http://127.0.0.1:9/v1", models: ["nope"] },
+        "nope",
+      );
+      await writeFile(join(kumoHome, "settings.yaml"), renderSettingsYaml(settings));
+      await writeFile(join(kumoHome, "kumo.json"), JSON.stringify({ permissionMode: "full", search: { provider: "none" } }));
+
+      const child = spawn(
+        process.execPath,
+        [join(repoRoot, "dist", "bin.js")],
+        {
+          cwd: base,
+          detached: true,
+          stdio: ["ignore", "pipe", "pipe"],
+          env: { ...process.env, HOME: userHome, KUMO_HOME: kumoHome },
+        },
+      );
+      let out = "";
+      child.stdout?.on("data", (d) => { out += String(d); });
+      child.stderr?.on("data", (d) => { out += String(d); });
+      const manifest = join(kumoHome, "skills", SKILLS_MANIFEST);
+      const t0 = Date.now();
+      try {
+        while (!existsSync(manifest)) {
+          if (Date.now() - t0 > 90_000) throw new Error(`no migration manifest after 90s; output:\n${out}`);
+          if (child.exitCode !== null && existsSync(manifest) === false && Date.now() - t0 > 5_000) {
+            throw new Error(`kumo exited ${String(child.exitCode)} before migrating; output:\n${out}`);
+          }
+          await sleep(250);
+        }
+        // Give the announcement a tick to reach stdout (printed before dsh spawns).
+        for (let i = 0; i < 20 && !out.includes("kept your 1 skill"); i++) await sleep(100);
+        expect(out).toContain("kept your 1 skill from .agents/skills");
+        const entries = await readInstalledSkills(join(kumoHome, "skills"));
+        expect(entries).toEqual([
+          { name: "kept", kind: "linked", source: join(userHome, ".agents", "skills", "kept") },
+        ]);
+        expect((await lstat(join(kumoHome, "skills", "kept"))).isSymbolicLink()).toBe(true);
+      } finally {
+        const pid = child.pid;
+        try {
+          if (pid !== undefined) process.kill(-pid, "SIGKILL"); // the whole group, dsh included
+          else child.kill("SIGKILL");
+        } catch {
+          try { child.kill("SIGKILL"); } catch { /* already gone */ }
+        }
+      }
+    },
+    150_000,
+  );
 });
 
 describe("kumo skills command (T26)", () => {

@@ -9,6 +9,8 @@ import { createRequire } from "node:module";
 import { buildLaunch, flagMode, resolveDshEntry, runDsh } from "./launch.js";
 import { ensureProfile } from "./profile.js";
 import { simpleSetup, type SetupIO } from "./setup/simple.js";
+import { migrateAgentsSkills } from "./setup/skills.js";
+import { ansi } from "./ui/theme.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { name: string; version: string };
@@ -246,6 +248,22 @@ async function main(): Promise<void> {
   }
   const { dir } = await ensureProfile(dshHome);
   ensureBundleInstalled(dir, dshEntry, env);
+
+  // T26b: the .agents/skills migration must not need the wizard — an
+  // existing user who upgrades and just runs `kumo` would otherwise silently
+  // lose every skill (agentsHome no longer points at the user home). Runs
+  // once before dsh starts; the skills manifest is the marker.
+  const migrated = await migrateAgentsSkills({ homeSkillsDir: join(dshHome, "skills") });
+  if (migrated.linked.length > 0) {
+    const n = String(migrated.linked.length);
+    const kept = `kumo: kept your ${n} skill${migrated.linked.length === 1 ? "" : "s"} from .agents/skills (manage them with kumo setup)`;
+    console.log(process.stdout.isTTY === true ? ansi.dim(kept) : kept);
+  }
+  if (migrated.copied.length > 0) {
+    console.log(
+      `kumo: could not link ${String(migrated.copied.length)} of those skills; they were copied instead (sources: ${migrated.copied.join(", ")}).`,
+    );
+  }
 
   const child = spawn(command, args, { env, stdio: "inherit" });
 

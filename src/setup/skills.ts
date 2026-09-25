@@ -298,3 +298,35 @@ export async function syncSkills(opts: {
   await rename(tmp, manifestPath);
   return { installed, removed, copied };
 }
+
+/**
+ * T26b: the launch-time migration for users who upgrade without re-running
+ * the wizard. When no manifest exists yet (kumo never picked skills) and the
+ * user home has valid skills under its `.agents/skills`, link them all, so
+ * the pre-T26 implicit load keeps working. The manifest is the marker: this
+ * runs at most once, and an existing manifest — even an empty one, meaning
+ * "the user chose nothing" — stops it forever.
+ */
+export async function migrateAgentsSkills(opts: {
+  homeSkillsDir: string;
+  home?: string;
+  pathMod?: typeof path;
+  link?: (target: string, linkPath: string) => Promise<void>;
+}): Promise<{ linked: string[]; copied: string[] }> {
+  const pathMod = opts.pathMod ?? path;
+  const home = opts.home ?? homedir();
+  if (existsSync(pathMod.join(opts.homeSkillsDir, SKILLS_MANIFEST))) {
+    return { linked: [], copied: [] };
+  }
+  const inAgents = (await scanFoundSkills(home, pathMod)).filter((s) => s.source === "agents");
+  if (inAgents.length === 0) return { linked: [], copied: [] }; // nothing to keep: no marker invented
+  const result = await syncSkills({
+    homeSkillsDir: opts.homeSkillsDir,
+    bundledRoot: "",
+    chosen: inAgents.map((s) => s.name),
+    home,
+    pathMod,
+    ...(opts.link !== undefined ? { link: opts.link } : {}),
+  });
+  return { linked: result.installed, copied: result.copied };
+}

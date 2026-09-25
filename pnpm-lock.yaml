@@ -207,11 +207,6 @@ importers:
         specifier: ^2.9.1
         version: 2.9.1
 
-  .tmp-kumo-cache-PJHCUH/profiles/kumo:
-    dependencies:
-      kumo-cli:
-        specifier: link:/home/tu44/projets/kumo
-        version: link:../../..
 
 packages:
 

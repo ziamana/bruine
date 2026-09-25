@@ -37,6 +37,9 @@ describe("cross-platform source audit (T14.4)", () => {
   test("no POSIX home paths or ~ strings in src/", () => {
     const offenders: string[] = [];
     for (const file of sourceFiles(join(__dirname, "..", "src"))) {
+      // T18.3 deliberately matches "~/" targets in the gate; everything else
+      // must stay free of hardcoded POSIX home paths and ~ strings.
+      if (file.endsWith(join("gate", "rules.ts"))) continue;
       const text = readFileSync(file, "utf8");
       if (/\/home\/|~\//.test(text)) offenders.push(file.split(sep).slice(-2).join("/"));
     }

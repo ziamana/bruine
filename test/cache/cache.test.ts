@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { ensureProfile } from "../../src/profile.js";
@@ -51,8 +52,8 @@ const scripts: ScriptedResponse[] = [
 
 beforeAll(async () => {
   fake = await startFakeModelServer(scripts);
-  home = await mkdtemp(join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".tmp-kumo-cache-"));
-  project = await mkdtemp(join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".tmp-kumo-proj-"));
+  home = await mkdtemp(join(tmpdir(), "kumo-cache-home-"));
+  project = await mkdtemp(join(tmpdir(), "kumo-cache-proj-"));
   await writeFile(join(project, "a.ts"), "export const a = 1;\n");
   await writeFile(join(project, "AGENTS.md"), "# AGENTS\nBe kind.\n");
 

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
-import { askJudge, judgePrompt, type JudgeLlm, type JudgeRoute } from "../gate/judge.js";
+import { askJudge, judgePrompt, JUDGE_MAX_COMMAND_CHARS, type JudgeLlm, type JudgeRoute } from "../gate/judge.js";
 import { decide, parseArgs, ruleKey, type PermissionMode } from "../gate/rules.js";
 import type { DshContext, KumoRepl } from "./ctx.js";
 
@@ -210,10 +210,12 @@ export function apply(ctx: DshContext): void {
   ctx.provide(KUMO_MODES_SERVICE, modes);
 
   const judge = async (toolName: string, summary: string): Promise<"ALLOW" | "ASK"> => {
+    // T18.7: oversized commands are never sent to the model.
+    if (summary.length > JUDGE_MAX_COMMAND_CHARS) return "ASK";
     const llm: JudgeLlm | undefined = ctx.get("llm");
     const route = judgeRoute(ctx);
     const message = createUserMessage({
-      content: [{ type: "text", text: judgePrompt(toolName, summary) }],
+      content: [{ type: "text", text: judgePrompt(`${toolName} ${summary}`) }],
       source: { kind: "plugin", plugin: "kumo-modes" },
     });
     return askJudge(llm, route, [message]);

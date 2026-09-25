@@ -55,5 +55,9 @@ export function kumoIcons(): KumoIcons {
 
 /** Display policy only: never mutate messages sent to the model. */
 export function withoutEmoji(text: string): string {
-  return text.replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\uFE0F\u200D]/gu, "");
+  return text
+    .replace(
+      /[\p{Extended_Pictographic}\p{Emoji_Modifier}][\uFE0F\u200D]*(?:[\p{Extended_Pictographic}\p{Emoji_Modifier}][\uFE0F\u200D]*)* ?|[\uFE0F\u200D]/gu,
+      "",
+    );
 }

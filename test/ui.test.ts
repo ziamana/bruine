@@ -110,6 +110,15 @@ describe("AssistantTextComponent (T13c)", () => {
     expect(text).toContain("kumo");
     expect(text).not.toContain("**");
   });
+
+  test("emoji plus VS16 and space removed, bold kept (T24.2)", () => {
+    const a = new AssistantTextComponent();
+    a.push("**🛠️ Développement & code**");
+    a.finish();
+    const text = a.render(40).map(strip).join("\n");
+    expect(text).toContain("Développement & code");
+    expect(text).not.toContain("*");
+  });
 });
 
 describe("TpsMeter (T13d, honest numbers)", () => {
@@ -143,7 +152,7 @@ describe("FooterComponent (T13d)", () => {
 
   test("renders placeholder state", () => {
     const f = new FooterComponent(UNICODE_ICONS);
-    expect(f.render(80)[0]).toContain("0%/— (auto)");
+    expect(f.render(80)[0]).toContain("0%/? (auto)");
   });
 });
 
@@ -215,6 +224,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
 describe("attachTui wiring", () => {
   interface FakeUi {
     addChat(c: any): void;
+    removeChat?(c: any): void;
     footer: { set(next: any): void };
     requestRender(): void;
     icons: typeof UNICODE_ICONS;
@@ -230,6 +240,10 @@ describe("attachTui wiring", () => {
       chats,
       footerState,
       addChat: (c) => chats.push(c),
+      removeChat: (c) => {
+        const i = chats.indexOf(c);
+        if (i !== -1) chats.splice(i, 1);
+      },
       footer: { set: (next) => { footerState = { ...ui.footerState, ...next }; ui.footerState = footerState; } },
       requestRender: () => {},
       icons: UNICODE_ICONS,
@@ -304,6 +318,27 @@ describe("attachTui wiring", () => {
       frame: { type: "chunk", chunk: { type: "reasoning-delta", text: "no" } },
     });
     expect(chats).toHaveLength(0);
+  });
+
+  test("Working shows on turn/start and is replaced by first chunk (T24.3)", () => {
+    const { chats, stream, event } = setup();
+    event("turn/start", { turn: 1 });
+    expect(chats).toHaveLength(1);
+    expect(rendered(chats[0])).toMatch(/Working/);
+    stream({ type: "reasoning-delta", text: "one" });
+    expect(chats).toHaveLength(1);
+    expect(rendered(chats[0])).toContain("Thinking");
+  });
+
+  test("mode announcements are not echoed as user messages (T24.4)", async () => {
+    const { chats, event } = setup();
+    const { PLAN_ON_TEXT, PLAN_OFF_TEXT } = await import("../src/plugins/modes.js");
+    event("user/message", { source: { kind: "user" }, content: [{ type: "text", text: PLAN_ON_TEXT }] });
+    expect(chats).toHaveLength(0);
+    event("user/message", { source: { kind: "user" }, content: [{ type: "text", text: PLAN_OFF_TEXT }] });
+    expect(chats).toHaveLength(0);
+    event("user/message", { source: { kind: "user" }, content: [{ type: "text", text: "hello" }] });
+    expect(chats).toHaveLength(1);
   });
 });
 

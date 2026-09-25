@@ -6,3 +6,6 @@ dist
 
 # raw local test logs (contain machine paths)
 test/e2e/*-output.txt
+
+# e2e run screens (temp dir names, timings)
+test/e2e/__screens__/run/

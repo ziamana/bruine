@@ -75,12 +75,11 @@ export class ReasoningLine {
     const split = splitReasoningSegments(this.#current, this.#lastFinished, delta);
     this.#current = split.current;
     this.#lastFinished = split.lastFinished;
-    this.screen.write(CLEAR + NOWRAP + dim(thinkingText(this.#lastFinished, this.screen.columns - 1, this.now() - this.#startTime, this.icons)) + WRAP);
   }
   end(): void {
     if (!this.#active) return;
     const seconds = (this.now() - this.#startTime) / 1000;
-    this.screen.write(CLEAR + NOWRAP + dim(clipCells(`${this.icons.think} Thought for ${seconds.toFixed(1)}s`, this.screen.columns - 1)) + WRAP + "\n");
+    this.screen.write(`Thought for ${seconds.toFixed(1)}s\n`);
     this.#active = false;
     this.#current = "";
     this.#lastFinished = "";

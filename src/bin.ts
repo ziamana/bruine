@@ -19,7 +19,7 @@ process.stdout.on("error", (err: NodeJS.ErrnoException) => {
   throw err;
 });
 
-const USAGE = `kumo — interactive terminal agent on top of DeepSeek Harness (dsh)
+const USAGE = `kumo: interactive terminal agent on top of DeepSeek Harness (dsh)
 
 Usage:
   kumo [args]        Start kumo. Extra args are passed through to dsh.
@@ -59,7 +59,7 @@ function ensureBundleInstalled(
   if (existsSync(marker)) return;
 
   const spec = selfPackageRoot() ?? `${pkg.name}@${pkg.version}`;
-  console.log(`kumo: first run — installing the kumo bundle into ${profileDir}…`);
+  console.log(`kumo: first run: installing the kumo bundle into ${profileDir}…`);
   const { status, error } = runDsh(
     dshEntry,
     ["plugin", "--profile", "kumo", "add", spec],
@@ -213,7 +213,7 @@ async function main(): Promise<void> {
       const { runFullSetup } = await import("./setup/full.js");
       const out = await runFullSetup(dshHome, {});
       if (out === "quit") {
-        console.log("Setup canceled — run `kumo setup` when ready.");
+        console.log("Setup canceled. Run `kumo setup` when ready.");
         process.exit(0);
       }
     } else {

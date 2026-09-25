@@ -162,8 +162,11 @@ test("modes: keys change actual tool permissions as well as colored labels", asy
     toolScript("write", { file_path: "auto.txt", content: "AUTO_WORKS" }, "auto_call"), textScript("AUTO_DONE"),
     toolScript("write", { file_path: "full.txt", content: "FULL_WORKS" }, "full_call"), textScript("FULL_DONE"),
   ], async (h) => {
+    const chatModeLines = () => h.screen().filter((line) => /^  ›/.test(line) && /mode|access/i.test(line));
     h.press("tab");
     await h.until(() => /^plan  ask\b/.test(footer(h)), 2000, "Plan label");
+    await h.waitFor("Plan mode: kumo reads and plans");
+    expect(chatModeLines()).toEqual([]);
     await h.dump("t23-after-footer-plan");
     await h.prompt("Write plan.txt");
     await h.waitFor("PLAN_DONE");
@@ -172,21 +175,30 @@ test("modes: keys change actual tool permissions as well as colored labels", asy
     expect(JSON.stringify(result?.content)).toContain("Plan mode is on");
     await h.dump("t23-after-plan-denies-write");
     expect(h.exit).toBeUndefined(); // Long denial must not crash the renderer.
+    expect(chatModeLines()).toEqual([]);
     h.press("tab");
     await h.until(() => /^ask\b/.test(footer(h)), 2000, "Build");
+    await h.waitFor("Build mode: kumo can change files again.");
+    expect(chatModeLines()).toEqual([]);
     h.press("shiftTab");
     await h.until(() => /^auto\b/.test(footer(h)), 2000, "Auto");
+    await h.waitFor("Auto: kumo decides, risky actions still ask.");
+    expect(chatModeLines()).toEqual([]);
     expect(footerCell(h, "auto").getFgColor()).toBe(3);
     await h.dump("t23-after-footer-auto");
     await h.prompt("Write auto.txt");
     await h.waitFor("AUTO_DONE");
     expect(readFileSync(join(h.project, "auto.txt"), "utf8")).toBe("AUTO_WORKS");
     h.press("shiftTab");
-    await h.waitFor("Switch to FULL ACCESS?");
+    await h.waitFor("Enable full access?");
+    await h.waitFor("Cancel");
+    await h.waitFor("Enable");
     expect(footer(h)).toMatch(/^auto\b/); // Still Auto until confirmed.
     await h.dump("t23-after-full-confirmation");
     h.press("down"); await delay(50); h.press("enter");
     await h.until(() => /^FULL ACCESS\b/.test(footer(h)), 2000, "Full access");
+    await h.waitFor("Full access: kumo never asks.");
+    expect(chatModeLines()).toEqual([]);
     expect(footerCell(h, "FULL ACCESS").getFgColor()).toBe(1);
     expect(footerCell(h, "FULL ACCESS").isBold()).toBeTruthy();
     await h.dump("t23-after-footer-full");
@@ -194,6 +206,19 @@ test("modes: keys change actual tool permissions as well as colored labels", asy
     await h.waitFor("FULL_DONE");
     expect(readFileSync(join(h.project, "full.txt"), "utf8")).toBe("FULL_WORKS");
     await h.dump("t23-after-full-allows-write");
+  });
+});
+
+test("working: delayed first chunk shows Working within 200ms (T24.3)", async () => {
+  await scenario("working", [{ chunks: [{ delta: { content: "WORKING_DONE" }, delayMs: 1500 }] }], async (h) => {
+    h.type("Start delayed work");
+    await h.waitFor("Start delayed work");
+    const start = Date.now();
+    h.press("enter");
+    await h.until(() => h.screen().join("\n").includes("Working"), 2000, "Working visible");
+    expect(Date.now() - start).toBeLessThan(2000);
+    await h.waitFor("WORKING_DONE");
+    await h.dump("working");
   });
 });
 
@@ -297,7 +322,7 @@ test("strict no-emoji check covers streamed reasoning, assistant text and user e
     { delta: { content: "🙂 Answer without pictographs ⚡." }, delayMs: 400 },
   ] }], async h => {
     h.type("User 🙂 prompt");
-    await h.waitFor("User  prompt");
+    await h.waitFor("User prompt");
     h.press("enter");
     await h.waitFor("Answer without pictographs");
     await h.waitStable(250, 1000);

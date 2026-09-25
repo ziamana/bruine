@@ -17,6 +17,17 @@ export const KUMO_MODES_SERVICE = "kumoModes";
 export const PLAN_ON_TEXT = "Plan mode is on: do not modify files or run modifying commands.";
 export const PLAN_OFF_TEXT = "Plan mode is off.";
 
+/** Announcement texts injected to the model; never shown as user chat. */
+export const MODE_ANNOUNCEMENTS: ReadonlySet<string> = new Set([PLAN_ON_TEXT, PLAN_OFF_TEXT]);
+
+export const NOTICE_PLAN_ON = "Plan mode: kumo reads and plans, no file changes. Tab to leave.";
+export const NOTICE_PLAN_OFF = "Build mode: kumo can change files again.";
+export const NOTICE_ASK = "Ask: kumo asks before every command and file change.";
+export const NOTICE_AUTO = "Auto: kumo decides, risky actions still ask.";
+export const NOTICE_FULL = "Full access: kumo never asks. Shift+Tab to leave.";
+
+export const FULL_CONFIRM_TITLE = "Enable full access? kumo will run commands and edit files without asking.";
+
 export interface ModesLogEntry {
   tool: string;
   summary: string;
@@ -66,6 +77,8 @@ export class Modes implements KumoModesService {
   announce: ((text: string) => void) | undefined;
   /** UI feedback for slash commands. */
   notify: ((text: string) => void) | undefined;
+  /** Transient notice above the editor (T24.4), not in chat history. */
+  showNotice: ((text: string, opts?: { red?: boolean }) => void) | undefined;
 
   constructor(permission: PermissionMode) {
     this.permission = permission;
@@ -86,6 +99,7 @@ export class Modes implements KumoModesService {
   togglePlan(): void {
     this.plan = !this.plan;
     this.announce?.(this.plan ? PLAN_ON_TEXT : PLAN_OFF_TEXT);
+    this.showNotice?.(this.plan ? NOTICE_PLAN_ON : NOTICE_PLAN_OFF);
     this.notifyChange();
   }
 
@@ -97,6 +111,9 @@ export class Modes implements KumoModesService {
       if (!ok) return this.permission;
     }
     this.permission = next;
+    if (next === "ask") this.showNotice?.(NOTICE_ASK);
+    else if (next === "auto") this.showNotice?.(NOTICE_AUTO);
+    else this.showNotice?.(NOTICE_FULL, { red: true });
     this.notifyChange();
     return next;
   }
@@ -166,16 +183,28 @@ export function apply(ctx: DshContext): void {
     repl = c.kumoRepl;
     const ui = repl?.ui;
     if (ui !== undefined) {
+      const anyUi = ui as unknown as {
+        askChoice(title: string, items: Array<{ value: string; label: string }>): Promise<number>;
+        confirmFullAccess?: () => Promise<boolean>;
+        showNotice?: (text: string, opts?: { red?: boolean }) => void;
+      };
       modes.setConfirmFullAccess(async () => {
-        const choice = await ui.askChoice(
-          "Switch to FULL ACCESS? kumo will stop asking before commands run.",
-          [
-            { value: "stay", label: "Stay in current mode" },
-            { value: "full", label: "Yes, grant full access" },
-          ],
-        );
+        if (typeof anyUi.confirmFullAccess === "function") {
+          return anyUi.confirmFullAccess();
+        }
+        const choice = await anyUi.askChoice(FULL_CONFIRM_TITLE, [
+          { value: "cancel", label: "Cancel" },
+          { value: "enable", label: "Enable" },
+        ]);
         return choice === 1;
       });
+      modes.showNotice = (text, opts) => {
+        try {
+          anyUi.showNotice?.(text, opts);
+        } catch {
+          // notice is best effort
+        }
+      };
       const refreshFooter = () => {
         ui.footer.set({ badges: modes.describe().badges });
         ui.requestRender();
@@ -242,7 +271,7 @@ export function apply(ctx: DshContext): void {
       ui.addChat(new Text(dim(line), 1, 0));
       ui.requestRender();
     } else if (screenUi !== undefined) {
-      screenUi.screen.write(`\n${dim(line)}\n`);
+      screenUi.screen.write(`\n${line}\n`);
     }
   };
 

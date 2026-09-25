@@ -294,5 +294,5 @@ export async function scanTailscale(
 
 /** Human label for a discovery in the wizard lists. */
 export function discoveredLabel(d: Discovered): string {
-  return `${d.baseUrl} — ${String(d.models.length)} model${d.models.length === 1 ? "" : "s"}`;
+  return `${d.baseUrl} · ${String(d.models.length)} model${d.models.length === 1 ? "" : "s"}`;
 }

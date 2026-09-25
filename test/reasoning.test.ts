@@ -47,43 +47,47 @@ describe("complete reasoning sentences", () => {
   });
 });
 
-describe("ReasoningLine", () => {
-  test("shows Thinking alone before the first completed sentence", () => {
+describe("ReasoningLine (T24.5 piped)", () => {
+  test("pushes produce no output until end", () => {
     const s = new FakeScreen();
     const r = new ReasoningLine(s, () => 0, UNICODE_ICONS);
     r.push("unfinished");
-    expect(strip(s.last)).toBe("· Thinking");
+    expect(s.writes).toHaveLength(0);
     expect(r.active).toBe(true);
   });
-  test("shows complete sentences without stacking, then a fixed duration", () => {
+  test("end writes Thought for once, then inactive", () => {
     const s = new FakeScreen();
     let time = 0;
     const r = new ReasoningLine(s, () => time, UNICODE_ICONS);
     for (const chunk of ["One", ". ", "Next\n\n", "partial"]) r.push(chunk);
-    expect(strip(s.last)).toBe("· Thinking  Next");
-    expect(s.writes.every(w => !w.includes("\n"))).toBe(true);
+    expect(s.writes).toHaveLength(0);
     time = 4200;
     r.end();
-    expect(strip(s.last)).toBe("∴ Thought for 4.2s\n");
+    expect(strip(s.last)).toBe("Thought for 4.2s\n");
+    expect(s.last).not.toContain("\r");
+    expect(s.last).not.toMatch(/[·✢✺✶✻✽]/);
     expect(r.active).toBe(false);
     const count = s.writes.length;
     r.end();
     expect(s.writes).toHaveLength(count);
   });
-  test("empty inputs/end do not draw, redraws are dim and guard autowrap", () => {
+  test("empty inputs/end do not draw", () => {
     const s = new FakeScreen();
     const r = new ReasoningLine(s, () => 0, UNICODE_ICONS);
     r.push(""); r.end();
     expect(s.writes).toHaveLength(0);
     r.push("x");
-    expect(s.last).toContain("\r\x1b[2K\x1b[?7l\x1b[2m");
-    expect(s.last).toContain("\x1b[22m\x1b[?7h");
+    expect(s.writes).toHaveLength(0);
+    r.end();
+    expect(s.writes).toHaveLength(1);
   });
-  test("ASCII fallback stays ASCII, including truncation", () => {
+  test("ASCII fallback also plain", () => {
     const s = new FakeScreen(); s.columns = 25;
     const r = new ReasoningLine(s, () => 0, ASCII_ICONS);
     r.push("x".repeat(100) + "\n");
-    expect(strip(s.last)).toBe("- Thinking  xxxxxxxxx...");
-    expect(strip(s.last)).not.toMatch(/[^\x00-\x7f]/);
+    expect(s.writes).toHaveLength(0);
+    r.end();
+    expect(strip(s.last)).toMatch(/^Thought for \d+\.\ds\n$/);
+    expect(strip(s.last)).not.toMatch(/[^\x00-\x7f\n]/);
   });
 });

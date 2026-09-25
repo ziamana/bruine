@@ -124,6 +124,30 @@ describe("Modes class", () => {
     m.togglePlan();
     expect(m.describe().badges).toEqual(["plan", "ask"]);
   });
+
+  test("mode changes emit transient notices, not chat (T24.4)", async () => {
+    const { NOTICE_PLAN_ON, NOTICE_PLAN_OFF, NOTICE_ASK, NOTICE_AUTO, NOTICE_FULL } = await import(
+      "../src/plugins/modes.js"
+    );
+    const m = new Modes("ask");
+    const notices: Array<{ text: string; opts?: { red?: boolean } }> = [];
+    m.showNotice = (text, opts) => notices.push({ text, opts });
+    m.togglePlan();
+    expect(notices.at(-1)?.text).toBe(NOTICE_PLAN_ON);
+    m.togglePlan();
+    expect(notices.at(-1)?.text).toBe(NOTICE_PLAN_OFF);
+    await m.cyclePermission();
+    expect(m.permission).toBe("auto");
+    expect(notices.at(-1)?.text).toBe(NOTICE_AUTO);
+    m.setConfirmFullAccess(async () => true);
+    await m.cyclePermission();
+    expect(m.permission).toBe("full");
+    expect(notices.at(-1)?.text).toBe(NOTICE_FULL);
+    expect(notices.at(-1)?.opts?.red).toBe(true);
+    await m.cyclePermission();
+    expect(m.permission).toBe("ask");
+    expect(notices.at(-1)?.text).toBe(NOTICE_ASK);
+  });
 });
 
 describe("judge (T16.C.3, T18.7)", () => {

@@ -6,6 +6,8 @@ import { ToolCallView } from "../render/tools.js";
 import { ReasoningComponent } from "../ui/reasoning-component.js";
 import { ToolCallComponent } from "../ui/tool-call-component.js";
 import { AssistantTextComponent, userMessageComponent } from "../ui/assistant-text.js";
+import { WorkingComponent } from "../ui/working.js";
+import { MODE_ANNOUNCEMENTS } from "./modes.js";
 import { TpsMeter } from "../ui/tps.js";
 import { ansi } from "../ui/theme.js";
 import type { DshContext, KumoRepl } from "./ctx.js";
@@ -76,6 +78,7 @@ export function attachTui(
   const tools = new Map<string, ToolCallComponent>();
   let reasoning: ReasoningComponent | undefined;
   let text: AssistantTextComponent | undefined;
+  let working: WorkingComponent | undefined;
   let lastInputTokens = 0;
   let lastOutputTokens = 0;
 
@@ -83,6 +86,22 @@ export function attachTui(
     const comp = tools.get(callId);
     if (comp === undefined) return undefined;
     return { tool: comp.tool, summary: comp.summary(80) };
+  };
+
+  const hideWorking = (): void => {
+    if (working !== undefined) {
+      (ui as unknown as { removeChat?: (c: unknown) => void }).removeChat?.(working);
+      working = undefined;
+      ui.requestRender();
+    }
+  };
+
+  const showWorking = (): void => {
+    if (working === undefined && reasoning === undefined && text === undefined) {
+      working = new WorkingComponent(Date.now, ui.icons);
+      ui.addChat(working);
+      ui.requestRender();
+    }
   };
 
   const closeLive = (): void => {
@@ -127,11 +146,13 @@ export function attachTui(
     if (subject !== agent) return;
     const f = frame as StreamFrame;
     if (f.type === "start" || f.type === "end") {
+      hideWorking();
       closeLive();
       return;
     }
     const chunk = f.chunk;
     if (chunk === undefined) return;
+    hideWorking();
     switch (chunk.type) {
       case "reasoning-delta":
         ensureReasoning().push(chunk.text);
@@ -183,18 +204,24 @@ export function attachTui(
     switch (event.type) {
       case "user/message": {
         // Only echo real user input; dsh injects reminders as plugin/system
-        // user-messages that must not clutter the transcript.
+        // user-messages that must not clutter the transcript. Mode announcements
+        // (T24.4) are injected for the model but shown as a notice, not chat.
         if (event.data.source?.kind !== "user") return;
         const blocks = (event.data.content ?? []).filter((b: any) => b.type === "text");
         const content = blocks.map((b: any) => b.text).join(" ");
-        if (content.trim() !== "") ui.addChat(userMessageComponent(content.trim()));
+        const trimmed = content.trim();
+        if (trimmed === "") return;
+        if (MODE_ANNOUNCEMENTS.has(trimmed)) return;
+        ui.addChat(userMessageComponent(trimmed));
         return;
       }
       case "turn/start":
         tps.reset();
         ui.footer.set({ tps: 0 });
+        showWorking();
         return;
       case "tool/call": {
+        hideWorking();
         const id = String(event.data.callId);
         const comp = ensureTool(id, event.data.name);
         if (event.data.arguments) comp.setArgs(event.data.arguments);
@@ -213,6 +240,7 @@ export function attachTui(
         return;
       }
       case "turn/end": {
+        hideWorking();
         closeLive();
         for (const comp of tools.values()) comp.cancel();
         const window = agent.session?.requestContext?.()?.contextWindow;
@@ -234,6 +262,7 @@ export function attachTui(
   });
 
   return () => {
+    hideWorking();
     closeLive();
     for (const comp of tools.values()) comp.cancel();
     ui.requestRender();
@@ -326,7 +355,7 @@ export function attach(
         if (reason?.kind === "error") {
           ui.screen.write(`\n${ui.icons.fail} ${reason.error.code}: ${reason.error.message}\n`);
         } else if (reason?.kind === "aborted") {
-          ui.screen.write(`\n${dim("- cancelled")}\n`);
+          ui.screen.write("\n- cancelled\n");
         }
         return;
       }

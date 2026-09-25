@@ -44,7 +44,7 @@ export class FooterComponent implements Component {
       const pct = ((s.contextUsed / s.contextWindow) * 100).toFixed(1);
       left = `${pct}%/${formatK(s.contextWindow)} (auto)`;
     } else {
-      left = "0%/— (auto)";
+      left = "0%/? (auto)";
     }
     const badges = (s.badges ?? ["ask"]).map((b) => b === "FULL ACCESS"
       ? ansi.bold(ansi.red(b)) : b === "ask" ? ansi.dim(b) : ansi.yellow(b));

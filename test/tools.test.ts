@@ -29,28 +29,28 @@ function fakeClock(start: number) {
 
 const strip = (s: string) => s.replace(/\r/g, "").replace(/\x1b\[[0-9]*[A-Za-z]/g, "");
 
-describe("ToolCallView", () => {
-  test("1. full lifecycle: header fills in, result shows summary and output", () => {
+describe("ToolCallView (T24.5 piped, no streaming header)", () => {
+  test("1. start/args silent, result shows summary and output", () => {
     const s = new FakeScreen();
     const clock = fakeClock(0);
     const v = new ToolCallView(s, clock.now, UNICODE_ICONS);
 
     v.start("1", "bash");
-    expect(s.last).toBe("● bash");
+    expect(s.writes).toHaveLength(0);
 
     v.args("1", '{"comm');
-    expect(strip(s.last)).toBe("● bash  …");
+    expect(s.writes).toHaveLength(0);
 
     v.args("1", 'and":"ls -la"}');
-    expect(strip(s.last)).toBe("● bash  ls -la");
+    expect(s.writes).toHaveLength(0);
 
     clock.set(400);
     v.result("1", true, "a\nb");
     const output = s.writes.slice(-3);
     expect(strip(output[0])).toMatch(/^✓ bash {2}ls -la {2}\d+\.\ds\n$/);
-    expect(strip(output[1]).trim()).toBe("a");
-    expect(strip(output[2]).trim()).toBe("b");
-    expect(output[1]).toContain("\x1b[2m");
+    expect(output[1]).toBe("  a\n");
+    expect(output[2]).toBe("  b\n");
+    expect(output[0]).not.toContain("\r");
   });
 
   test("2. long output: 5 lines shown + more-lines hint", () => {
@@ -64,16 +64,18 @@ describe("ToolCallView", () => {
     expect(strip(output[0]).startsWith("✓")).toBe(true);
     for (const [i, w] of output.slice(1, 6).entries()) {
       expect(strip(w).trim()).toBe(`l${i + 1}`);
+      expect(w.startsWith("  ")).toBe(true);
     }
     expect(strip(output[6]).trim()).toBe("… 7 more lines");
   });
 
-  test("3. path argument becomes the summary", () => {
+  test("3. path argument becomes the summary, still silent until result", () => {
     const s = new FakeScreen();
     const v = new ToolCallView(s, fakeClock(0).now, UNICODE_ICONS);
     v.start("1", "read");
     v.args("1", '{"path":"src/x.ts"}');
-    expect(strip(s.last)).toBe("● read  src/x.ts");
+    expect(s.writes).toHaveLength(0);
+    expect(v.describe("1")).toEqual({ tool: "read", summary: "src/x.ts" });
   });
 
   test("4. failed result starts with ✗", () => {
@@ -97,7 +99,8 @@ describe("ToolCallView", () => {
     const v = new ToolCallView(s, fakeClock(0).now, UNICODE_ICONS);
     v.start("1", "weather");
     v.args("1", '{"city":"Paris","days":2}');
-    expect(strip(s.last)).toBe('● weather  {"city":"Paris","days":2}');
+    expect(s.writes).toHaveLength(0);
+    expect(v.describe("1")).toEqual({ tool: "weather", summary: '{"city":"Paris","days":2}' });
   });
 
   test("summary is truncated to fit columns", () => {
@@ -106,10 +109,10 @@ describe("ToolCallView", () => {
     const v = new ToolCallView(s, fakeClock(0).now, UNICODE_ICONS);
     v.start("1", "bash");
     v.args("1", JSON.stringify({ command: "x".repeat(60) }));
-    const text = strip(s.last).replace("● bash  ", "");
+    const summary = v.describe("1")?.summary ?? "";
     // columns - tool.length - 6 = 30 - 4 - 6 = 20
-    expect(text.length).toBe(20);
-    expect(text.endsWith("…")).toBe(true);
+    expect(summary.length).toBe(20);
+    expect(summary.endsWith("…")).toBe(true);
   });
 
   test("describe exposes the current header info for approvals", () => {

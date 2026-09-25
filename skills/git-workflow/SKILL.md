@@ -1,6 +1,6 @@
 ---
 name: git-workflow
-description: Keep git history clean and reviewable — focused branches, atomic commits, honest messages, safe pushes.
+description: Keep git history clean and reviewable: focused branches, atomic commits, honest messages, safe pushes.
 ---
 
 # Git workflow

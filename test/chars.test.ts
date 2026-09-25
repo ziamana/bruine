@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import { describe, expect, test } from "vitest";
-import { ASCII_ICONS, UNICODE_ICONS, iconsFor } from "../src/render/chars.js";
+import { ASCII_ICONS, UNICODE_ICONS, iconsFor, withoutEmoji } from "../src/render/chars.js";
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -44,5 +44,13 @@ describe("cross-platform source audit (T14.4)", () => {
       if (/\/home\/|~\//.test(text)) offenders.push(file.split(sep).slice(-2).join("/"));
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("withoutEmoji (T24.2)", () => {
+  test("removes emoji plus VS16/ZWJ and one following space", () => {
+    expect(withoutEmoji("**🛠️ Développement & code**")).toBe("**Développement & code**");
+    expect(withoutEmoji("User 🙂 prompt")).toBe("User prompt");
+    expect(withoutEmoji("🙂 Answer")).toBe("Answer");
   });
 });

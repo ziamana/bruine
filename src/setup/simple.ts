@@ -321,7 +321,7 @@ export async function askSearch(
   } else if (ans.startsWith("3")) {
     const key = (await io.secret("Brave Search API key: ")).trim();
     if (key === "") {
-      io.write("No key entered — web search stays off.\n");
+      io.write("No key entered. Web search stays off.\n");
     } else {
       await writeEnvVar(join(dshHome, ".env"), "BRAVE_API_KEY", key);
       choice = { provider: "brave", apiKeyEnv: "BRAVE_API_KEY" };
@@ -329,7 +329,7 @@ export async function askSearch(
   } else if (ans.startsWith("4")) {
     const key = (await io.secret("Tavily API key: ")).trim();
     if (key === "") {
-      io.write("No key entered — web search stays off.\n");
+      io.write("No key entered. Web search stays off.\n");
     } else {
       await writeEnvVar(join(dshHome, ".env"), "TAVILY_API_KEY", key);
       choice = { provider: "tavily", apiKeyEnv: "TAVILY_API_KEY" };
@@ -348,7 +348,7 @@ async function askProviderKey(
   const keyLabel = provider === "deepseek" ? "DeepSeek" : "OpenRouter";
   const key = (await io.secret(`${keyLabel} API key: `)).trim();
   if (key === "") {
-    io.write("No key entered — skipping. You can add one later in the kumo home .env file\n");
+    io.write("No key entered. Skipping. You can add one later in the kumo home .env file\n");
     return { kind: "skipped" };
   }
   const settingsPath = join(dshHome, "settings.yaml");

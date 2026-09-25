@@ -16,51 +16,39 @@ function setup() {
   return { screen, ui, fake, agent, session, frame, event };
 }
 
-describe("render plugin", () => {
-  test("reasoning deltas draw the dim line", () => {
+describe("render plugin (T24.5 piped, no spinner, no CR)", () => {
+  test("reasoning deltas produce no output until block-end", () => {
     const { screen, frame } = setup();
     frame({ type: "reasoning-delta", text: "Let me" });
     frame({ type: "reasoning-delta", text: " think" });
-    expect(strip(screen.last)).toBe("· Thinking");
-  });
-
-  test("block-end of reasoning writes the thought line", () => {
-    const { screen, frame } = setup();
-    frame({ type: "reasoning-delta", text: "hmm" });
+    expect(screen.writes).toHaveLength(0);
     frame({ type: "block-end", block: { type: "reasoning", text: "hmm" } });
-    expect(strip(screen.last)).toMatch(/^∴ Thought for \d+\.\ds\n$/);
+    expect(strip(screen.last)).toMatch(/^Thought for \d+\.\ds\n$/);
   });
 
-  test("text deltas stream and block-end closes with one newline", () => {
+  test("text deltas stream directly and block-end closes with one newline", () => {
     const { screen, frame } = setup();
     frame({ type: "text-delta", text: "Hel" });
     frame({ type: "text-delta", text: "lo" });
+    expect(screen.all).toBe("Hello");
     frame({ type: "block-end", block: { type: "text", text: "Hello" } });
-    expect(screen.all).toBe("\r\x1b[2KHello\n");
+    expect(screen.all).toBe("Hello\n");
   });
 
-  test("a non-reasoning block-start closes a dangling reasoning line", () => {
-    const { screen, frame } = setup();
-    frame({ type: "reasoning-delta", text: "hmm" });
-    frame({ type: "block-start", blockType: "text", index: 1 });
-    expect(strip(screen.last)).toMatch(/^∴ Thought for/);
-  });
-
-  test("tool-call deltas stream the header", () => {
+  test("tool-call deltas produce no streaming header", () => {
     const { screen, frame } = setup();
     frame({ type: "tool-call-delta", id: "t1", name: "bash", argumentsDelta: '{"comm' });
-    expect(strip(screen.last)).toBe("● bash  …");
     frame({ type: "tool-call-delta", id: "t1", argumentsDelta: 'and":"ls"}' });
-    expect(strip(screen.last)).toBe("● bash  ls");
+    expect(screen.writes).toHaveLength(0);
   });
 
-  test("durable tool/call starts a call the stream never showed", () => {
+  test("durable tool/call alone produces no output", () => {
     const { screen, event } = setup();
     event("tool/call", { turn: 1, step: 0, callId: "t9", name: "read", arguments: '{"path":"a.ts"}' });
-    expect(strip(screen.last)).toBe("● read  a.ts");
+    expect(screen.writes).toHaveLength(0);
   });
 
-  test("durable tool/call does not restart an already streamed call", () => {
+  test("durable tool/call does not duplicate streamed call", () => {
     const { screen, frame, event } = setup();
     frame({ type: "tool-call-delta", id: "t1", name: "bash", argumentsDelta: '{"command":"ls"}' });
     const before = screen.writes.length;
@@ -68,7 +56,7 @@ describe("render plugin", () => {
     expect(screen.writes.length).toBe(before);
   });
 
-  test("tool/result draws the result line and output preview", () => {
+  test("tool/result draws the result line and output preview once", () => {
     const { screen, frame, event } = setup();
     frame({ type: "tool-call-delta", id: "t1", name: "bash", argumentsDelta: '{"command":"ls"}' });
     event("tool/result", {
@@ -83,8 +71,8 @@ describe("render plugin", () => {
     });
     const out = screen.writes.slice(-3);
     expect(strip(out[0])).toMatch(/^✓ bash {2}ls {2}\d+\.\ds\n$/);
-    expect(strip(out[1]).trim()).toBe("a");
-    expect(strip(out[2]).trim()).toBe("b");
+    expect(strip(out[1])).toBe("  a\n");
+    expect(strip(out[2])).toBe("  b\n");
   });
 
   test("errored tool result draws ✗", () => {
@@ -121,5 +109,27 @@ describe("render plugin", () => {
     });
     event("tool/call", { turn: 1, step: 0, callId: "x", name: "bash", arguments: "{}" }, { id: "other" });
     expect(screen.writes).toHaveLength(0);
+  });
+
+  test("no CR, no spinner frames, no cursor codes in piped output", () => {
+    const { screen, frame, event } = setup();
+    frame({ type: "reasoning-delta", text: "thinking hard" });
+    frame({ type: "text-delta", text: "hello" });
+    frame({ type: "tool-call-delta", id: "t1", name: "read", argumentsDelta: '{"file_path":"note.txt"}' });
+    event("tool/result", {
+      turn: 1,
+      step: 0,
+      message: {
+        content: [{ type: "tool-result", toolCallId: "t1", content: [{ type: "text", text: "line1\nline2" }], isError: false }],
+      },
+    });
+    frame({ type: "block-end", block: { type: "reasoning", text: "x" } });
+    frame({ type: "block-end", block: { type: "text", text: "hello" } });
+    event("turn/end", { turn: 1, reason: { kind: "completed" } });
+    const all = screen.writes.join("");
+    expect(all).not.toContain("\r");
+    expect(all).not.toMatch(/[·✢✺✶✻✽]/);
+    expect(all).not.toContain("\x1b[?7");
+    expect(all).not.toContain("\x1b[2K");
   });
 });

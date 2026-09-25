@@ -67,14 +67,12 @@ export class ToolCallView {
 
   start(id: string, toolName: string): void {
     this.#calls.set(id, { tool: toolName, rawArgs: "", startTime: this.#now() });
-    this.#screen.write(`${this.#icons.bullet} ${toolName}`);
   }
 
   args(id: string, jsonDelta: string): void {
     const call = this.#calls.get(id);
     if (!call) return;
     call.rawArgs += jsonDelta;
-    this.#screen.write(CLEAR + this.#header(call, this.#summary(call)));
   }
 
   result(id: string, ok: boolean, output: string): void {
@@ -88,16 +86,16 @@ export class ToolCallView {
       `${mark} ${call.tool}` +
       (summary !== "" ? `  ${summary}` : "") +
       `  ${seconds.toFixed(1)}s\n`;
-    this.#screen.write(CLEAR + head);
+    this.#screen.write(head);
 
     const lines = output.split("\n");
     if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
     for (const line of lines.slice(0, MAX_OUTPUT_LINES)) {
-      this.#screen.write(dim(`    ${line}`) + "\n");
+      this.#screen.write(`  ${line}\n`);
     }
     const rest = lines.length - MAX_OUTPUT_LINES;
     if (rest > 0) {
-      this.#screen.write(dim(`    … ${rest} more lines`) + "\n");
+      this.#screen.write(`  … ${rest} more lines\n`);
     }
 
     this.#calls.delete(id);

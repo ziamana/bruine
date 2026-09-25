@@ -122,7 +122,7 @@ class CheckList implements Component {
       const item = this.items[i]!;
       const mark = this.checked.has(i) ? "[x] " : "[ ] ";
       const prefix = i === this.#cursor ? ansi.cyan("❯ ") : "  ";
-      const desc = item.description !== undefined ? ansi.gray(` — ${item.description}`) : "";
+      const desc = item.description !== undefined ? ansi.gray(`: ${item.description}`) : "";
       lines.push(`${prefix}${mark}${item.label}${desc}`.slice(0, Math.max(1, width)));
     }
     return lines;
@@ -410,7 +410,7 @@ export async function runFullSetup(
           }
         })();
       } catch (err) {
-        setStatus(`! ${(err as Error).message} — try again`);
+        setStatus(`! ${(err as Error).message}. Try again`);
         await sleep(1400);
         setStatus(stepTitle(step));
         continue; // same step again, answers kept
@@ -456,7 +456,7 @@ export async function runFullSetup(
         { value: "done", label: discoveries.length > 0 ? "Continue →" : "Continue → (cloud models only)" },
       ];
       const sel = await selectStep(
-        "AI servers — found, add, or remove; Enter to pick an action",
+        "AI servers: found, add, or remove; Enter to pick an action",
         items,
         (i) => i,
       );
@@ -483,7 +483,7 @@ export async function runFullSetup(
           "Scan your local network for AI servers?",
           [
             { value: "n", label: "No" },
-            { value: "y", label: "Yes — private ranges only (10/8, 172.16/12, 192.168/16)" },
+            { value: "y", label: "Yes: private ranges only (10/8, 172.16/12, 192.168/16)" },
           ],
           (i) => i,
         );
@@ -544,15 +544,15 @@ export async function runFullSetup(
   ): Promise<Outcome<RolePick | undefined>> {
     const discoveries = flow.answers.discoveries;
     const items: SelectItem[] = [];
-    if (opts.allowNone === true) items.push({ value: "none", label: "None — skip" });
+    if (opts.allowNone === true) items.push({ value: "none", label: "None: skip" });
     if (opts.useMainDefault !== undefined) {
       items.push({ value: "main", label: `Use main (${opts.useMainDefault.model})` });
     }
     discoveries.forEach((d, i) =>
-      items.push({ value: `s${String(i)}`, label: `${discoveredLabel(d)}  —  ${d.baseUrl}` }),
+      items.push({ value: `s${String(i)}`, label: `${discoveredLabel(d)}  ·  ${d.baseUrl}` }),
     );
-    items.push({ value: "deepseek", label: "DeepSeek (cloud — needs an API key)" });
-    items.push({ value: "openrouter", label: "OpenRouter (cloud — needs an API key)" });
+    items.push({ value: "deepseek", label: "DeepSeek (cloud, needs an API key)" });
+    items.push({ value: "openrouter", label: "OpenRouter (cloud, needs an API key)" });
 
     const src = await selectStep(`Role: ${label}`, items, (i) => i);
     if (src === BACK || src === CANCEL) return src;
@@ -628,9 +628,9 @@ export async function runFullSetup(
     const m = await selectStep(
       "Default access mode",
       [
-        { value: "ask", label: "Ask (default) — confirm every command and write" },
-        { value: "auto", label: "Auto — kumo decides, risky actions still ask" },
-        { value: "full", label: "Full access — never asks" },
+        { value: "ask", label: "Ask (default): confirm every command and write" },
+        { value: "auto", label: "Auto: kumo decides, risky actions still ask" },
+        { value: "full", label: "Full access: never asks" },
       ],
       (i) => i,
     );
@@ -639,7 +639,7 @@ export async function runFullSetup(
     if (mode === "full") {
       const conf = await lineStep("FULL ACCESS means kumo runs anything. Type full to confirm: ");
       if (conf === BACK || conf === CANCEL) return conf;
-      if (conf.trim() !== "full") throw new Error("confirmation failed — staying on this step");
+      if (conf.trim() !== "full") throw new Error("confirmation failed. Staying on this step");
     }
     return { permissionMode: mode };
   }
@@ -649,12 +649,12 @@ export async function runFullSetup(
     const detected = await detectSearxng(opts.fetchImpl !== undefined ? { fetchImpl: opts.fetchImpl } : {});
     setStatus(stepTitle("search"));
     const s = await selectStep(
-      "Web search (a search needs an index of the web — nothing is scraped for free)",
+      "Web search (a search needs an index of the web. Nothing is scraped for free)",
       [
         { value: "none", label: "None (default)" },
-        { value: "searxng", label: detected !== undefined ? `SearXNG — detected on ${detected}` : "SearXNG — self-hosted instance URL" },
-        { value: "brave", label: "Brave Search — API key" },
-        { value: "tavily", label: "Tavily — API key" },
+        { value: "searxng", label: detected !== undefined ? `SearXNG: detected on ${detected}` : "SearXNG: self-hosted instance URL" },
+        { value: "brave", label: "Brave Search: API key" },
+        { value: "tavily", label: "Tavily: API key" },
       ],
       (i) => i,
     );
@@ -692,7 +692,7 @@ export async function runFullSetup(
     const checked = new Set(
       bundled.map((s, i) => i).filter((i) => flow.answers.skills.includes(bundled[i]?.name ?? "")),
     );
-    const sel = await checkStep("Skills — Space toggles, Enter continues", items, checked);
+    const sel = await checkStep("Skills: Space toggles, Enter continues", items, checked);
     if (sel === BACK || sel === CANCEL) return sel;
     return { skills: sel.map((i) => (items[i] as SelectItem).value) };
   }
@@ -731,7 +731,7 @@ export async function runFullSetup(
     const plan = flow.buildPlan({ dshHome, bundledSkillsRoot: bundledRoot, bundledSkills: bundled });
     const a = flow.answers;
     const ref = (r: RolePick | undefined): string =>
-      r === undefined ? "—" : `${r.cloud ?? r.discovered?.baseUrl ?? "?"} · ${r.model}`;
+      r === undefined ? "none" : `${r.cloud ?? r.discovered?.baseUrl ?? "?"} · ${r.model}`;
     const lines = [
       `  Main     ${ref(a.roles.main)}`,
       `  Fast     ${ref(a.roles.fast ?? a.roles.main)}${a.roles.fast === undefined ? "  (default = main)" : ""}`,
@@ -814,7 +814,7 @@ function stepTitle(step: string): string {
     summary: "Summary",
   };
   const order = ["models", "roles", "keys", "mode", "search", "skills", "theme", "telemetry", "summary"];
-  return `${labels[step] ?? step}  (step ${String(order.indexOf(step) + 1)}/${String(order.length)})  —  Esc back · Ctrl+C quit`;
+  return `${labels[step] ?? step}  (step ${String(order.indexOf(step) + 1)}/${String(order.length)})  ·  Esc back · Ctrl+C quit`;
 }
 
 /** A plain readline SetupIO for the simple path (secret is masked raw). */

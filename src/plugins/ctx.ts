@@ -29,6 +29,9 @@ export interface KumoRepl {
   ui?: {
     askChoice(title: string, items: Array<{ value: string; label: string }>): Promise<number>;
     addChat(component: any): void;
+    removeChat?(component: any): void;
+    showNotice?(text: string, opts?: { red?: boolean }): void;
+    confirmFullAccess?(): Promise<boolean>;
     footer: { set(next: Record<string, unknown>): void; tpsReset?(): void };
     requestRender(): void;
     icons: { think: string; prompt: string; ok: string; fail: string; bullet: string; spark: string };

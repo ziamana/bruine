@@ -196,7 +196,7 @@ export class SetupFlow {
     bundledSkillsRoot: string;
     bundledSkills: SkillMeta[];
   }): Promise<void> {
-    if (this.canceled) throw new Error("setup was canceled — nothing was written");
+    if (this.canceled) throw new Error("setup was canceled. Nothing was written");
     if (!this.atSummary) throw new Error("save is only available on the summary step");
     if (this.validate("roles").length > 0) throw new Error("no main role");
     await commitPlan(opts.dshHome, this.buildPlan(opts));

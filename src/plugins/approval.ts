@@ -1,4 +1,3 @@
-import { dim } from "../render/reasoning.js";
 import type { DshContext, KumoRepl } from "./ctx.js";
 import type { RenderService } from "./render.js";
 
@@ -90,7 +89,6 @@ export function apply(ctx: DshContext): void {
       const question = buildQuestion(request, (id) => screen?.tools.describe(id));
       // Close the transient display before asking.
       screen?.reasoning.end();
-      screen?.screen.write("\r\x1b[2K");
 
       const ask = repl.ask;
       if (ask === undefined) return next();
@@ -100,9 +98,7 @@ export function apply(ctx: DshContext): void {
         if (always) modes?.rememberFor(request.callId);
         if (screen !== undefined) {
           const mark = ok ? screen.icons.ok : screen.icons.fail;
-          screen.screen.write(
-            `\r\x1b[2K${dim(`${mark} ${ok ? (always ? "allowed for session" : "allowed") : "rejected"}`)}\n`,
-          );
+          screen.screen.write(`${mark} ${ok ? (always ? "allowed for session" : "allowed") : "rejected"}\n`);
         }
         return ok ? ("allowed-once" as const) : ("rejected" as const);
       });

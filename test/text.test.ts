@@ -13,14 +13,14 @@ class FakeScreen implements Screen {
   }
 }
 
-describe("TextStream", () => {
+describe("TextStream (T24.5 piped)", () => {
   test("1. streams deltas and ends with exactly one newline", () => {
     const s = new FakeScreen();
     const t = new TextStream(s);
     t.push("Hel");
     t.push("lo");
     t.end();
-    expect(s.all).toBe("\r\x1b[2KHello\n");
+    expect(s.all).toBe("Hello\n");
   });
 
   test("2. no extra newline when the text already ends with one", () => {
@@ -28,7 +28,7 @@ describe("TextStream", () => {
     const t = new TextStream(s);
     t.push("Hi\n");
     t.end();
-    expect(s.all).toBe("\r\x1b[2KHi\n");
+    expect(s.all).toBe("Hi\n");
   });
 
   test("3. end() with no push writes nothing", () => {
@@ -38,12 +38,13 @@ describe("TextStream", () => {
     expect(s.writes).toHaveLength(0);
   });
 
-  test("first push clears the temporary line only once", () => {
+  test("first push writes directly with no clear code", () => {
     const s = new FakeScreen();
     const t = new TextStream(s);
     t.push("a");
     t.push("b");
-    expect(s.all).toBe("\r\x1b[2Kab");
+    expect(s.all).toBe("ab");
+    expect(s.all).not.toContain("\r");
   });
 
   test("resets between turns", () => {
@@ -53,7 +54,7 @@ describe("TextStream", () => {
     t.end();
     t.push("two");
     t.end();
-    expect(s.all).toBe("\r\x1b[2Kone\n\r\x1b[2Ktwo\n");
+    expect(s.all).toBe("one\ntwo\n");
   });
 
   test("empty push writes nothing", () => {

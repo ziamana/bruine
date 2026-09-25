@@ -51,6 +51,14 @@ class ChoiceOverlay implements Component {
   }
 }
 
+/** Notice area directly above the editor (T24.4): one empty line when idle. */
+class NoticeBox extends Container {
+  override render(width: number): string[] {
+    if (this.children.length === 0) return [""];
+    return super.render(width);
+  }
+}
+
 /**
  * The kumo TUI shell (T13a), pi-tui main-screen mode: header, chat
  * transcript, bordered multi-line editor, footer. Replaces readline while a
@@ -63,9 +71,12 @@ export class KumoUi {
   readonly editor: Editor;
   readonly footer: FooterComponent;
   readonly icons: KumoIcons;
+  readonly noticeBox: NoticeBox;
   #lastCtrlC = 0;
   #animation: ReturnType<typeof setInterval> | undefined;
   #closed = false;
+  #noticeTimer: ReturnType<typeof setTimeout> | undefined;
+  #confirming = false;
 
   constructor(
     version: string,
@@ -88,14 +99,27 @@ export class KumoUi {
     this.editor = new PlainGlyphEditor(this.tui, editorTheme);
     this.editor.onSubmit = (text) => handlers.onSubmit(text);
     this.footer = new FooterComponent(icons);
+    this.noticeBox = new NoticeBox();
 
     this.tui.addChild(header);
     this.tui.addChild(this.chat);
-    this.tui.addChild({ render: () => [""], invalidate: () => {} });
+    this.tui.addChild(this.noticeBox);
     this.tui.addChild(this.editor);
     this.tui.addChild(this.footer);
 
     this.tui.addInputListener((data: string) => {
+      if (this.#confirming) {
+        if (matchesKey(data, "tab") || matchesKey(data, "shift+tab")) {
+          return { consume: true };
+        }
+        if (matchesKey(data, "escape")) {
+          return {};
+        }
+        if (matchesKey(data, "ctrl+c") || matchesKey(data, "ctrl+d")) {
+          return { consume: true };
+        }
+        return {};
+      }
       if (handlers.onTab !== undefined && matchesKey(data, "tab")) {
         handlers.onTab();
         this.requestRender();
@@ -163,6 +187,68 @@ export class KumoUi {
     this.editor.addToHistory(text);
   }
 
+  /** Transient dim (or red) notice directly above the editor for 3 s (T24.4). */
+  showNotice(text: string, opts: { red?: boolean } = {}): void {
+    if (this.#closed) return;
+    this.clearNoticeBox();
+    const line = new Text(opts.red === true ? ansi.red(text) : ansi.dim(text), 1, 0);
+    this.noticeBox.addChild(line);
+    this.requestRender();
+    if (this.#noticeTimer !== undefined) clearTimeout(this.#noticeTimer);
+    this.#noticeTimer = setTimeout(() => {
+      this.#noticeTimer = undefined;
+      this.clearNoticeBox();
+      this.requestRender();
+    }, 3000);
+    this.#noticeTimer.unref?.();
+  }
+
+  clearNoticeBox(): void {
+    if (this.#noticeTimer !== undefined) {
+      clearTimeout(this.#noticeTimer);
+      this.#noticeTimer = undefined;
+    }
+    for (const child of [...this.noticeBox.children]) {
+      this.noticeBox.removeChild(child);
+    }
+  }
+
+  /**
+   * Full access confirmation as an inline SelectList above the editor (T24.4).
+   * Red title, items Cancel (default) / Enable. Resolves true for Enable.
+   */
+  confirmFullAccess(): Promise<boolean> {
+    if (this.#closed) return Promise.resolve(false);
+    this.clearNoticeBox();
+    this.#confirming = true;
+    const title = new Text(
+      ansi.red("Enable full access? kumo will run commands and edit files without asking."),
+      1,
+      0,
+    );
+    const items: SelectItem[] = [
+      { value: "cancel", label: "Cancel" },
+      { value: "enable", label: "Enable" },
+    ];
+    const list = new SelectList(items, Math.max(items.length, 5), selectListTheme);
+    this.noticeBox.addChild(title);
+    this.noticeBox.addChild(list);
+    this.requestRender();
+    return new Promise((resolve) => {
+      const finish = (ok: boolean) => {
+        this.#confirming = false;
+        this.clearNoticeBox();
+        this.tui.setFocus(this.editor);
+        this.requestRender();
+        resolve(ok);
+      };
+      list.onSelect = (item) => finish(items.indexOf(item) === 1);
+      list.onCancel = () => finish(false);
+      this.tui.setFocus(list);
+      this.requestRender();
+    });
+  }
+
   /**
    * A pi-tui select shown as a modal overlay (T13d). Resolves with the
    * chosen index, or -1 on cancel (escape / ctrl+c).
@@ -191,6 +277,10 @@ export class KumoUi {
     this.#closed = true;
     clearInterval(this.#animation);
     this.#animation = undefined;
+    if (this.#noticeTimer !== undefined) {
+      clearTimeout(this.#noticeTimer);
+      this.#noticeTimer = undefined;
+    }
     try {
       await this.terminal.drainInput(300, 50);
     } catch {

@@ -12,6 +12,7 @@
     "./repl": "./dist/plugins/repl.js",
     "./render": "./dist/plugins/render.js",
     "./approval": "./dist/plugins/approval.js",
+    "./web-search": "./dist/plugins/web-search.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },

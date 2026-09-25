@@ -1,7 +1,25 @@
 # The kumo-cli bundle patch: an interactive terminal agent over dsh-base.
-# Inserts the four kumo plugins: startup parses argv, repl owns the single
-# agent and the readline loop, render draws the live stream, approval answers
-# tool approvals with a y/n prompt.
+# Inserts the kumo plugins (startup, repl, render, approval, web-search) and
+# the extra tool rows. Cache rule (ARCHITECTURE section 0): the system prompt
+# and the tools array are byte-identical all session long — modes are a
+# kumo-side gate + appended messages, never a prompt/tool swap.
+
+- id: system-prompt
+  config:
+    includeHarnessIdentity: false
+    personaPrefix: >-
+      You are kumo, a terminal coding agent powered by {{model}}. Be short and
+      direct: answer first, detail only when asked. Reply in the user's
+      language.
+    personaSuffix: Your working directory is {{cwd}}.
+
+# kumo's own search provider (SearXNG / Brave / Tavily, configured in
+# kumo.json; "none" by default). Never dsh-free-search.
+- id: web
+  inject: [kumoSearch]
+  config:
+    searchProvider: !!js ctx.kumoSearch.id
+    fetchProvider: http
 
 - insert:
     - id: kumo-startup
@@ -16,3 +34,15 @@
 
     - id: kumo-approval
       name: 'kumo-cli/approval'
+
+    - id: kumo-web-search
+      name: 'kumo-cli/web-search'
+
+    - id: tool-ask-user
+      name: '@deepseek-ai/dsh-tool-ask-user'
+
+    - id: tool-str-replace-editor
+      name: '@deepseek-ai/dsh-tool-str-replace-editor'
+
+    - id: tool-present
+      name: '@deepseek-ai/dsh-tool-present'

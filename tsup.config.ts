@@ -7,6 +7,7 @@ export default defineConfig({
     "plugins/repl": "src/plugins/repl.ts",
     "plugins/render": "src/plugins/render.ts",
     "plugins/approval": "src/plugins/approval.ts",
+    "plugins/web-search": "src/plugins/web-search.ts",
   },
   format: ["esm"],
   clean: true,

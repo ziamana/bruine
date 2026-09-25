@@ -249,10 +249,89 @@ export type SetupOutcome =
   | { kind: "openrouter" }
   | { kind: "skipped" };
 
+export interface SearchChoice {
+  provider: "none" | "searxng" | "brave" | "tavily";
+  url?: string;
+  apiKeyEnv?: string;
+}
+
+/** Probe localhost for a SearXNG instance (JSON API answers with results). */
+export async function detectSearxng(
+  opts: { fetchImpl?: FetchLike; timeoutMs?: number } = {},
+): Promise<string | undefined> {
+  const doFetch = opts.fetchImpl ?? (fetch as unknown as FetchLike);
+  for (const port of [8888, 8080]) {
+    const url = `http://127.0.0.1:${port}`;
+    try {
+      const res = await doFetch(`${url}/search?q=ping&format=json`, {
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 300),
+      });
+      if (!res.ok) continue;
+      const body = await res.json();
+      if (Array.isArray(body?.results)) return url;
+    } catch {
+      // not here
+    }
+  }
+  return undefined;
+}
+
+async function writeKumoJson(dshHome: string, search: SearchChoice): Promise<void> {
+  const kumoJsonPath = join(dshHome, "kumo.json");
+  let doc: Record<string, unknown> = {};
+  try {
+    doc = JSON.parse(await readFile(kumoJsonPath, "utf8")) as Record<string, unknown>;
+  } catch {
+    doc = {};
+  }
+  doc.mode = "simple";
+  doc.search = search;
+  await writeAtomic(kumoJsonPath, `${JSON.stringify(doc, null, 2)}\n`);
+}
+
+/** Offer web search configuration and persist it to kumo.json. */
+export async function askSearch(
+  dshHome: string,
+  io: SetupIO,
+  opts: { fetchImpl?: FetchLike } = {},
+): Promise<SearchChoice> {
+  const detected = await detectSearxng(opts);
+  const hint = detected !== undefined ? `   (SearXNG detected on ${detected})` : "";
+  const ans = (
+    await io.question(`Web search:  1) None${hint}  2) SearXNG  3) Brave  4) Tavily  [1] `)
+  ).trim();
+
+  let choice: SearchChoice = { provider: "none" };
+  if (ans.startsWith("2")) {
+    const fallback = detected ?? "http://127.0.0.1:8888";
+    const urlAns = (await io.question(`SearXNG URL [${fallback}]: `)).trim();
+    choice = { provider: "searxng", url: urlAns === "" ? fallback : urlAns };
+  } else if (ans.startsWith("3")) {
+    const key = (await io.secret("Brave Search API key: ")).trim();
+    if (key === "") {
+      io.write("No key entered — web search stays off.\n");
+    } else {
+      await writeEnvVar(join(dshHome, ".env"), "BRAVE_API_KEY", key);
+      choice = { provider: "brave", apiKeyEnv: "BRAVE_API_KEY" };
+    }
+  } else if (ans.startsWith("4")) {
+    const key = (await io.secret("Tavily API key: ")).trim();
+    if (key === "") {
+      io.write("No key entered — web search stays off.\n");
+    } else {
+      await writeEnvVar(join(dshHome, ".env"), "TAVILY_API_KEY", key);
+      choice = { provider: "tavily", apiKeyEnv: "TAVILY_API_KEY" };
+    }
+  }
+  await writeKumoJson(dshHome, choice);
+  return choice;
+}
+
 async function askProviderKey(
   dshHome: string,
   io: SetupIO,
   provider: "deepseek" | "openrouter",
+  opts: { fetchImpl?: FetchLike } = {},
 ): Promise<SetupOutcome> {
   const keyLabel = provider === "deepseek" ? "DeepSeek" : "OpenRouter";
   const key = (await io.secret(`${keyLabel} API key: `)).trim();
@@ -266,6 +345,7 @@ async function askProviderKey(
   const envKey = provider === "deepseek" ? "DEEPSEEK_API_KEY" : "OPENROUTER_API_KEY";
   await writeEnvVar(join(dshHome, ".env"), envKey, key);
   io.write(`Saved. Your API key is stored in ${join(dshHome, ".env")} (owner-only).\n`);
+  await askSearch(dshHome, io, opts);
   return { kind: provider };
 }
 
@@ -294,6 +374,7 @@ async function askServerAddress(
   await writeAtomic(settingsPath, renderSettingsYaml(localServerSettings(hit, model)), 0o600);
   await writeEnvVar(join(dshHome, ".env"), LOCAL_API_KEY_ENV, "local");
   io.write(`Using model: ${model} at ${baseUrl}\n`);
+  await askSearch(dshHome, io, opts);
   return { kind: "local", baseUrl, model };
 }
 
@@ -317,6 +398,7 @@ export async function simpleSetup(
     await writeAtomic(settingsPath, renderSettingsYaml(localServerSettings(hit, model)), 0o600);
     await writeEnvVar(join(dshHome, ".env"), LOCAL_API_KEY_ENV, "local");
     io.write(`Found a local model server at ${hit.baseUrl}. Using model: ${model}\n`);
+    if (io.isTTY) await askSearch(dshHome, io, opts);
     return { kind: "local", baseUrl: hit.baseUrl, model };
   }
 
@@ -333,8 +415,8 @@ export async function simpleSetup(
     const choice = (
       await io.question("Setup:  1) Enter a server address   2) DeepSeek   3) OpenRouter   [1] ")
     ).trim();
-    if (choice.startsWith("2")) return askProviderKey(dshHome, io, "deepseek");
-    if (choice.startsWith("3")) return askProviderKey(dshHome, io, "openrouter");
+    if (choice.startsWith("2")) return askProviderKey(dshHome, io, "deepseek", opts);
+    if (choice.startsWith("3")) return askProviderKey(dshHome, io, "openrouter", opts);
     const result = await askServerAddress(dshHome, io, opts);
     if (result !== "retry") return result;
   }

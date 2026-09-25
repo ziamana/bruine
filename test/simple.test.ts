@@ -175,7 +175,10 @@ describe("simpleSetup", () => {
       baseUrl: "http://127.0.0.1:8080/v1",
       model: "llama3",
     });
-    expect(asked).toEqual([]);
+    expect(asked).toHaveLength(1); // web search offer, default answer ""
+    expect(asked[0]).toContain("Web search");
+    const kumoJson = JSON.parse(await readFile(join(home, "kumo.json"), "utf8"));
+    expect(kumoJson).toEqual({ mode: "simple", search: { provider: "none" } });
     const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
     expect(parsed["agent-default-model"]).toEqual({ provider: "local", model: "llama3" });
     expect(parsed["llm-pi-ai"].providers.local.models).toEqual([{ id: "llama3", name: "llama3" }]);
@@ -189,7 +192,7 @@ describe("simpleSetup", () => {
     const { io, asked, secretsAsked } = fakeIO({ answers: ["2"], secrets: ["sk-abc"] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "deepseek" });
-    expect(asked.length).toBe(1); // only the menu
+    expect(asked.length).toBe(2); // menu + web search offer
     expect(asked.some((q) => /key/i.test(q))).toBe(false);
     expect(secretsAsked).toEqual(["DeepSeek API key: "]);
     const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
@@ -260,7 +263,7 @@ describe("simpleSetup", () => {
     try {
       const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
       // menu default (empty → 1), then the URL (without /v1), then pick model 2
-      const { io } = fakeIO({ answers: ["", `127.0.0.1:${port}`, "2"] });
+      const { io } = fakeIO({ answers: ["", `127.0.0.1:${port}`, "2", ""] });
       const outcome = await simpleSetup(home, io, { ports: [] });
       expect(outcome).toEqual({
         kind: "local",
@@ -282,5 +285,51 @@ describe("simpleSetup", () => {
     const outcome = await simpleSetup(home, io, { ports: [] });
     expect(outcome).toEqual({ kind: "deepseek" });
     expect(out.join("")).toContain("Could not reach");
+  });
+
+  // T15 — web search configuration step
+
+  test("Brave key during search step → kumo.json + .env", async () => {
+    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const { io, secretsAsked } = fakeIO({
+      answers: ["2", "3"],
+      secrets: ["sk-abc", "brave-1"],
+    });
+    await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
+    expect(secretsAsked).toEqual(["DeepSeek API key: ", "Brave Search API key: "]);
+    const kumoJson = JSON.parse(await readFile(join(home, "kumo.json"), "utf8"));
+    expect(kumoJson.search).toEqual({ provider: "brave", apiKeyEnv: "BRAVE_API_KEY" });
+    const env = await readFile(join(home, ".env"), "utf8");
+    expect(env).toContain("BRAVE_API_KEY=brave-1");
+    expect(env).toContain("DEEPSEEK_API_KEY=sk-abc");
+  });
+
+  test("Tavily key during search step", async () => {
+    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const { io } = fakeIO({ answers: ["2", "4"], secrets: ["sk-abc", "tav-1"] });
+    await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
+    const kumoJson = JSON.parse(await readFile(join(home, "kumo.json"), "utf8"));
+    expect(kumoJson.search).toEqual({ provider: "tavily", apiKeyEnv: "TAVILY_API_KEY" });
+    expect(await readFile(join(home, ".env"), "utf8")).toContain("TAVILY_API_KEY=tav-1");
+  });
+
+  test("detected SearXNG → default URL used", async () => {
+    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const fetchImpl: FetchLike = async (url) => {
+      if (url.includes("/search?")) {
+        return { ok: true, json: async () => ({ results: [{ url: "u", title: "t", content: "c" }] }) };
+      }
+      if (url.includes(":8880/v1/models")) {
+        return { ok: true, json: async () => ({ data: [{ id: "m" }] }) };
+      }
+      throw new Error("refused");
+    };
+    // local server on 8880 answers → setup asks only the search questions
+    const { io, asked } = fakeIO({ answers: ["2", ""] });
+    const outcome = await simpleSetup(home, io, { ports: [8880], fetchImpl });
+    expect(outcome.kind).toBe("local");
+    expect(asked[0]).toContain("SearXNG detected on http://127.0.0.1:8888");
+    const kumoJson = JSON.parse(await readFile(join(home, "kumo.json"), "utf8"));
+    expect(kumoJson.search).toEqual({ provider: "searxng", url: "http://127.0.0.1:8888" });
   });
 });

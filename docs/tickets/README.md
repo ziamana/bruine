@@ -23,8 +23,8 @@ You are implementing one ticket of the kumo project.
 | T02 | `kumo` launcher | T01 |
 | T03 | Profile generator | T01 |
 | T04 | Reasoning line renderer | T01 |
-| T05 | Tool call renderer | T01 |
-| T06 | Text renderer | T01 |
+| T05 | Tool call renderer | T04 (uses its Screen type) |
+| T06 | Text renderer | T04 (uses its Screen type) |
 | T07 | REPL plugin | T02 T03 |
 | T08 | Render plugin (wiring) | T04 T05 T06 T07 |
 | T09 | Approval plugin | T07 |

@@ -48,4 +48,5 @@ You are implementing one ticket of the kumo project.
 | T27 | Signature UI: cache meter, tool rail + grouping, turn summary, animated header, paste chip | T25 |
 | T28 | BUG ask_user_question has no answerer + real question UI; ghost-text next-prompt suggestion | T25 |
 | T30 | Update check at startup + `kumo update` (must be in the first release) | T26 |
+| T31 | `/` command palette (pi-tui autocomplete) + `/new` + `/help` (first release) | T27 |
 | T29 | Paste an image (clipboard ctrl+v, vision models only) | after first public release |

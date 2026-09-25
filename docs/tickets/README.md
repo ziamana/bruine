@@ -40,3 +40,4 @@ You are implementing one ticket of the kumo project.
 | T19 | Judge really works on local models + 6 remaining gate holes | T18 |
 | T20 | Rename package to kumo-code (command stays kumo) | T19 |
 | T21 | Full setup v0.2 (LAN discovery, roles, keys, mode, skills, theme, telemetry) | T20 + Aron's UI test |
+| T22 | E2E tests in a real terminal (pty + headless xterm), 7 scenarios | parallel, worktree |

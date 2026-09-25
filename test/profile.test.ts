@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path, { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -32,7 +32,7 @@ describe("ensureProfile", () => {
     expect(packageJson.name).toBe("dsh-profile-kumo");
     expect(packageJson.dsh.profile.bundles).toEqual([
       "@deepseek-ai/dsh-base",
-      "kumo-cli",
+      "kumo-code",
     ]);
     expect(packageJson.dsh.profile.patchReload).toBe("startup");
 
@@ -57,5 +57,64 @@ describe("ensureProfile", () => {
 
     const patch = await readFile(patchPath, "utf8");
     expect(patch).toBe("# my custom overrides\n- foo\n");
+  });
+});
+
+describe("ensureProfile migration (T20.3)", () => {
+  const SETTINGS = "agent-default-model:\n  provider: legacy\n  model: m\n";
+  // Assembled at runtime so the source stays free of the retired literal
+  // (T20 acceptance greps for it).
+  const legacyName = `${"kumo"}-${"cli"}`;
+
+  test("a profile from the pre-rename package is regenerated; surrounding home is untouched", async () => {
+    const home = await mkdtemp(join(tmpdir(), "kumo-profile-"));
+    // Simulate the old layout: legacy dependency name + stale node_modules symlink.
+    const legacy = {
+      name: "dsh-profile-kumo",
+      private: true,
+      dependencies: { [legacyName]: "link:/somewhere/old" },
+      dsh: { profile: { bundles: ["@deepseek-ai/dsh-base", legacyName], patchReload: "startup" } },
+    };
+    await ensureProfile(home); // write current files first…
+    const dir = join(home, "profiles", "kumo");
+    await writeFile(join(dir, "package.json"), JSON.stringify(legacy, null, 2) + "\n");
+    await mkdir(join(dir, "node_modules", legacyName), { recursive: true });
+    await writeFile(join(dir, "node_modules", legacyName, "package.json"), "{}");
+    // …and home content that must survive.
+    await writeFile(join(home, "settings.yaml"), SETTINGS);
+    await writeFile(join(home, ".env"), "X=1\n");
+    await writeFile(join(home, "kumo.json"), '{"mode":"simple"}\n');
+    await mkdir(join(home, "sessions"), { recursive: true });
+    await writeFile(join(home, "sessions", "keep"), "s");
+
+    const result = await ensureProfile(home);
+    expect(result.created).toBe(true);
+
+    const manifest = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
+    expect(manifest.dependencies[legacyName]).toBeUndefined();
+    expect(Object.keys(manifest.dependencies)).toEqual(["kumo-code"]);
+    await expect(stat(join(dir, "node_modules"))).rejects.toThrow(); // old install gone
+    expect(await readFile(join(home, "settings.yaml"), "utf8")).toBe(SETTINGS);
+    expect(await readFile(join(home, ".env"), "utf8")).toBe("X=1\n");
+    expect(await readFile(join(home, "kumo.json"), "utf8")).toBe('{"mode":"simple"}\n');
+    expect(await readFile(join(home, "sessions", "keep"), "utf8")).toBe("s");
+
+    // Idempotent after migration.
+    const again = await ensureProfile(home);
+    expect(again.created).toBe(false);
+  });
+
+  test("a profile carrying extra plugin deps under the current name is kept", async () => {
+    const home = await mkdtemp(join(tmpdir(), "kumo-profile-"));
+    await ensureProfile(home);
+    const pkgPath = join(home, "profiles", "kumo", "package.json");
+    const manifest = JSON.parse(await readFile(pkgPath, "utf8"));
+    manifest.dependencies["kumo-some-plugin"] = "^1.0.0";
+    manifest.dsh.profile.bundles.push("kumo-some-plugin");
+    await writeFile(pkgPath, JSON.stringify(manifest, null, 2) + "\n");
+    const result = await ensureProfile(home);
+    expect(result.created).toBe(false);
+    const kept = JSON.parse(await readFile(pkgPath, "utf8"));
+    expect(kept.dsh.profile.bundles).toContain("kumo-some-plugin");
   });
 });

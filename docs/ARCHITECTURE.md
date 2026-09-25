@@ -35,9 +35,9 @@ $ kumo [args]
    │
    └─ spawn: DSH_HOME=~/.kumo  dsh --profile kumo [args]
                 │
-                profile "kumo" = bundles [@deepseek-ai/dsh-base, kumo-cli]
+                profile "kumo" = bundles [@deepseek-ai/dsh-base, kumo-code]
                 │
-                kumo-cli bundle patch inserts 4 Cordis plugins:
+                kumo-code bundle patch inserts 4 Cordis plugins:
                   kumo-startup   parse argv, provide ctx.kumoStartup
                   kumo-repl      create ONE Agent, readline loop, followup(), whenIdle()
                   kumo-render    draw reasoning / text / tool calls from live events
@@ -135,7 +135,7 @@ Renderers are **pure classes** (input: deltas, output: strings / terminal ops) s
 ## 4. Repo layout
 ```
 kumo/
-  package.json          name "kumo-cli", bin { "kumo": "dist/bin.js" }, type module
+  package.json          name "kumo-code", bin { "kumo": "dist/bin.js" }, type module
   src/
     bin.ts              launcher (T02)
     profile.ts          profile generator (T03)

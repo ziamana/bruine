@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { mkdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
@@ -41,6 +41,22 @@ async function writeAtomic(path: string, content: string): Promise<void> {
   await rename(tmp, path);
 }
 
+/**
+ * A profile is legacy when its dependency list does not reference this
+ * package's current name (T20.3 migration after the npm rename).
+ */
+async function isLegacyProfile(packageJsonPath: string): Promise<boolean> {
+  try {
+    const manifest = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
+      dependencies?: Record<string, unknown>;
+    };
+    const deps = manifest?.dependencies ?? {};
+    return Object.keys(deps).length > 0 && !(pkg.name in deps);
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureProfile(
   dshHome: string,
   pathMod: typeof path = path,
@@ -49,7 +65,13 @@ export async function ensureProfile(
   const dir = p.dir;
 
   if (await exists(p.packageJson)) {
-    return { created: false, dir };
+    if (!(await isLegacyProfile(p.packageJson))) {
+      return { created: false, dir };
+    }
+    // T20.3 migration: a profile generated before the package rename is
+    // regenerated — only the profile directory. settings.yaml, .env,
+    // kumo.json and sessions/ live outside it and are never touched.
+    await rm(dir, { recursive: true, force: true });
   }
 
   await mkdir(dir, { recursive: true });
@@ -58,7 +80,7 @@ export async function ensureProfile(
     name: "dsh-profile-kumo",
     private: true,
     dependencies: {
-      "kumo-cli": pkg.version,
+      [pkg.name]: pkg.version,
     },
     dsh: {
       profile: {

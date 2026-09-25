@@ -1,9 +1,17 @@
 {
-  "name": "kumo-cli",
+  "name": "kumo-code",
   "version": "0.0.1",
   "description": "Interactive terminal agent built on DeepSeek Harness (dsh)",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "TODO_GITHUB_URL"
+  },
+  "homepage": "TODO_GITHUB_URL#readme",
+  "bugs": {
+    "url": "TODO_GITHUB_URL/issues"
+  },
   "bin": {
     "kumo": "dist/bin.js"
   },

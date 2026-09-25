@@ -45,5 +45,6 @@ You are implementing one ticket of the kumo project.
 | T24 | Finishing: no em-dash in UI/skills, mode notes not as user msgs, no spinner when piped, e2e screens out of git | T23 |
 | T25 | Honest TPS per LLM call, footer without duplicate auto, reasoning word by word inside sentences | T24 |
 | T26 | Reuse skills from Claude Code / OpenCode / pi / ~/.agents (linked, not copied), shown in setup | T21 |
-| T27 | Signature UI: cache meter, tool rail + grouping, turn summary, animated header | T25 |
+| T27 | Signature UI: cache meter, tool rail + grouping, turn summary, animated header, paste chip | T25 |
 | T28 | BUG ask_user_question has no answerer + real question UI; ghost-text next-prompt suggestion | T25 |
+| T29 | Paste an image (clipboard ctrl+v, vision models only) | after first public release |

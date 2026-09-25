@@ -1,28 +1,28 @@
  kumo v0.0.1                                                                                        
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
 
-  › Start a long answer                                                                           
+  > Think in ASCII                                                                                
 
-  word0 word1 word2 word3 word4 word5 word6 word7 word8 word9                                     
+  * Thought for 1.0s
 
-  - cancelled                                                                                     
+  ASCII_DONE                                                                                      
 
-  › Try another turn                                                                              
+  > Read note.txt                                                                                 
 
-  SECOND_TURN_WORKS                                                                               
+  v read  note.txt  1.0s
+    > <path>/tmp/kumo-e2e-project-IwInCM/note.txt</path>
+      <type>file</type>
+      <content>
+      1: E2E_READ_SENTINEL
+      
+      ... 2 more lines
+
+  ASCII_READ_DONE                                                                                 
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-ask  0.0%/262k (auto)  (local) e2e-model · off
-
-
-
-
-
-
-
-
+ask  0.0%/262k (auto)  (local) e2e-model - off
 
 
 

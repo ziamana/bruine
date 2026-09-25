@@ -1,20 +1,20 @@
  kumo v0.0.1                                                                                        
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
 
-  › Write rejected.txt                                                                            
+  › Start work                                                                                    
 
-  · write  rejected.txt
+  ✗ read  …  0.3s
+    ⎿ Cancelled
+
+  - cancelled                                                                                     
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-ask  0%/— (auto)  (local) e2e-model · off
+ask  0.0%/262k (auto)  (local) e2e-model · off
 
 
-           ? Allow write: rejected.txt                                                              
-          → Allow once                                                                              
-            Always for this session                                                                 
-            Reject                                                                                  
+
 
 
 

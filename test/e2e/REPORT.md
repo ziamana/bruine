@@ -316,3 +316,20 @@ PROMPT_TO_CLEAR
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 0.0%/262k (auto)                                                             (local) e2e-model • off
 ```
+
+## T23 (finished and verified by BOS, 2026-09-25)
+
+Implemented by GPT-6 Sol (quota ran out during the final check), verified and committed by BOS.
+
+| Check | Result |
+|---|---|
+| Unit tests | 210/210 |
+| E2E (real pty, 100×30) | **13/13**, including the former `it.fails` Ask label |
+| Tab / Shift+Tab | reach the modes plugin; Plan really denies a write, Full really allows it. Only the redraw was missing |
+| Crash found | a tool line longer than the terminal crashed pi-tui; tool output is now clipped |
+| `✓ bash …` | cause: durable arguments appended to the streamed JSON; fixed |
+| Emoji | none on screen (strict Extended_Pictographic check, no exception); spinner `· ✢ ✺ ✶ ✻ ✽`, ASCII `- \ | /` |
+| Reasoning | every 50 ms snapshot is a complete sentence or `Thinking` alone |
+
+Known, not in T23: the Plan/mode announcement appended to the context is echoed in the chat as if the user typed it
+(`› Plan mode is on: …`). It should render as a dim system note.

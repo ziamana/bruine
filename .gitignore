@@ -3,3 +3,6 @@ dist
 
 # test scratch dirs
 .tmp-kumo-*
+
+# raw local test logs (contain machine paths)
+test/e2e/*-output.txt

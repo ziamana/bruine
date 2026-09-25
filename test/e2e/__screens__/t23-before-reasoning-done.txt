@@ -1,12 +1,12 @@
  kumo v0.0.1                                                                                        
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
-
+ │ Think through this                                                                               
+💭 thought for 1.7s
+ BASELINE_DONE                                                                                      
 ────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-ask  0%/— (auto)  (local) e2e-model · off
-
-
+0.0%/262k (auto)                                                             (local) e2e-model • off
 
 
 

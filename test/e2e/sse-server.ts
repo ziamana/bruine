@@ -13,6 +13,7 @@ export interface Chunk {
 export interface Script {
   chunks: Chunk[];
   finish?: "stop" | "tool_calls";
+  finishDelayMs?: number;
 }
 export interface RecordedRequest {
   body: RequestBody;
@@ -23,13 +24,14 @@ export interface RecordedRequest {
 export const textScript = (text: string): Script => ({ chunks: [{ delta: { content: text } }] });
 
 /** Identity once, then indexed argument fragments, then a tool_calls finish. */
-export function toolScript(name: string, args: Record<string, unknown>): Script {
+export function toolScript(name: string, args: Record<string, unknown>, id = "call_e2e_1"): Script {
   const json = JSON.stringify(args);
   const middle = Math.floor(json.length / 2);
   return {
     finish: "tool_calls",
+    finishDelayMs: 400,
     chunks: [
-      { delta: { tool_calls: [{ index: 0, id: "call_e2e_1", type: "function", function: { name, arguments: "" } }] }, delayMs: 100 },
+      { delta: { tool_calls: [{ index: 0, id, type: "function", function: { name, arguments: "" } }] }, delayMs: 100 },
       ...[json.slice(0, middle), json.slice(middle)].map((arguments_) => ({
         delta: { tool_calls: [{ index: 0, function: { arguments: arguments_ } }] }, delayMs: 300,
       })),
@@ -87,6 +89,7 @@ export async function startServer(scripts: Script[]) {
         if (res.destroyed) return;
         chunk(part.delta);
       }
+      await delay(script.finishDelayMs ?? 0, undefined, { signal: abort.signal });
       chunk({}, script.finish ?? "stop");
       record.completed = true;
       res.end("data: [DONE]\n\n");

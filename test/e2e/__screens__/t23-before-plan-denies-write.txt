@@ -1,0 +1,30 @@
+ kumo v0.0.1                                                                                                                                                    
+ escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                                                                                     
+ │ Think through this                                                                                                                                           
+💭 thought for 1.7s
+ BASELINE_DONE                                                                                                                                                  
+ │ Read note.txt                                                                                                                                                
+✗ read  …  1.6s
+    Error: Plan mode is on: do not modify files or run modifying commands. Press Tab (or /plan off) to switch to Build.
+ READ_DONE                                                                                                                                                      
+ │ Plan mode is on: do not modify files or run modifying commands.                                                                                              
+ │ Write plan-denied.txt                                                                                                                                        
+ PLAN_PROBE_DONE                                                                                                                                                
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                                                                
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+0.0%/262k (auto)                                                                                                                   PLAN  (local) e2e-model • off
+
+
+
+
+
+
+
+
+
+
+
+
+
+

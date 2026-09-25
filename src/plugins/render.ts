@@ -99,7 +99,7 @@ export function attachTui(
 
   const ensureReasoning = (): ReasoningComponent => {
     if (reasoning === undefined) {
-      reasoning = new ReasoningComponent();
+      reasoning = new ReasoningComponent(Date.now, ui.icons);
       ui.addChat(reasoning);
     }
     return reasoning;
@@ -116,7 +116,7 @@ export function attachTui(
   const ensureTool = (id: string, toolName: string): ToolCallComponent => {
     let comp = tools.get(id);
     if (comp === undefined) {
-      comp = new ToolCallComponent(toolName);
+      comp = new ToolCallComponent(toolName, Date.now, ui.icons);
       tools.set(id, comp);
       ui.addChat(comp);
     }
@@ -197,7 +197,7 @@ export function attachTui(
       case "tool/call": {
         const id = String(event.data.callId);
         const comp = ensureTool(id, event.data.name);
-        if (event.data.arguments) comp.args(event.data.arguments);
+        if (event.data.arguments) comp.setArgs(event.data.arguments);
         ui.requestRender();
         return;
       }
@@ -214,15 +214,16 @@ export function attachTui(
       }
       case "turn/end": {
         closeLive();
+        for (const comp of tools.values()) comp.cancel();
         const window = agent.session?.requestContext?.()?.contextWindow;
         if (typeof window === "number" && window > 0) {
           ui.footer.set({ contextUsed: lastInputTokens + lastOutputTokens, contextWindow: window });
         }
         const reason = event.data.reason;
         if (reason?.kind === "error") {
-          ui.addChat(new Text(ansi.red(`${ui.icons.fail} ${reason.error.code}: ${reason.error.message}`), 1, 0));
+          ui.addChat(new Text(ansi.red(`${ui.icons.fail} ${reason.error.code}: ${reason.error.message}`), 0, 0));
         } else if (reason?.kind === "aborted") {
-          ui.addChat(new Text(dim("- cancelled"), 1, 0));
+          ui.addChat(new Text(dim("- cancelled"), 0, 0));
         }
         ui.requestRender();
         return;
@@ -233,6 +234,9 @@ export function attachTui(
   });
 
   return () => {
+    closeLive();
+    for (const comp of tools.values()) comp.cancel();
+    ui.requestRender();
     offStream();
     offSession();
   };

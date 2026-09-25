@@ -1,21 +1,21 @@
  kumo v0.0.1                                                                                        
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
-
+ │ Think through this                                                                               
+💭 thought for 1.7s
+ BASELINE_DONE                                                                                      
+ │ Read note.txt                                                                                    
+✓ read  …  0.6s
+    <path>/tmp/kumo-e2e-project-R2ElSj/note.txt</path>
+    <type>file</type>
+    <content>
+    1: E2E_READ_SENTINEL
+    
+    … 2 more lines
+ READ_DONE                                                                                          
 ────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-ask  0%/— (auto)  (local) e2e-model · off
-
-
-
-
-
-
-
-
-
-
-
+0.0%/262k (auto)                                                             (local) e2e-model • off
 
 
 

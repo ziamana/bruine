@@ -1,16 +1,16 @@
  kumo v0.0.1                                                                                        
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
- │ Start a long answer                                                                              
- word0 word1 word2 word3 word4 word5 word6 word7 word8 word9                                        
- - cancelled                                                                                        
+
+  › Start a long answer                                                                           
+
+  word0 word1 word2 word3 word4 word5 word6 word7 word8 word9                                     
+
+  - cancelled                                                                                     
+
 ────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-0.0%/262k (auto)                                                             (local) e2e-model • off
-
-
-
-
+ask  0.0%/262k (auto)  (local) e2e-model · off
 
 
 

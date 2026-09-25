@@ -1,16 +1,16 @@
  kumo v0.0.1                                                
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands 
- │ Think while the terminal resizes                         
-💭 thought for 4.1s
- REASONING_DONE                                             
+
+  › Think while the terminal resizes                      
+
+  ∴ Thought for 6.1s
+
+  REASONING_DONE                                          
+
 ────────────────────────────────────────────────────────────
                                                             
 ────────────────────────────────────────────────────────────
-0.0%/262k (auto)                     (local) e2e-model • off
-
-
-
-
+ask  0.0%/262k (auto)  (local) e2e-model · off
 
 
 

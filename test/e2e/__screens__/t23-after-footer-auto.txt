@@ -1,20 +1,20 @@
  kumo v0.0.1                                                                                        
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
 
-  › Write rejected.txt                                                                            
+  › Plan mode is on: do not modify files or run modifying commands.                               
 
-  · write  rejected.txt
+  › Write plan.txt                                                                                
+
+  ✗ write  plan.txt  1.0s
+    ⎿ Error: Plan mode is on: do not modify files or run modifying commands. Press Tab (or /plan …
+
+  PLAN_DONE                                                                                       
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-ask  0%/— (auto)  (local) e2e-model · off
+auto  0.0%/262k (auto)  (local) e2e-model · off
 
-
-           ? Allow write: rejected.txt                                                              
-          → Allow once                                                                              
-            Always for this session                                                                 
-            Reject                                                                                  
 
 
 

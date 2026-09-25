@@ -122,7 +122,7 @@ describe("Modes class", () => {
   test("badges include PLAN when planning", () => {
     const m = new Modes("ask");
     m.togglePlan();
-    expect(m.describe().badges).toEqual(["PLAN"]);
+    expect(m.describe().badges).toEqual(["plan", "ask"]);
   });
 });
 

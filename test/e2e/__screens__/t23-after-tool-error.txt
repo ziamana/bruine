@@ -1,20 +1,20 @@
  kumo v0.0.1                                                                                        
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
 
-  › Write rejected.txt                                                                            
+  › Read absent.txt                                                                               
 
-  · write  rejected.txt
+  ✗ read  absent.txt  1.0s
+    ⎿ Error: cannot read "/tmp/kumo-e2e-project-6xlTt1/absent.txt": not found
+
+  ERROR_HANDLED                                                                                   
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-ask  0%/— (auto)  (local) e2e-model · off
+ask  0.0%/262k (auto)  (local) e2e-model · off
 
 
-           ? Allow write: rejected.txt                                                              
-          → Allow once                                                                              
-            Always for this session                                                                 
-            Reject                                                                                  
+
 
 
 

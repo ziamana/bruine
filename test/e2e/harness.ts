@@ -28,9 +28,10 @@ export class Harness {
   child!: pty.IPty;
   exit: { exitCode: number; signal?: number } | undefined;
   private pending = Promise.resolve();
+  readonly emojiScreens: string[] = [];
   private constructor(readonly home: string, readonly project: string, readonly server: Awaited<ReturnType<typeof startServer>>) {}
 
-  static async start(scripts: Script[], permissionMode = "ask") {
+  static async start(scripts: Script[], permissionMode = "ask", ascii = false) {
     const home = await mkdtemp(join(tmpdir(), "kumo-e2e-home-"));
     const project = await mkdtemp(join(tmpdir(), "kumo-e2e-project-"));
     const server = await startServer(scripts);
@@ -45,7 +46,7 @@ export class Harness {
       const modules = join(dir, "node_modules");
       await mkdir(join(modules, "@deepseek-ai"), { recursive: true });
       const dshRequire = createRequire(require.resolve("@deepseek-ai/dsh/package.json"));
-      await symlink(root, join(modules, "kumo-cli"), process.platform === "win32" ? "junction" : "dir");
+      await symlink(root, join(modules, (require(join(root, "package.json")) as { name: string }).name), process.platform === "win32" ? "junction" : "dir");
       await symlink(dirname(dshRequire.resolve("@deepseek-ai/dsh-base/package.json")), join(modules, "@deepseek-ai", "dsh-base"), process.platform === "win32" ? "junction" : "dir");
       const env: Record<string, string> = {};
       // Preserve OS/runtime variables, but prevent model credentials and inherited
@@ -53,10 +54,14 @@ export class Harness {
       for (const [key, value] of Object.entries(process.env)) {
         if (value !== undefined && !/(API_KEY|TOKEN|SECRET|^DSH_|^KUMO_)/i.test(key)) env[key] = value;
       }
-      Object.assign(env, { KUMO_HOME: home, DSH_HOME: home, DSH_TELEMETRY_DISABLED: "1", KUMO_LOCAL_API_KEY: "e2e", KUMO_ASCII: "0", TERM: "xterm-256color", LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" });
+      Object.assign(env, { KUMO_HOME: home, DSH_HOME: home, DSH_TELEMETRY_DISABLED: "1", KUMO_LOCAL_API_KEY: "e2e", KUMO_ASCII: ascii ? "1" : "0", TERM: "xterm-256color", LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" });
       h.child = pty.spawn(process.execPath, [join(root, "dist", "bin.js")], { name: "xterm-256color", cols: 100, rows: 30, cwd: project, env });
       h.child.onData((data) => {
-        h.pending = h.pending.then(() => new Promise<void>((done) => h.term.write(data, done)));
+        h.pending = h.pending.then(() => new Promise<void>((done) => h.term.write(data, () => {
+          const screen = h.screen().join("\n");
+          if (/\p{Extended_Pictographic}/u.test(screen) && h.emojiScreens.length < 5) h.emojiScreens.push(screen);
+          done();
+        })));
       });
       // Reply to terminal queries just as a real terminal would.
       h.term.onData((data) => { if (!h.exit) h.child.write(data); });

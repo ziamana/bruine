@@ -1,26 +1,45 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, test } from "vitest";
+import { beforeAll, expect, it, test } from "vitest";
 import stringWidth from "string-width";
 import { build, Harness } from "./harness.js";
 import { textScript, toolScript, type Script } from "./sse-server.js";
 
 beforeAll(build, 60_000);
 
+const completeSentences = [
+  "Use 3.5, e.g. this example, i.e. one value.",
+  ...Array.from({ length: 39 }, (_, i) => i === 19 ? "x".repeat(300) : `Sentence ${i} 漢字!`),
+];
 const reasoning = (): Script => ({ chunks: [
-  ...Array.from({ length: 40 }, (_, i) => ({ delta: { reasoning_content: `${i === 20 ? "x".repeat(300) : `Line ${i} 🙂 漢字`}${i % 2 ? "\n" : "\n\n"}` }, delayMs: 100 })),
+  ...completeSentences.flatMap((sentence, i) => {
+    const middle = Math.floor(sentence.length / 2);
+    return [
+      { delta: { reasoning_content: sentence.slice(0, middle) }, delayMs: 75 },
+      { delta: { reasoning_content: sentence.slice(middle) + (i % 3 === 0 ? " " : i % 3 === 1 ? "\n" : "\n\n") }, delayMs: 75 },
+    ];
+  }),
   { delta: { content: "REASONING_DONE" }, delayMs: 150 },
 ] });
+const footer = (h: Harness) => h.screen().find(line => line.includes("e2e-model")) ?? "";
+const footerCell = (h: Harness, label: string) => {
+  const row = h.screen().findIndex(line => line.includes("e2e-model"));
+  const col = h.screen()[row]!.indexOf(label);
+  expect(col).toBeGreaterThanOrEqual(0);
+  return h.term.buffer.active.getLine(h.term.buffer.active.viewportY + row)!.getCell(col)!;
+};
+const runningThought = (line: string) => /^\s*[·✢✺✶✻✽] Thinking/.test(line);
 
-async function scenario(name: string, scripts: Script[], run: (h: Harness) => Promise<void>) {
+async function scenario(name: string, scripts: Script[], run: (h: Harness) => Promise<void>, ascii = false) {
   let h: Harness | undefined;
   try {
-    h = await Harness.start(scripts);
+    h = await Harness.start(scripts, "ask", ascii);
     await h.waitFor("e2e-model", 30_000);
     await h.waitStable(150, 2000);
     await run(h);
     expect(h.server.errors).toEqual([]);
+    expect(h.emojiScreens, "No Extended_Pictographic code point may appear in any parsed terminal frame").toEqual([]);
   } catch (error) {
     if (h) {
       await h.dump(`${name}-failure`);
@@ -33,24 +52,39 @@ async function scenario(name: string, scripts: Script[], run: (h: Harness) => Pr
 }
 
 // Every scenario owns its PTY, home, project and server; failures never bail out.
-test("reasoning: only one visible thought line throughout 40 mixed lines", async () => {
+test("reasoning: every 50ms snapshot is a complete sentence or Thinking alone", async () => {
   await scenario("reasoning", [reasoning()], async (h) => {
     await h.prompt("Think through the problem");
-    await h.waitFor("💭");
+    await h.waitFor("Thinking");
     let snapshots = 0;
-    const deadline = Date.now() + 10_000;
+    const frames = new Set<string>();
+    const shown = new Set<string>();
+    const deadline = Date.now() + 12_000;
     while (!h.screen().join("\n").includes("REASONING_DONE")) {
       await h.flush();
-      const lines = h.screen().filter((line) => line.includes("💭"));
-      if (lines.length > 1) await h.dump("reasoning");
+      const lines = h.screen().filter(runningThought);
       expect(lines.length, h.screen().join("\n")).toBeLessThanOrEqual(1);
+      if (lines.length) {
+        const line = lines[0]!.trim();
+        frames.add(line[0]!);
+        const sentence = line.replace(/^[·✢✺✶✻✽] Thinking(?:  )?/, "");
+        // The only clipped sentence is the 300-cell x sentence; its prefix
+        // must stay on the LEFT, with a single ellipsis at the end.
+        expect(sentence === "" || completeSentences.includes(sentence) || /^x+…$/.test(sentence), sentence).toBe(true);
+        shown.add(sentence);
+        if (sentence === completeSentences[0]) await h.dump("t23-after-reasoning-running");
+      }
       expect(Date.now()).toBeLessThan(deadline);
       snapshots++;
       await delay(50);
     }
-    await h.dump("reasoning");
-    expect(snapshots).toBeGreaterThan(20);
-    expect(h.screen().join("\n")).toContain("thought for");
+    expect(snapshots).toBeGreaterThan(80);
+    expect(frames.size).toBeGreaterThan(5);
+    expect(shown.has(completeSentences[0]!)).toBe(true);
+    expect([...shown].some(s => /^x+…$/.test(s))).toBe(true);
+    await h.dump("t23-after-reasoning-done");
+    expect(h.screen().join("\n")).toContain("∴ Thought for");
+    await h.waitStable(350, 1000);
   });
 });
 
@@ -79,11 +113,34 @@ test("escape: abort stream within one second and accept another turn", async () 
 test("tool call: read note.txt and send the real tool result back", async () => {
   await scenario("tool-call", [toolScript("read", { file_path: "note.txt" }), textScript("READ_FINISHED")], async (h) => {
     await h.prompt("Read note.txt");
-    await h.waitFor("● read");
-    await h.dump("tool-call-streaming");
+    await h.until(() => h.screen().some(line => /^\s*[·✢✺✶✻✽] read  note.txt/.test(line)));
+    await h.dump("t23-after-tool-running");
+    const frames = new Set<string>();
+    const deadline = Date.now() + 2000;
+    while (!h.screen().join("\n").includes("✓ read")) {
+      await h.flush();
+      const line = h.screen().find(line => /^\s*[·✢✺✶✻✽] read/.test(line));
+      if (line) frames.add(line.trim()[0]!);
+      expect(Date.now()).toBeLessThan(deadline);
+      await delay(50);
+    }
+    expect(frames.size).toBeGreaterThan(1);
     await h.waitFor("✓ read");
     await h.waitFor("READ_FINISHED");
-    await h.dump("tool-call");
+    await h.dump("t23-after-tool-done");
+    expect(h.screen().join("\n")).toContain("✓ read  note.txt");
+    const header = h.screen().findIndex(line => line.includes("✓ read"));
+    expect(h.screen()[header]).toMatch(/^  ✓/);
+    expect(h.screen()[header - 1]?.trim()).toBe("");
+    expect(h.screen()[header + 1]).toMatch(/^    ⎿ /);
+    expect(h.screen().find(line => line.includes("READ_FINISHED"))).toMatch(/^  READ_FINISHED/);
+    const prompt = h.screen().findIndex(line => line.includes("› Read note.txt"));
+    expect(h.screen()[prompt]).toMatch(/^  › /);
+    expect(h.screen()[prompt + 1]?.trim()).toBe("");
+    const answer = h.screen().findIndex(line => line.includes("READ_FINISHED"));
+    expect(h.screen()[answer - 1]?.trim()).toBe("");
+    expect(h.screen()[answer + 1]?.trim()).toBe("");
+    await h.waitStable(350, 1000);
     const requests = h.server.mainRequests();
     expect(requests).toHaveLength(2);
     const result = requests[1]!.body.messages.find((m) => m.role === "tool" && m.tool_call_id === "call_e2e_1");
@@ -91,75 +148,52 @@ test("tool call: read note.txt and send the real tool result back", async () => 
   });
 });
 
-describe("Ask footer label", () => {
-  let h: Harness | undefined;
-  // Setup/cleanup live outside it.fails so infrastructure errors cannot satisfy
-  // the expected product failure.
-  beforeEach(async () => {
-    h = await Harness.start([]);
-    await h.waitFor("e2e-model", 30_000);
-    await h.waitStable(150, 2000);
-  });
-  afterEach(async () => { await h?.close(); h = undefined; });
-
-  // fixed by T23
-  it.fails("always shows the initial ask label", async () => {
-    await h!.dump("ask-label");
-    const footer = h!.screen().find((line) => line.includes("e2e-model"));
-    expect(footer).toMatch(/\bask\b/i);
+it("Ask footer label: always shows dim ask (fixed by T23)", async () => {
+  await scenario("ask-label", [], async (h) => {
+    expect(footer(h)).toMatch(/^ask\b/);
+    expect(footerCell(h, "ask").isDim()).toBeTruthy();
+    await h.dump("t23-after-footer-ask");
   });
 });
 
-test("modes: Tab Plan/Build, Shift+Tab Auto, confirmed red Full access", async () => {
-  await scenario("modes", [], async (h) => {
-    const failures: string[] = [];
-    // Keep exercising later transitions even when an earlier label is broken.
-    const checkpoint = async (name: string, check: () => Promise<void>) => {
-      try { await check(); }
-      catch (error) {
-        failures.push(`${name}: ${String(error)}`);
-        await h.dump(`${name}-failure`);
-        console.error(`CHECKPOINT FAILED: ${name}\n${h.screen().join("\n")}`);
-      }
-      await h.dump(name);
-    };
+test("modes: keys change actual tool permissions as well as colored labels", async () => {
+  await scenario("modes", [
+    toolScript("write", { file_path: "plan.txt", content: "denied" }, "plan_call"), textScript("PLAN_DONE"),
+    toolScript("write", { file_path: "auto.txt", content: "AUTO_WORKS" }, "auto_call"), textScript("AUTO_DONE"),
+    toolScript("write", { file_path: "full.txt", content: "FULL_WORKS" }, "full_call"), textScript("FULL_DONE"),
+  ], async (h) => {
     h.press("tab");
-    await checkpoint("modes-plan", () => h.waitFor("PLAN", 2000));
+    await h.until(() => /^plan  ask\b/.test(footer(h)), 2000, "Plan label");
+    await h.dump("t23-after-footer-plan");
+    await h.prompt("Write plan.txt");
+    await h.waitFor("PLAN_DONE");
+    expect(existsSync(join(h.project, "plan.txt"))).toBe(false);
+    const result = h.server.mainRequests()[1]!.body.messages.find(m => m.role === "tool" && m.tool_call_id === "plan_call");
+    expect(JSON.stringify(result?.content)).toContain("Plan mode is on");
+    await h.dump("t23-after-plan-denies-write");
+    expect(h.exit).toBeUndefined(); // Long denial must not crash the renderer.
     h.press("tab");
-    // Current UI represents Build by removing PLAN rather than a Build badge.
-    await checkpoint("modes-build", () => h.until(() => !h.screen().some((line) => /\bPLAN\b/.test(line)), 2000, "Build (PLAN removed)"));
+    await h.until(() => /^ask\b/.test(footer(h)), 2000, "Build");
     h.press("shiftTab");
-    await checkpoint("modes-auto", async () => {
-      // The context meter's gray '(auto)' is not a permission label.
-      await h.until(() => {
-        const row = h.screen().findIndex((line) => line.includes("e2e-model"));
-        if (row < 0) return false;
-        for (const match of h.screen()[row]!.matchAll(/\bauto\b/gi)) {
-          const cell = h.term.buffer.active.getLine(h.term.buffer.active.viewportY + row)!.getCell(match.index!)!;
-          if (cell.isFgPalette() && cell.getFgColor() === 3) return true;
-        }
-        return false;
-      }, 2000, "yellow Auto permission label");
-    });
+    await h.until(() => /^auto\b/.test(footer(h)), 2000, "Auto");
+    expect(footerCell(h, "auto").getFgColor()).toBe(3);
+    await h.dump("t23-after-footer-auto");
+    await h.prompt("Write auto.txt");
+    await h.waitFor("AUTO_DONE");
+    expect(readFileSync(join(h.project, "auto.txt"), "utf8")).toBe("AUTO_WORKS");
     h.press("shiftTab");
-    await checkpoint("modes-confirmation", async () => {
-      await h.waitFor("Switch to FULL ACCESS?", 2000);
-      expect(h.screen().join("\n")).toContain("Stay in current mode");
-      expect(h.screen().join("\n")).toContain("Yes, grant full access");
-    });
-    h.press("down");
-    await delay(50);
-    h.press("enter");
-    await checkpoint("modes-full", async () => {
-      await h.until(() => !h.screen().join("\n").includes("Switch to FULL ACCESS?") && h.screen().join("\n").includes("FULL ACCESS"), 2000, "confirmed Full access badge");
-      const row = h.screen().findIndex((line) => line.includes("FULL ACCESS"));
-      const column = h.screen()[row]!.indexOf("FULL ACCESS");
-      const cell = h.term.buffer.active.getLine(h.term.buffer.active.viewportY + row)!.getCell(column)!;
-      expect(cell.isFgPalette()).toBeTruthy();
-      expect(cell.getFgColor()).toBe(1);
-    });
-    await h.dump("modes");
-    expect(failures, failures.join("\n")).toEqual([]);
+    await h.waitFor("Switch to FULL ACCESS?");
+    expect(footer(h)).toMatch(/^auto\b/); // Still Auto until confirmed.
+    await h.dump("t23-after-full-confirmation");
+    h.press("down"); await delay(50); h.press("enter");
+    await h.until(() => /^FULL ACCESS\b/.test(footer(h)), 2000, "Full access");
+    expect(footerCell(h, "FULL ACCESS").getFgColor()).toBe(1);
+    expect(footerCell(h, "FULL ACCESS").isBold()).toBeTruthy();
+    await h.dump("t23-after-footer-full");
+    await h.prompt("Write full.txt");
+    await h.waitFor("FULL_DONE");
+    expect(readFileSync(join(h.project, "full.txt"), "utf8")).toBe("FULL_WORKS");
+    await h.dump("t23-after-full-allows-write");
   });
 });
 
@@ -191,20 +225,20 @@ test("keys: ctrl+c clears input and ctrl+d exits successfully", async () => {
 test("resize: 60×20 during reasoning preserves one thought line", async () => {
   await scenario("resize", [reasoning()], async (h) => {
     await h.prompt("Think while the terminal resizes");
-    await h.waitFor("💭");
+    await h.waitFor("Thinking");
     h.resize(60, 20);
     const deadline = Date.now() + 10_000;
     while (!h.screen().join("\n").includes("REASONING_DONE")) {
       await h.flush();
       const lines = h.screen();
       expect(lines).toHaveLength(20);
-      expect(lines.filter((line) => line.includes("💭")).length, lines.join("\n")).toBeLessThanOrEqual(1);
+      expect(lines.filter((line) => runningThought(line)).length, lines.join("\n")).toBeLessThanOrEqual(1);
       expect(lines.every((line) => stringWidth(line) <= 60), lines.join("\n")).toBe(true);
       expect(Date.now()).toBeLessThan(deadline);
       await delay(50);
     }
     await h.dump("resize");
-    expect(h.screen().join("\n")).toContain("thought for");
+    expect(h.screen().join("\n")).toContain("Thought for");
   });
 });
 
@@ -224,4 +258,77 @@ test("approval: Down Down Enter rejects write without creating the file", async 
     expect(existsSync(join(h.project, "rejected.txt"))).toBe(false);
     expect(h.server.mainRequests()[1]!.body.messages.some((m) => m.role === "tool")).toBe(true);
   });
+});
+
+test.each(["reasoning", "tool"] as const)("Escape stops the %s spinner and leaves no live frame", async (kind) => {
+  const script: Script = kind === "reasoning"
+    ? { chunks: [{ delta: { reasoning_content: "Complete sentence. Incomplete" } }], finishDelayMs: 20000 }
+    : { ...toolScript("read", { file_path: "note.txt" }), finishDelayMs: 20000 };
+  await scenario(`cancel-${kind}`, [script], async h => {
+    await h.prompt("Start work");
+    await h.until(() => h.screen().some(line => kind === "reasoning" ? runningThought(line) : /^\s*[·✢✺✶✻✽] read/.test(line)));
+    await delay(300);
+    h.press("escape");
+    await h.until(() => h.server.mainRequests()[0]!.disconnected, 1000, "stream cancelled");
+    await h.waitFor("cancelled");
+    await h.waitStable(350, 1000);
+    expect(h.screen().some(line => /^\s*[·✢✺✶✻✽] (Thinking|read)/.test(line))).toBe(false);
+    await h.dump(`t23-after-cancel-${kind}`);
+  });
+});
+
+test("tool error stops its spinner and renders a red failure marker", async () => {
+  await scenario("tool-error", [toolScript("read", { file_path: "absent.txt" }), textScript("ERROR_HANDLED")], async h => {
+    await h.prompt("Read absent.txt");
+    await h.waitFor("ERROR_HANDLED");
+    const row = h.screen().findIndex(line => line.includes("✗ read"));
+    expect(row).toBeGreaterThanOrEqual(0);
+    const cell = h.term.buffer.active.getLine(h.term.buffer.active.viewportY + row)!.getCell(2)!;
+    expect(cell.getFgColor()).toBe(1);
+    expect(h.screen().some(line => /^\s*[·✢✺✶✻✽] read/.test(line))).toBe(false);
+    await h.waitStable(350, 1000);
+    await h.dump("t23-after-tool-error");
+  });
+});
+
+test("strict no-emoji check covers streamed reasoning, assistant text and user echo", async () => {
+  await scenario("no-emoji", [{ chunks: [
+    { delta: { reasoning_content: "🙂 Finished idea. " }, delayMs: 100 },
+    { delta: { content: "🙂 Answer without pictographs ⚡." }, delayMs: 400 },
+  ] }], async h => {
+    h.type("User 🙂 prompt");
+    await h.waitFor("User  prompt");
+    h.press("enter");
+    await h.waitFor("Answer without pictographs");
+    await h.waitStable(250, 1000);
+    expect(h.screen().join("\n")).not.toMatch(/\p{Extended_Pictographic}/u);
+    expect(h.emojiScreens).toEqual([]);
+    await h.dump("t23-after-no-emoji");
+  });
+});
+
+test("ASCII fallback animates with - backslash bar slash and finishes without Unicode icons", async () => {
+  await scenario("ascii", [{ chunks: [
+    { delta: { reasoning_content: "Finished sentence. partial" }, delayMs: 100 },
+    { delta: { content: "ASCII_DONE" }, delayMs: 1000 },
+  ] }, toolScript("read", { file_path: "note.txt" }), textScript("ASCII_READ_DONE")], async h => {
+    await h.prompt("Think in ASCII");
+    await h.waitFor("Thinking");
+    const frames = new Set<string>();
+    const deadline = Date.now() + 4000;
+    while (!h.screen().join("\n").includes("ASCII_DONE")) {
+      await h.flush();
+      const line = h.screen().find(line => /Thinking/.test(line));
+      if (line) frames.add(line.trim()[0]!);
+      expect(Date.now()).toBeLessThan(deadline);
+      await delay(50);
+    }
+    expect([...frames].sort()).toEqual(["-", "\\", "|", "/"].sort());
+    expect(h.screen().join("\n")).toContain("* Thought for");
+    await h.prompt("Read note.txt");
+    await h.waitFor("ASCII_READ_DONE");
+    expect(h.screen().join("\n")).toContain("v read  note.txt");
+    expect(h.screen().join("\n")).not.toMatch(/[∴✓✗✢✺✶✻✽⎿›]/);
+    await h.dump("t23-after-ascii");
+  }, true);
 });

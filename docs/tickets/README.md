@@ -29,4 +29,6 @@ You are implementing one ticket of the kumo project.
 | T08 | Render plugin (wiring) | T04 T05 T06 T07 |
 | T09 | Approval plugin | T07 |
 | T10 | Simple setup | T03 |
-| T11 | Review fixes (key echo, --help, bundle link) | T10 |
+| T11 | Review fixes (key echo, --help, bundle link, server address) | T10 |
+| **T12** | **HOTFIX reasoning lines stacking** | T04 |
+| T13a-d | UI rebuilt on pi-tui (pi look, Escape, markdown, footer) | T12 |

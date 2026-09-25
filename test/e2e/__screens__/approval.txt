@@ -1,0 +1,30 @@
+ kumo v0.0.1                                                                                        
+ escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
+
+  › Write rejected.txt                                                                            
+
+  ✗ write  rejected.txt  1.1s
+    ⎿ Error: the user rejected tool "write"
+
+  WRITE_REJECTED                                                                                  
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ask  0.0%/262k (auto)  (local) e2e-model · off
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

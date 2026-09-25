@@ -1,0 +1,30 @@
+ kumo v0.0.1                                                                                        
+ escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
+
+  › Plan mode is on: do not modify files or run modifying commands.                               
+
+  › Write plan.txt                                                                                
+
+  ✗ write  plan.txt  1.0s
+    ⎿ Error: Plan mode is on: do not modify files or run modifying commands. Press Tab (or /plan …
+
+  PLAN_DONE                                                                                       
+
+  › Plan mode is off.                                                                             
+           Switch to FULL ACCESS? kumo will stop asking before commands run.                        
+  › Write → Stay in current mode                                                                    
+            Yes, grant full access                                                                  
+  ✓ write  auto.txt  1.0s
+    ⎿ <path>/tmp/kumo-e2e-project-8slOAq/auto.txt</path>
+      <type>file</type>
+      <content>
+      Created file
+      </content>
+
+  AUTO_DONE                                                                                       
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+auto  0.0%/262k (auto)  (local) e2e-model · off
+

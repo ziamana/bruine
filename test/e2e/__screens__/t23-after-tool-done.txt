@@ -1,0 +1,30 @@
+ kumo v0.0.1                                                                                        
+ escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
+
+  › Read note.txt                                                                                 
+
+  ✓ read  note.txt  1.0s
+    ⎿ <path>/tmp/kumo-e2e-project-0fkrka/note.txt</path>
+      <type>file</type>
+      <content>
+      1: E2E_READ_SENTINEL
+      
+      … 2 more lines
+
+  READ_FINISHED                                                                                   
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ask  0.0%/262k (auto)  (local) e2e-model · off
+
+
+
+
+
+
+
+
+
+
+

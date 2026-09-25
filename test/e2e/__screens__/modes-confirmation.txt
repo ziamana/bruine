@@ -1,0 +1,30 @@
+ kumo v0.0.1                                                                                        
+ escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+0%/— (auto)                                                                  (local) e2e-model • off
+
+
+
+
+
+
+
+           Switch to FULL ACCESS? kumo will stop asking before commands run.                        
+          → Stay in current mode                                                                    
+            Yes, grant full access                                                                  
+
+
+
+
+
+
+
+
+
+
+
+
+
+

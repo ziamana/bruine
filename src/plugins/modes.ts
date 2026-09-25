@@ -112,8 +112,8 @@ export class Modes implements KumoModesService {
 
   describe(): { plan: boolean; permission: PermissionMode; badges: string[] } {
     const badges: string[] = [];
-    if (this.plan) badges.push("PLAN");
-    if (this.permission === "full") badges.push("FULL ACCESS");
+    if (this.plan) badges.push("plan");
+    badges.push(this.permission === "full" ? "FULL ACCESS" : this.permission);
     return { plan: this.plan, permission: this.permission, badges };
   }
 
@@ -176,9 +176,12 @@ export function apply(ctx: DshContext): void {
         );
         return choice === 1;
       });
-      modes.onChange(() => {
-        repl?.ui?.footer.set({ badges: modes.describe().badges });
-      });
+      const refreshFooter = () => {
+        ui.footer.set({ badges: modes.describe().badges });
+        ui.requestRender();
+      };
+      modes.onChange(refreshFooter);
+      refreshFooter();
       // Plan toggles append a message to the model context (cache rule: the
       // system prompt and tools never change).
       modes.announce = (text) => {

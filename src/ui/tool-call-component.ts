@@ -1,69 +1,49 @@
 import type { Component } from "@earendil-works/pi-tui";
-import { truncateToWidth } from "@earendil-works/pi-tui";
-import { dim } from "../render/reasoning.js";
+import { clipCells, dim, sanitize, spinnerFrame } from "../render/reasoning.js";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
-import { toolSummary } from "../render/tools.js";
+import { ansi } from "./theme.js";
 
+const SUMMARY_KEYS = ["command", "cmd", "path", "file_path", "url", "query", "pattern"];
 const MAX_OUTPUT_LINES = 5;
 
-/**
- * One tool call as a pi-tui component (T13c): the header fills in while
- * arguments stream, then the result line plus a short output preview stay
- * in the transcript (logic shared with the screen ToolCallView).
- */
 export class ToolCallComponent implements Component {
-  readonly tool: string;
   #rawArgs = "";
   #startTime: number;
-  #now: () => number;
-  #icons: KumoIcons;
   #done: { ok: boolean; seconds: number; lines: string[]; rest: number } | undefined;
-
-  constructor(
-    tool: string,
-    now: () => number = Date.now,
-    icons: KumoIcons = kumoIcons(),
-  ) {
-    this.tool = tool;
-    this.#now = now;
-    this.#icons = icons;
+  constructor(readonly tool: string, private now: () => number = Date.now, private icons: KumoIcons = kumoIcons()) {
     this.#startTime = now();
   }
-
-  args(jsonDelta: string): void {
-    this.#rawArgs += jsonDelta;
-  }
-
+  get active(): boolean { return this.#done === undefined; }
+  args(delta: string): void { this.#rawArgs += delta; }
+  /** The durable event replaces streamed JSON, it must never be appended twice. */
+  setArgs(json: string): void { this.#rawArgs = json; }
   result(ok: boolean, output: string): void {
-    const seconds = (this.#now() - this.#startTime) / 1000;
-    const lines = output.split("\n");
-    if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-    const shown = lines.slice(0, MAX_OUTPUT_LINES);
-    this.#done = { ok, seconds, lines: shown, rest: lines.length - shown.length };
+    const lines = sanitize(output).split("\n");
+    if (lines.at(-1) === "") lines.pop();
+    this.#done = { ok, seconds: (this.now() - this.#startTime) / 1000, lines: lines.slice(0, MAX_OUTPUT_LINES), rest: Math.max(0, lines.length - MAX_OUTPUT_LINES) };
   }
-
-  /** Current summary, for the approval prompt. */
-  summary(width = 80): string {
-    return toolSummary(this.#rawArgs, this.tool, width);
+  cancel(): void { if (this.active) this.result(false, "Cancelled"); }
+  summary(width = 60): string {
+    if (!this.#rawArgs) return "";
+    try {
+      const parsed: unknown = JSON.parse(this.#rawArgs);
+      const obj = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
+      const key = obj && SUMMARY_KEYS.find((k) => k in obj);
+      const text = key ? String(obj![key]) : JSON.stringify(parsed);
+      return clipCells(sanitize(text).replace(/\n/g, " "), Math.min(60, width), this.icons.think === "*" ? "..." : "…");
+    } catch { return this.icons.think === "*" ? "..." : "…"; }
   }
-
   render(width: number): string[] {
-    const summary = this.summary(width);
-    if (this.#done === undefined) {
-      return [truncateToWidth(`${this.#icons.bullet} ${this.tool}  ${summary}`, width)];
-    }
-    const mark = this.#done.ok ? this.#icons.ok : this.#icons.fail;
-    const head =
-      `${mark} ${this.tool}` +
-      (summary !== "" ? `  ${summary}` : "") +
-      `  ${this.#done.seconds.toFixed(1)}s`;
-    const out = [truncateToWidth(head, width)];
-    for (const line of this.#done.lines) out.push(dim(`    ${line}`));
-    if (this.#done.rest > 0) out.push(dim(`    … ${this.#done.rest} more lines`));
+    const summary = this.summary();
+    const detail = summary ? `  ${summary}` : "";
+    if (!this.#done) return [clipCells(`${spinnerFrame(this.now() - this.#startTime, this.icons)} ${this.tool}${detail}`, width)];
+    const mark = this.#done.ok ? ansi.green(this.icons.ok) : ansi.red(this.icons.fail);
+    const tail = clipCells(` ${this.tool}${detail}  ${this.#done.seconds.toFixed(1)}s`, Math.max(0, width - 1));
+    const out = [width > 0 ? mark + tail : ""];
+    const branch = this.icons.think === "*" ? ">" : "⎿";
+    this.#done.lines.forEach((line, i) => out.push(dim(clipCells(`${i === 0 ? `  ${branch} ` : "    "}${line}`, width))));
+    if (this.#done.rest > 0) out.push(dim(clipCells(`    ${this.icons.think === "*" ? "..." : "…"} ${this.#done.rest} more lines`, width)));
     return out;
   }
-
-  invalidate(): void {
-    // Stateless render.
-  }
+  invalidate(): void {}
 }

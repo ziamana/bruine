@@ -1,0 +1,30 @@
+ kumo v0.0.1                                                                                        
+ escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
+
+  › Think through the problem                                                                     
+
+  ✢ Thinking  Use 3.5, e.g. this example, i.e. one value.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ask  0%/— (auto)  (local) e2e-model · off
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,148 +1,89 @@
 import stringWidth from "string-width";
 import { describe, expect, test } from "vitest";
-import { ReasoningLine } from "../src/render/reasoning.js";
-import { UNICODE_ICONS } from "../src/render/chars.js";
+import { clipCells, ReasoningLine, splitReasoningSegments, SPINNER_FRAMES, ASCII_SPINNER_FRAMES } from "../src/render/reasoning.js";
+import { ASCII_ICONS, UNICODE_ICONS } from "../src/render/chars.js";
 import { FakeScreen, strip } from "./fakes.js";
 
-function fakeClock(start: number) {
-  let t = start;
-  return {
-    now: () => t,
-    set: (v: number) => {
-      t = v;
-    },
-  };
+function sentences(...chunks: string[]) {
+  let state = { current: "", lastFinished: "", finishedAny: false };
+  return chunks.map(chunk => state = splitReasoningSegments(state.current, state.lastFinished, chunk));
 }
+describe("complete reasoning sentences", () => {
+  test("buffers incomplete tokens and publishes an entire sentence at once", () => {
+    const states = sentences("Let me", " check", ".", " Next partial");
+    expect(states.slice(0, 3).map(s => s.lastFinished)).toEqual(["", "", ""]);
+    expect(states[3]).toEqual({ current: "Next partial", lastFinished: "Let me check.", finishedAny: true });
+  });
+  test.each([".", "!", "?", "…"])("%s followed by space completes a sentence", mark => {
+    expect(sentences(`One${mark} Two`).at(-1)?.lastFinished).toBe(`One${mark}`);
+  });
+  test("newlines complete the accumulated sentence, empty lines don't erase it", () => {
+    expect(sentences("first half", " second half\n\nunfinished").at(-1)).toEqual({ current: "unfinished", lastFinished: "first half second half", finishedAny: true });
+  });
+  test("keeps only the LAST complete sentence and hides its partial successor", () => {
+    expect(sentences("First. Second! Third? incomplete").at(-1)?.lastFinished).toBe("Third?");
+  });
+  test("does not split decimals, e.g., or i.e., even at chunk boundaries", () => {
+    const states = sentences("Use 3.", "5, e.g.", " this, i.e.", " that. ");
+    expect(states.slice(0, 3).map(s => s.lastFinished)).toEqual(["", "", ""]);
+    expect(states.at(-1)?.lastFinished).toBe("Use 3.5, e.g. this, i.e. that.");
+  });
+  test("removes emoji and terminal control characters from display text", () => {
+    expect(sentences("🙂漢字\tcheck\n")[0]?.lastFinished).toBe("漢字 check");
+  });
+  test("clips the END by display cells, preserves grapheme clusters", () => {
+    const text = "開始e\u0301".repeat(20);
+    const clipped = clipCells(text, 20);
+    expect(clipped.startsWith("開始e\u0301")).toBe(true);
+    expect(clipped.endsWith("…")).toBe(true);
+    expect(stringWidth(clipped)).toBeLessThanOrEqual(20);
+    expect(clipCells(text, 0)).toBe("");
+    expect(clipCells(text, 1)).toBe("…");
+  });
+  test("every required spinner frame passes the strict Unicode property check", () => {
+    expect(SPINNER_FRAMES.join(" ")).toBe("· ✢ ✺ ✶ ✻ ✽ ✻ ✶ ✺ ✢");
+    expect(SPINNER_FRAMES.join("")).not.toMatch(/\p{Extended_Pictographic}/u);
+    expect(ASCII_SPINNER_FRAMES).toEqual(["-", "\\", "|", "/"]);
+  });
+});
 
 describe("ReasoningLine", () => {
-  test("1. deltas accumulate on one line", () => {
+  test("shows Thinking alone before the first completed sentence", () => {
     const s = new FakeScreen();
-    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
-    r.push("Let me");
-    r.push(" check");
-    expect(s.last).toContain("💭 Let me check");
+    const r = new ReasoningLine(s, () => 0, UNICODE_ICONS);
+    r.push("unfinished");
+    expect(strip(s.last)).toBe("· Thinking");
     expect(r.active).toBe(true);
   });
-
-  test("2. a newline finishes the line; only the new one shows", () => {
+  test("shows complete sentences without stacking, then a fixed duration", () => {
     const s = new FakeScreen();
-    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
-    r.push("line one\nline t");
-    expect(s.last).toContain("💭 line t");
-    expect(s.last).not.toContain("line one");
-  });
-
-  test("3. after a trailing newline the finished line stays visible", () => {
-    const s = new FakeScreen();
-    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
-    r.push("done\n");
-    expect(s.last).toContain("💭 done");
-  });
-
-  test("4. long lines are truncated to columns, keeping the tail", () => {
-    const s = new FakeScreen();
-    s.columns = 20;
-    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
-    r.push("x".repeat(50));
-    const text = strip(s.last).replace("💭 ", "");
-    expect(text.length).toBeLessThanOrEqual(16);
-    expect(text.startsWith("…")).toBe(true);
-  });
-
-  test("5. end() shows the elapsed time with one decimal", () => {
-    const s = new FakeScreen();
-    const clock = fakeClock(1000);
-    const r = new ReasoningLine(s, clock.now, UNICODE_ICONS);
-    r.push("thinking");
-    clock.set(5200);
+    let time = 0;
+    const r = new ReasoningLine(s, () => time, UNICODE_ICONS);
+    for (const chunk of ["One", ". ", "Next\n\n", "partial"]) r.push(chunk);
+    expect(strip(s.last)).toBe("· Thinking  Next");
+    expect(s.writes.every(w => !w.includes("\n"))).toBe(true);
+    time = 4200;
     r.end();
-    expect(s.last).toContain("💭 thought for 4.2s");
-    expect(s.last.endsWith("\n")).toBe(true);
+    expect(strip(s.last)).toBe("∴ Thought for 4.2s\n");
     expect(r.active).toBe(false);
-  });
-
-  test("6. end() without any push writes nothing", () => {
-    const s = new FakeScreen();
-    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
+    const count = s.writes.length;
     r.end();
+    expect(s.writes).toHaveLength(count);
+  });
+  test("empty inputs/end do not draw, redraws are dim and guard autowrap", () => {
+    const s = new FakeScreen();
+    const r = new ReasoningLine(s, () => 0, UNICODE_ICONS);
+    r.push(""); r.end();
     expect(s.writes).toHaveLength(0);
+    r.push("x");
+    expect(s.last).toContain("\r\x1b[2K\x1b[?7l\x1b[2m");
+    expect(s.last).toContain("\x1b[22m\x1b[?7h");
   });
-
-  test("empty push writes nothing", () => {
-    const s = new FakeScreen();
-    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
-    r.push("");
-    expect(s.writes).toHaveLength(0);
-    expect(r.active).toBe(false);
-  });
-
-  test("every redraw clears the line, is dim and guards autowrap", () => {
-    const s = new FakeScreen();
-    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
-    r.push("hi");
-    expect(s.last.startsWith("\r\x1b[2K")).toBe(true);
-    expect(s.last).toContain("\x1b[2m");
-    expect(s.last).toContain("\x1b[22m");
-    expect(s.last).toContain("\x1b[?7l");
-    expect(s.last).toContain("\x1b[?7h");
-  });
-
-  // T12 — stacking hotfix acceptance
-
-  test("T12.1 paragraph break: no write ever contains a raw newline", () => {
-    const s = new FakeScreen();
-    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
-    r.push("a\n\nb");
-    expect(s.writes.every((w) => !w.includes("\n"))).toBe(true);
-    expect(strip(s.last)).toBe("💭 b");
-  });
-
-  test("T12.2 trailing blank segments keep the last finished line", () => {
-    const s = new FakeScreen();
-    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
-    r.push("first\n\n");
-    expect(s.writes.every((w) => !w.includes("\n"))).toBe(true);
-    expect(strip(s.last)).toBe("💭 first");
-  });
-
-  test("T12.3 control characters are sanitized to spaces", () => {
-    const s = new FakeScreen();
-    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
-    r.push("x\ty\rz");
-    expect(strip(s.last)).toBe("💭 x y z");
-  });
-
-  test("T12.4 emoji/CJK width is measured in display cells", () => {
-    const s = new FakeScreen();
-    s.columns = 20;
-    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
-    r.push("😀".repeat(10) + "あ".repeat(10) + "abc");
-    expect(stringWidth(strip(s.last))).toBeLessThanOrEqual(19);
-    expect(strip(s.last).startsWith("💭 ")).toBe(true);
-  });
-
-  test("T12.5 scripted 30-delta stream: the only newline comes from end()", () => {
-    const s = new FakeScreen();
-    const r = new ReasoningLine(s, Date.now, UNICODE_ICONS);
-    const deltas = [
-      "Let me ",
-      "think\n",
-      "about\n\n",
-      "this",
-      " paragraph\nbreaks\n",
-      "\n",
-      "a new",
-      " start\n",
-      "line one\nline two\nline three",
-      " more\n\n\n",
-      ...Array.from({ length: 20 }, (_, i) => `seg${i % 3} `),
-      "end\n",
-    ];
-    expect(deltas.length).toBeGreaterThanOrEqual(30);
-    for (const d of deltas) r.push(d);
-    expect(s.writes.every((w) => !w.includes("\n"))).toBe(true);
-    r.end();
-    expect(s.writes.filter((w) => w.includes("\n"))).toHaveLength(1);
-    expect(strip(s.writes[s.writes.length - 1]).endsWith("thought for 0.0s\n")).toBe(true);
+  test("ASCII fallback stays ASCII, including truncation", () => {
+    const s = new FakeScreen(); s.columns = 25;
+    const r = new ReasoningLine(s, () => 0, ASCII_ICONS);
+    r.push("x".repeat(100) + "\n");
+    expect(strip(s.last)).toBe("- Thinking  xxxxxxxxx...");
+    expect(strip(s.last)).not.toMatch(/[^\x00-\x7f]/);
   });
 });

@@ -1,0 +1,30 @@
+ kumo v0.0.1                                                                                        
+ escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
+
+  › Plan mode is on: do not modify files or run modifying commands.                               
+
+  › Write plan.txt                                                                                
+
+  ✗ write  plan.txt  1.0s
+    ⎿ Error: Plan mode is on: do not modify files or run modifying commands. Press Tab (or /plan …
+
+  PLAN_DONE                                                                                       
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+plan  ask  0.0%/262k (auto)  (local) e2e-model · off
+
+
+
+
+
+
+
+
+
+
+
+
+
+

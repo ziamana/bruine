@@ -14,6 +14,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi, editorTheme, selectListTheme } from "./theme.js";
+import { ChatTranscript, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
 
 export interface KumoUiHandlers {
@@ -63,6 +64,8 @@ export class KumoUi {
   readonly footer: FooterComponent;
   readonly icons: KumoIcons;
   #lastCtrlC = 0;
+  #animation: ReturnType<typeof setInterval> | undefined;
+  #closed = false;
 
   constructor(
     version: string,
@@ -81,23 +84,26 @@ export class KumoUi {
       1,
       0,
     );
-    this.chat = new Container();
-    this.editor = new Editor(this.tui, editorTheme);
+    this.chat = new ChatTranscript();
+    this.editor = new PlainGlyphEditor(this.tui, editorTheme);
     this.editor.onSubmit = (text) => handlers.onSubmit(text);
     this.footer = new FooterComponent(icons);
 
     this.tui.addChild(header);
     this.tui.addChild(this.chat);
+    this.tui.addChild({ render: () => [""], invalidate: () => {} });
     this.tui.addChild(this.editor);
     this.tui.addChild(this.footer);
 
     this.tui.addInputListener((data: string) => {
       if (handlers.onTab !== undefined && matchesKey(data, "tab")) {
         handlers.onTab();
+        this.requestRender();
         return { consume: true };
       }
       if (handlers.onShiftTab !== undefined && matchesKey(data, "shift+tab")) {
         handlers.onShiftTab();
+        this.requestRender();
         return { consume: true };
       }
       if (matchesKey(data, "escape")) {
@@ -110,6 +116,7 @@ export class KumoUi {
           handlers.onQuit();
         } else {
           this.editor.setText("");
+          this.requestRender();
         }
         this.#lastCtrlC = now;
         return { consume: true };
@@ -130,7 +137,16 @@ export class KumoUi {
   }
 
   requestRender(): void {
+    if (this.#closed) return;
     this.tui.requestRender();
+    const active = this.chat.children.some((c) => (c as Component & { active?: boolean }).active);
+    if (active && this.#animation === undefined) {
+      this.#animation = setInterval(() => this.requestRender(), 100);
+      this.#animation.unref();
+    } else if (!active && this.#animation !== undefined) {
+      clearInterval(this.#animation);
+      this.#animation = undefined;
+    }
   }
 
   addChat(component: Component): void {
@@ -140,6 +156,7 @@ export class KumoUi {
 
   removeChat(component: Component): void {
     this.chat.removeChild(component);
+    this.requestRender();
   }
 
   rememberHistory(text: string): void {
@@ -171,6 +188,9 @@ export class KumoUi {
 
   /** Graceful shutdown: drain pending key-release bytes, then stop. */
   async shutdown(): Promise<void> {
+    this.#closed = true;
+    clearInterval(this.#animation);
+    this.#animation = undefined;
     try {
       await this.terminal.drainInput(300, 50);
     } catch {

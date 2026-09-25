@@ -1,0 +1,30 @@
+    … 2 more lines
+ READ_DONE                                                                                          
+ │ Plan mode is on: do not modify files or run modifying commands.                                  
+ │ Write plan-denied.txt                                                                            
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+0.0%/262k (auto)                                                       PLAN  (local) e2e-model • off
+
+
+file://~/projets/kumo-e2e/node_modules/.pnpm/@earendil-works+pi-tui@0.85.1/node_modules/@ea
+rendil-works/pi-tui/dist/tui-main-screen.js:492
+                throw new Error(errorMsg);
+                ^
+
+Error: Rendered line 7 exceeds terminal width (119 > 100).
+
+This is likely caused by a custom TUI component not truncating its output.
+Use visibleWidth() to measure and truncateToWidth() to truncate lines.
+
+Debug log written to: /tmp/pi-tui-crash.log
+    at TuiMainScreen.doRender (file://~/projets/kumo-e2e/node_modules/.pnpm/@earendil-works
++pi-tui@0.85.1/node_modules/@earendil-works/pi-tui/dist/tui-main-screen.js:492:23)
+    at Timeout._onTimeout (file://~/projets/kumo-e2e/node_modules/.pnpm/@earendil-works+pi-
+tui@0.85.1/node_modules/@earendil-works/pi-tui/dist/tui.js:649:18)
+    at listOnTimeout (node:internal/timers:685:17)
+    at process.processTimers (node:internal/timers:618:7)
+
+Node.js v26.8.1
+

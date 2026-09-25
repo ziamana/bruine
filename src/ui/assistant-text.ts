@@ -1,4 +1,6 @@
-import { Markdown, type Component } from "@earendil-works/pi-tui";
+import { Markdown, Text, type Component } from "@earendil-works/pi-tui";
+import { kumoIcons, withoutEmoji } from "../render/chars.js";
+import { dim } from "../render/reasoning.js";
 import { markdownTheme } from "./theme.js";
 
 /**
@@ -11,17 +13,17 @@ export class AssistantTextComponent implements Component {
   #text = "";
 
   constructor() {
-    this.#md = new Markdown("", 1, 0, markdownTheme);
+    this.#md = new Markdown("", 0, 0, markdownTheme);
   }
 
   push(delta: string): void {
     this.#text += delta;
-    this.#md.setText(this.#text);
+    this.#md.setText(withoutEmoji(this.#text));
   }
 
   finish(): void {
     // Markdown holds the full text already; kept explicit for readability.
-    this.#md.setText(this.#text);
+    this.#md.setText(withoutEmoji(this.#text));
   }
 
   render(width: number): string[] {
@@ -35,5 +37,5 @@ export class AssistantTextComponent implements Component {
 
 /** A finished user message, echoed dimmed into the transcript. */
 export function userMessageComponent(text: string): Component {
-  return new Markdown(`> ${text}`, 1, 0, markdownTheme);
+  return new Text(`${dim(kumoIcons().prompt)} ${withoutEmoji(text)}`, 0, 0);
 }

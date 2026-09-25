@@ -12,12 +12,12 @@ export interface KumoIcons {
 }
 
 export const UNICODE_ICONS: KumoIcons = {
-  think: "💭",
+  think: "∴",
   prompt: "›",
   ok: "✓",
   fail: "✗",
   bullet: "●",
-  spark: "⚡",
+  spark: "",
 };
 
 export const ASCII_ICONS: KumoIcons = {
@@ -51,4 +51,9 @@ let cached: KumoIcons | undefined;
 export function kumoIcons(): KumoIcons {
   if (cached === undefined) cached = iconsFor();
   return cached;
+}
+
+/** Display policy only: never mutate messages sent to the model. */
+export function withoutEmoji(text: string): string {
+  return text.replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\uFE0F\u200D]/gu, "");
 }

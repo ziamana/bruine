@@ -1,5 +1,6 @@
 import { Text, type Terminal } from "@earendil-works/pi-tui";
-import { describe, expect, test } from "vitest";
+import stringWidth from "string-width";
+import { describe, expect, test, vi } from "vitest";
 import { KumoUi } from "../src/ui/kumo-ui.js";
 import { ReasoningComponent } from "../src/ui/reasoning-component.js";
 import { ToolCallComponent } from "../src/ui/tool-call-component.js";
@@ -41,7 +42,7 @@ describe("ReasoningComponent (T13b)", () => {
     r.push("thinking\n\nabout\nthis");
     const lines = r.render(40);
     expect(lines).toHaveLength(1);
-    expect(strip(lines[0])).toBe("💭 this");
+    expect(strip(lines[0])).toBe("· Thinking  about");
   });
 
   test("collapses to 'thought for Xs' after end()", () => {
@@ -52,7 +53,7 @@ describe("ReasoningComponent (T13b)", () => {
     r.end();
     const lines = r.render(40);
     expect(lines).toHaveLength(1);
-    expect(strip(lines[0])).toBe("💭 thought for 2.2s");
+    expect(strip(lines[0])).toBe("∴ Thought for 2.2s");
   });
 
   test("renders nothing before the first push", () => {
@@ -74,13 +75,13 @@ describe("ReasoningComponent (T13b)", () => {
 describe("ToolCallComponent (T13c)", () => {
   test("streams one header line, then result + preview", () => {
     const t = new ToolCallComponent("bash", () => 0, UNICODE_ICONS);
-    expect(strip(t.render(60)[0])).toBe("● bash  ");
+    expect(strip(t.render(60)[0])).toBe("· bash");
     t.args('{"command":"ls -la"}');
-    expect(strip(t.render(60)[0])).toBe("● bash  ls -la");
+    expect(strip(t.render(60)[0])).toBe("· bash  ls -la");
     t.result(true, "a\nb");
     const lines = t.render(60).map(strip);
     expect(lines[0]).toBe("✓ bash  ls -la  0.0s");
-    expect(lines[1].trim()).toBe("a");
+    expect(lines[1].trim()).toBe("⎿ a");
     expect(lines[2].trim()).toBe("b");
   });
 
@@ -136,8 +137,8 @@ describe("FooterComponent (T13d)", () => {
     });
     const lines = f.render(80).map(strip);
     expect(lines[0]).toContain("12.3%/131k (auto)");
-    expect(lines[0]).toContain("(local) Ornith 1.5 9B • low");
-    expect(lines[1]).toContain("⚡ TPS: 55.9");
+    expect(lines[0]).toContain("(local) Ornith 1.5 9B · low");
+    expect(lines[1]).toContain("TPS: 55.9");
   });
 
   test("renders placeholder state", () => {
@@ -251,9 +252,9 @@ describe("attachTui wiring", () => {
     const { chats, stream } = setup();
     stream({ type: "reasoning-delta", text: "one\n\ntwo" });
     expect(chats).toHaveLength(1);
-    expect(rendered(chats[0])).toBe("💭 two");
+    expect(rendered(chats[0])).toBe("· Thinking  one");
     stream({ type: "block-end", block: { type: "reasoning", text: "x" } });
-    expect(rendered(chats[0])).toMatch(/💭 thought for/);
+    expect(rendered(chats[0])).toMatch(/∴ Thought for/);
   });
 
   test("text deltas render markdown", () => {
@@ -266,7 +267,7 @@ describe("attachTui wiring", () => {
   test("tool stream + durable result", () => {
     const { chats, stream, event, service } = setup();
     stream({ type: "tool-call-delta", id: "t1", name: "bash", argumentsDelta: '{"command":"ls"}' });
-    expect(rendered(chats[0])).toContain("● bash");
+    expect(rendered(chats[0])).toContain("· bash");
     expect(service.describe?.("t1")).toEqual({ tool: "bash", summary: "ls" });
     event("tool/result", {
       turn: 1,
@@ -303,5 +304,60 @@ describe("attachTui wiring", () => {
       frame: { type: "chunk", chunk: { type: "reasoning-delta", text: "no" } },
     });
     expect(chats).toHaveLength(0);
+  });
+});
+
+describe("T23 regressions", () => {
+  test("streamed arguments are replaced by durable arguments, not concatenated", () => {
+    const fake = fakeCtx();
+    const chats: any[] = [];
+    const session = {};
+    const agent = { session };
+    const ui = { icons: UNICODE_ICONS, addChat: (c: any) => chats.push(c), requestRender: () => {}, footer: { set: () => {} } };
+    const detach = attachTui(fake.ctx as any, agent, ui as any, {});
+    fake.emit("agent/assistant-stream", { agent, frame: { type: "chunk", chunk: { type: "tool-call-delta", id: "1", name: "read", argumentsDelta: '{"file_path":"note.txt"}' } } });
+    fake.emit("session/event", session, { type: "tool/call", data: { callId: "1", name: "read", arguments: '{"file_path":"note.txt"}' } });
+    expect(chats[0].summary()).toBe("note.txt");
+    detach();
+    expect(chats[0].active).toBe(false);
+  });
+  test("tool output and CJK summaries never exceed their cell budgets", () => {
+    const tool = new ToolCallComponent("read", () => 0, UNICODE_ICONS);
+    tool.setArgs(JSON.stringify({ file_path: "漢字".repeat(100) }));
+    expect(tool.summary()).toMatch(/^漢字.*…$/);
+    tool.result(false, "denied ".repeat(100));
+    for (const width of [20, 60, 100]) {
+      for (const line of tool.render(width)) expect(stringWidth(strip(line))).toBeLessThanOrEqual(width);
+    }
+  });
+  test("reasoning animation changes frames without exposing partial sentences", () => {
+    let time = 0;
+    const r = new ReasoningComponent(() => time, UNICODE_ICONS);
+    r.push("Completed. Incomplete");
+    const first = strip(r.render(80)[0]);
+    time = 100;
+    expect(strip(r.render(80)[0])).toBe("✢ Thinking  Completed.");
+    expect(first).toBe("· Thinking  Completed.");
+    r.end();
+    const done = r.render(80);
+    time = 2000;
+    expect(r.render(80)).toEqual(done);
+  });
+  test("consumed key handlers request redraw and bypass editor input", async () => {
+    const terminal = new FakeTerminal();
+    const tab = vi.fn(); const shiftTab = vi.fn();
+    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {}, onTab: tab, onShiftTab: shiftTab }, terminal, UNICODE_ICONS);
+    const render = vi.spyOn(ui, "requestRender");
+    ui.start();
+    terminal.onInput?.("abc");
+    terminal.onInput?.("\t");
+    terminal.onInput?.("\x1b[Z");
+    expect(tab).toHaveBeenCalledOnce();
+    expect(shiftTab).toHaveBeenCalledOnce();
+    expect(ui.editor.getText()).toBe("abc");
+    terminal.onInput?.("\x03");
+    expect(ui.editor.getText()).toBe("");
+    expect(render).toHaveBeenCalledTimes(3);
+    await ui.shutdown();
   });
 });

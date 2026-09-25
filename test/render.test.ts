@@ -21,14 +21,14 @@ describe("render plugin", () => {
     const { screen, frame } = setup();
     frame({ type: "reasoning-delta", text: "Let me" });
     frame({ type: "reasoning-delta", text: " think" });
-    expect(strip(screen.last)).toBe("💭 Let me think");
+    expect(strip(screen.last)).toBe("· Thinking");
   });
 
   test("block-end of reasoning writes the thought line", () => {
     const { screen, frame } = setup();
     frame({ type: "reasoning-delta", text: "hmm" });
     frame({ type: "block-end", block: { type: "reasoning", text: "hmm" } });
-    expect(strip(screen.last)).toMatch(/^💭 thought for \d+\.\ds\n$/);
+    expect(strip(screen.last)).toMatch(/^∴ Thought for \d+\.\ds\n$/);
   });
 
   test("text deltas stream and block-end closes with one newline", () => {
@@ -43,7 +43,7 @@ describe("render plugin", () => {
     const { screen, frame } = setup();
     frame({ type: "reasoning-delta", text: "hmm" });
     frame({ type: "block-start", blockType: "text", index: 1 });
-    expect(strip(screen.last)).toMatch(/^💭 thought for/);
+    expect(strip(screen.last)).toMatch(/^∴ Thought for/);
   });
 
   test("tool-call deltas stream the header", () => {

@@ -42,3 +42,4 @@ You are implementing one ticket of the kumo project.
 | T21 | Full setup v0.2 (LAN discovery, roles, keys, mode, skills, theme, telemetry) | T20 + Aron's UI test |
 | T22 | E2E tests in a real terminal (pty + headless xterm), 7 scenarios | parallel, worktree |
 | T23 | UI polish: no emoji + animated spinner, sentence-by-sentence reasoning, spacing, tool args, mode label | T22 |
+| T24 | Finishing: no em-dash in UI/skills, mode notes not as user msgs, no spinner when piped, e2e screens out of git | T23 |

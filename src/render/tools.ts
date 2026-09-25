@@ -71,6 +71,13 @@ export class ToolCallView {
     this.#calls.delete(id);
   }
 
+  /** Current header info for a tracked call; used by the approval prompt. */
+  describe(id: string): { tool: string; summary: string } | undefined {
+    const call = this.#calls.get(id);
+    if (!call) return undefined;
+    return { tool: call.tool, summary: this.#summary(call) };
+  }
+
   #summary(call: Call): string {
     const max = this.#screen.columns - call.tool.length - 6;
     if (call.rawArgs === "") return "";

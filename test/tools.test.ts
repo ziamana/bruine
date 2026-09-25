@@ -110,4 +110,15 @@ describe("ToolCallView", () => {
     expect(text.length).toBe(20);
     expect(text.endsWith("…")).toBe(true);
   });
+
+  test("describe exposes the current header info for approvals", () => {
+    const s = new FakeScreen();
+    const v = new ToolCallView(s, fakeClock(0).now);
+    expect(v.describe("nope")).toBeUndefined();
+    v.start("1", "bash");
+    v.args("1", '{"command":"rm -rf dist"}');
+    expect(v.describe("1")).toEqual({ tool: "bash", summary: "rm -rf dist" });
+    v.result("1", true, "done");
+    expect(v.describe("1")).toBeUndefined();
+  });
 });

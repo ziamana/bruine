@@ -1,0 +1,260 @@
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+/** Ports probed on 127.0.0.1 for an OpenAI-compatible model server. */
+export const PROBE_PORTS = [
+  8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089, 8090, 11434, 1234,
+  8000,
+];
+
+export interface ProbeHit {
+  port: number;
+  baseUrl: string;
+  models: string[];
+}
+
+export type FetchLike = (
+  url: string,
+  init?: { signal?: AbortSignal },
+) => Promise<{ ok: boolean; json(): Promise<any> }>;
+
+export interface ProbeOptions {
+  host?: string;
+  timeoutMs?: number;
+  fetchImpl?: FetchLike;
+}
+
+/** GET /v1/models on one port; resolves undefined on any failure. */
+export async function probePort(
+  port: number,
+  opts: ProbeOptions = {},
+): Promise<ProbeHit | undefined> {
+  const host = opts.host ?? "127.0.0.1";
+  const timeoutMs = opts.timeoutMs ?? 400;
+  const doFetch = opts.fetchImpl ?? (fetch as unknown as FetchLike);
+  const baseUrl = `http://${host}:${port}/v1`;
+  try {
+    const res = await doFetch(`${baseUrl}/models`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) return undefined;
+    const body = await res.json();
+    const models: string[] = Array.isArray(body?.data)
+      ? body.data.map((m: any) => String(m?.id)).filter((id: string) => id !== "" && id !== "undefined")
+      : [];
+    if (models.length === 0) return undefined;
+    return { port, baseUrl, models };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Probe every port at once; the first answer wins. */
+export function discoverLocalServer(
+  ports: number[] = PROBE_PORTS,
+  opts: ProbeOptions = {},
+): Promise<ProbeHit | undefined> {
+  return new Promise((resolve) => {
+    if (ports.length === 0) {
+      resolve(undefined);
+      return;
+    }
+    let pending = ports.length;
+    let settled = false;
+    for (const port of ports) {
+      void probePort(port, opts).then((hit) => {
+        if (settled) return;
+        if (hit !== undefined) {
+          settled = true;
+          resolve(hit);
+        } else {
+          pending -= 1;
+          if (pending === 0) resolve(undefined);
+        }
+      });
+    }
+  });
+}
+
+/** Prefer a chat model over embedding/vision-only ones. */
+export function pickModel(models: string[]): string {
+  const chat = models.find((id) => !/embed/i.test(id));
+  return chat ?? models[0] ?? "";
+}
+
+export type SettingsDoc = Record<string, unknown>;
+
+export function localServerSettings(hit: ProbeHit, model: string): SettingsDoc {
+  return {
+    "llm-pi-ai": {
+      providers: {
+        local: {
+          displayName: "Local Server",
+          api: "openai-completions",
+          baseURL: hit.baseUrl,
+          models: [{ id: model, name: model }],
+        },
+      },
+    },
+    "agent-default-model": { provider: "local", model },
+  };
+}
+
+/** dsh-base already ships the deepseek-official route; only the default model is stated. */
+export function deepseekSettings(): SettingsDoc {
+  return {
+    "agent-default-model": { provider: "deepseek-official", model: "deepseek-flash" },
+  };
+}
+
+export function openrouterSettings(): SettingsDoc {
+  return {
+    "llm-pi-ai": {
+      providers: {
+        openrouter: { apiKeyEnv: "OPENROUTER_API_KEY" },
+      },
+    },
+    "agent-default-model": { provider: "openrouter", model: "openrouter/auto" },
+  };
+}
+
+const BARE_KEY = /^[A-Za-z0-9_.-]+$/;
+
+function yamlKey(key: string): string {
+  return BARE_KEY.test(key) ? key : JSON.stringify(key);
+}
+
+function yamlScalar(value: unknown): string {
+  if (value === null || value === undefined) return "''";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function isContainer(value: unknown): boolean {
+  return typeof value === "object" && value !== null;
+}
+
+function emitLines(value: unknown, indent: number): string[] {
+  const pad = " ".repeat(indent);
+  if (Array.isArray(value)) {
+    const lines: string[] = [];
+    for (const item of value) {
+      if (isContainer(item)) {
+        const child = emitLines(item, indent + 2);
+        lines.push(`${pad}- ${child[0].trimStart()}`, ...child.slice(1));
+      } else {
+        lines.push(`${pad}- ${yamlScalar(item)}`);
+      }
+    }
+    return lines;
+  }
+  if (isContainer(value)) {
+    const lines: string[] = [];
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (isContainer(child)) {
+        lines.push(`${pad}${yamlKey(key)}:`, ...emitLines(child, indent + 2));
+      } else {
+        lines.push(`${pad}${yamlKey(key)}: ${yamlScalar(child)}`);
+      }
+    }
+    return lines;
+  }
+  return [`${pad}${yamlScalar(value)}`];
+}
+
+/** Minimal deterministic YAML for the fixed settings shape kumo writes. */
+export function renderSettingsYaml(doc: SettingsDoc): string {
+  const header = "# Generated by kumo setup. Edit freely; this file is hot-reloaded.\n";
+  return header + emitLines(doc, 0).join("\n") + "\n";
+}
+
+async function writeAtomic(path: string, content: string, mode?: number): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const tmp = `${path}.tmp`;
+  await writeFile(tmp, content, { encoding: "utf8", ...(mode !== undefined ? { mode } : {}) });
+  if (mode !== undefined) await chmod(tmp, mode);
+  await rename(tmp, path);
+}
+
+/** Set or replace one KEY=value line, keeping the file owner-only. */
+export async function writeEnvVar(
+  envPath: string,
+  key: string,
+  value: string,
+): Promise<void> {
+  let text = "";
+  try {
+    text = await readFile(envPath, "utf8");
+  } catch {
+    text = "";
+  }
+  const line = `${key}=${value}`;
+  const re = new RegExp(`^${key}=.*$`, "m");
+  const next = re.test(text)
+    ? text.replace(re, line)
+    : text === "" || text.endsWith("\n")
+      ? `${text}${line}\n`
+      : `${text}\n${line}\n`;
+  await writeAtomic(envPath, next, 0o600);
+}
+
+export interface SetupIO {
+  isTTY: boolean;
+  write(text: string): void;
+  question(q: string): Promise<string>;
+}
+
+export type SetupOutcome =
+  | { kind: "local"; port: number; model: string }
+  | { kind: "deepseek" }
+  | { kind: "openrouter" }
+  | { kind: "skipped" };
+
+/**
+ * First-run setup: find a local OpenAI-compatible server, else ask for one
+ * API key. Idempotent: an existing settings.yaml is never touched.
+ */
+export async function simpleSetup(
+  dshHome: string,
+  io: SetupIO,
+  opts: ProbeOptions & { ports?: number[] } = {},
+): Promise<SetupOutcome> {
+  const settingsPath = join(dshHome, "settings.yaml");
+  if (existsSync(settingsPath)) return { kind: "skipped" };
+
+  io.write("kumo setup: looking for a local model server…\n");
+  const hit = await discoverLocalServer(opts.ports ?? PROBE_PORTS, opts);
+  if (hit !== undefined) {
+    const model = pickModel(hit.models);
+    await writeAtomic(settingsPath, renderSettingsYaml(localServerSettings(hit, model)), 0o600);
+    io.write(`Found a local model server on port ${hit.port}. Using model: ${model}\n`);
+    return { kind: "local", port: hit.port, model };
+  }
+
+  if (!io.isTTY) {
+    io.write(
+      "No local model server found. Start one (llama.cpp, ollama, LM Studio…),\n" +
+        "or run kumo in a terminal to configure an API key.\n",
+    );
+    return { kind: "skipped" };
+  }
+
+  io.write("No local model server found.\n");
+  const choice = await io.question("Use which provider?  1) DeepSeek  2) OpenRouter  [1] ");
+  const provider = choice.trim().startsWith("2") ? "openrouter" : "deepseek";
+  const keyPrompt =
+    provider === "deepseek" ? "DeepSeek API key: " : "OpenRouter API key: ";
+  const key = (await io.question(keyPrompt)).trim();
+  if (key === "") {
+    io.write("No key entered — skipping. You can add one later in ~/.kumo/.env\n");
+    return { kind: "skipped" };
+  }
+
+  const doc = provider === "deepseek" ? deepseekSettings() : openrouterSettings();
+  await writeAtomic(settingsPath, renderSettingsYaml(doc), 0o600);
+  const envKey = provider === "deepseek" ? "DEEPSEEK_API_KEY" : "OPENROUTER_API_KEY";
+  await writeEnvVar(join(dshHome, ".env"), envKey, key);
+  io.write(`Saved. Your API key is stored in ${join(dshHome, ".env")} (owner-only).\n`);
+  return { kind: provider };
+}

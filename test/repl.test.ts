@@ -139,7 +139,7 @@ describe("Repl", () => {
     await tick();
     await tick();
     expect(h.followups).toEqual([]);
-    expect(h.flushes).toBe(1);
+    expect(h.flushes).toBe(0); // turns already flushed; quit does not re-flush
     expect(h.exits).toEqual([0]);
   });
 
@@ -199,7 +199,7 @@ describe("Repl", () => {
     await tick();
     await tick();
     expect(h.followups).toEqual(["long task"]);
-    expect(h.flushes).toBe(2); // once after the turn, once on quit
+    expect(h.flushes).toBe(1); // the turn flushed; quit does not re-flush
     expect(h.exits).toEqual([0]);
   });
 });

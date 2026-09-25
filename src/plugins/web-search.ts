@@ -6,9 +6,6 @@ import type { DshContext } from "./ctx.js";
 /** Stable Cordis plugin name. */
 export const name = "kumo-web-search";
 
-/** Services required before the provider can register. */
-export const inject = ["web"];
-
 /** Service provided so the `web` row can resolve searchProvider from kumo. */
 export const KUMO_SEARCH_SERVICE = "kumoSearch";
 
@@ -146,11 +143,19 @@ export function makeSearchProvider(
   };
 }
 
-export function apply(ctx: DshContext): (() => void) | void {
+export function apply(ctx: DshContext): () => void {
   ctx.provide(KUMO_SEARCH_SERVICE, { id: "kumo" });
   const provider = makeSearchProvider(readSearchConfig(), process.env, fetch as unknown as FetchLike);
-  const web = ctx.get("web");
-  if (typeof web?.registerSearchProvider === "function") {
-    return web.registerSearchProvider(provider);
-  }
+  let dispose: (() => void) | undefined;
+  // Register when the `web` runtime mounts — never declared as a module-level
+  // `inject`, which would deadlock the `web` row behind this plugin.
+  ctx.inject(["web"], (c: any) => {
+    const web = c.web ?? ctx.get("web");
+    if (typeof web?.registerSearchProvider === "function") {
+      dispose = web.registerSearchProvider(provider);
+    }
+  });
+  return () => {
+    dispose?.();
+  };
 }

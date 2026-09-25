@@ -48,11 +48,15 @@ export function parseAnswer(line: string): boolean {
 export function apply(ctx: DshContext): void {
   let repl: KumoRepl | undefined;
   let render: RenderService | undefined;
+  let modes: { rememberFor(callId: string | undefined): void } | undefined;
   ctx.inject(["kumoRepl"], (c: any) => {
     repl = c.kumoRepl;
   });
   ctx.inject(["kumoRender"], (c: any) => {
     render = c.kumoRender;
+  });
+  ctx.inject(["kumoModes"], (c: any) => {
+    modes = c.kumoModes;
   });
 
   ctx.on(
@@ -63,17 +67,25 @@ export function apply(ctx: DshContext): void {
 
       const ui = repl.ui;
       if (ui !== undefined) {
-        // TUI mode (T13d): pi-tui select. Escape/cancel = reject.
+        // TUI mode (T13d/T16): pi-tui select. Escape/cancel = reject.
         const title = approvalTitle(request, (id) => render?.describe?.(id));
         return ui
           .askChoice(title, [
             { value: "allow", label: "Allow once" },
+            { value: "always", label: "Always for this session" },
             { value: "reject", label: "Reject" },
           ])
-          .then((choice) => (choice === 0 ? ("allowed-once" as const) : ("rejected" as const)));
+          .then((choice) => {
+            if (choice === 0) return "allowed-once" as const;
+            if (choice === 1) {
+              modes?.rememberFor(request.callId);
+              return "allowed-once" as const;
+            }
+            return "rejected" as const;
+          });
       }
 
-      // Non-TTY mode: the y/n readline prompt.
+      // Non-TTY mode: the y/n readline prompt ("a" allows for the session).
       const screen = render?.screen;
       const question = buildQuestion(request, (id) => screen?.tools.describe(id));
       // Close the transient display before asking.
@@ -83,10 +95,14 @@ export function apply(ctx: DshContext): void {
       const ask = repl.ask;
       if (ask === undefined) return next();
       return ask(question).then((answer) => {
-        const ok = parseAnswer(answer);
+        const always = /^a(lways?)?$/i.test(answer.trim());
+        const ok = always || parseAnswer(answer);
+        if (always) modes?.rememberFor(request.callId);
         if (screen !== undefined) {
           const mark = ok ? screen.icons.ok : screen.icons.fail;
-          screen.screen.write(`\r\x1b[2K${dim(`${mark} ${ok ? "allowed" : "rejected"}`)}\n`);
+          screen.screen.write(
+            `\r\x1b[2K${dim(`${mark} ${ok ? (always ? "allowed for session" : "allowed") : "rejected"}`)}\n`,
+          );
         }
         return ok ? ("allowed-once" as const) : ("rejected" as const);
       });

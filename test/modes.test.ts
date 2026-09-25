@@ -1,0 +1,141 @@
+import { describe, expect, test } from "vitest";
+import { apply, Modes, PLAN_OFF_TEXT, PLAN_ON_TEXT } from "../src/plugins/modes.js";
+import { askJudge, judgePrompt } from "../src/gate/judge.js";
+import { fakeCtx } from "./fakes.js";
+
+function harness(services: Record<string, unknown> = {}) {
+  const fake = fakeCtx(services);
+  const agent = { session: {}, inject: (m: unknown) => injected.push(m) };
+  const injected: unknown[] = [];
+  apply(fake.ctx as any);
+  fake.provided.set("kumoRepl", { agent });
+  for (const { services: deps, cb } of fake.injected) {
+    if (deps.includes("kumoRepl")) cb({ kumoRepl: { agent } });
+  }
+  const modes: any = fake.provided.get("kumoModes");
+  const preExecute = (name: string, args: unknown, callId = "c1", execAgent: unknown = agent) =>
+    fake.emit(
+      "tools/pre-execute",
+      { name, arguments: JSON.stringify(args), agent: execAgent, callId },
+      async () => ({ kind: "delegate" }),
+    ) as Promise<any>;
+  return { fake, modes, preExecute, injected, otherAgent: { session: {} } };
+}
+
+const llmReturning = (text: string): any => ({
+  stream: async function* () {
+    yield { type: "text-delta", text };
+  },
+});
+
+describe("kumo gate (T16.C)", () => {
+  test("ask mode: bash asks, read-only allows", async () => {
+    const { modes, preExecute } = harness();
+    expect(modes.permission).toBe("ask");
+    expect((await preExecute("bash", { command: "ls" })).kind).toBe("ask");
+    expect((await preExecute("read", { path: "a" })).kind).toBe("allow");
+    expect(modes.log.length).toBe(2);
+  });
+
+  test("delegates other agents' calls to next()", async () => {
+    const { preExecute, otherAgent } = harness();
+    const d = await preExecute("bash", { command: "ls" }, "c9", otherAgent);
+    expect(d.kind).toBe("delegate");
+  });
+
+  test("full access: nothing asks", async () => {
+    const { modes, preExecute } = harness();
+    modes.permission = "full";
+    expect((await preExecute("bash", { command: "rm -rf x" })).kind).toBe("allow");
+  });
+
+  test("plan mode denies mutations and announces as appended messages", async () => {
+    const { modes, preExecute, injected } = harness();
+    modes.togglePlan();
+    expect(injected.length).toBe(1);
+    const msg: any = injected[0];
+    expect(msg.content[0].text).toBe(PLAN_ON_TEXT);
+    expect((await preExecute("write", { path: "a.ts" })).kind).toBe("deny");
+    expect((await preExecute("write", { path: "a.ts" })).reason).toContain("Plan mode is on");
+    expect((await preExecute("bash", { command: "ls" })).kind).toBe("allow");
+    modes.togglePlan();
+    expect((injected[1] as any).content[0].text).toBe(PLAN_OFF_TEXT);
+    expect((await preExecute("write", { path: "a.ts" })).kind).toBe("ask"); // back to ask mode
+  });
+
+  test("auto mode consults the fast model for judge cases", async () => {
+    const { modes, preExecute } = harness({ llm: llmReturning("ALLOW"), agentDefaultModel: { currentSelection: () => ({ provider: "p", model: "m" }) } });
+    modes.permission = "auto";
+    const d = await preExecute("bash", { command: "npm test" });
+    expect(d.kind).toBe("allow");
+    expect(modes.log[modes.log.length - 1]?.via).toBe("fast-model");
+  });
+
+  test("auto mode: fast model ASK → ask; no llm → ask", async () => {
+    const a = harness({ llm: llmReturning("ASK") });
+    a.modes.permission = "auto";
+    expect((await a.preExecute("bash", { command: "make deploy" })).kind).toBe("ask");
+
+    const b = harness();
+    b.modes.permission = "auto";
+    expect((await b.preExecute("bash", { command: "make deploy" })).kind).toBe("ask");
+  });
+
+  test("Always for this session bypasses later asks for the same rule", async () => {
+    const { modes, preExecute } = harness();
+    const first = await preExecute("bash", { command: "npm test" }, "call-7");
+    expect(first.kind).toBe("ask");
+    modes.rememberFor("call-7");
+    expect((await preExecute("bash", { command: "npm test run" }, "call-8")).kind).toBe("allow");
+    expect((await preExecute("bash", { command: "git push" }, "call-9")).kind).toBe("ask");
+  });
+
+  test("slash commands /plan and /permissions", () => {
+    const { modes } = harness();
+    expect(modes.runCommand("/plan")).toBe("Plan mode: on (read-only)");
+    expect(modes.runCommand("/plan off")).toBe("Plan mode: off (build)");
+    expect(modes.runCommand("/plan on")).toBe("Plan mode: on (read-only)");
+    expect(modes.runCommand("/plan on")).toBe("Plan mode: on (read-only)");
+    expect(modes.runCommand("/nope")).toBeUndefined();
+    expect(modes.runCommand("/permissions")).toContain("No permission decisions yet");
+  });
+});
+
+describe("Modes class", () => {
+  test("cyclePermission: ask → auto → full (with confirm) → ask", async () => {
+    const m = new Modes("ask");
+    expect(await m.cyclePermission()).toBe("auto"); // no confirm needed for auto
+    let confirm = false;
+    m.setConfirmFullAccess(async () => confirm);
+    confirm = false;
+    expect(await m.cyclePermission()).toBe("auto"); // full refused → stays
+    confirm = true;
+    expect(await m.cyclePermission()).toBe("full");
+    expect(m.describe().badges).toEqual(["FULL ACCESS"]);
+    expect(await m.cyclePermission()).toBe("ask");
+  });
+
+  test("badges include PLAN when planning", () => {
+    const m = new Modes("ask");
+    m.togglePlan();
+    expect(m.describe().badges).toEqual(["PLAN"]);
+  });
+});
+
+describe("judge (T16.C.3)", () => {
+  test("timeout falls back to ASK", async () => {
+    const hanging: any = {
+      stream: () => ({
+        [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) }),
+      }),
+    };
+    const verdict = await askJudge(hanging, { provider: "p", model: "m" }, [], 60);
+    expect(verdict).toBe("ASK");
+  });
+
+  test("prompt is one line", () => {
+    const p = judgePrompt("bash", "npm test");
+    expect(p).not.toContain("\n");
+    expect(p).toContain("Answer ALLOW or ASK");
+  });
+});

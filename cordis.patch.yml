@@ -14,12 +14,54 @@
     personaSuffix: Your working directory is {{cwd}}.
 
 # kumo's own search provider (SearXNG / Brave / Tavily, configured in
-# kumo.json; "none" by default). Never dsh-free-search.
+# kumo.json; "none" by default). Never dsh-free-search. The provider registers
+# itself with the `web` runtime lazily, so no gating is needed here.
 - id: web
-  inject: [kumoSearch]
   config:
-    searchProvider: !!js ctx.kumoSearch.id
+    searchProvider: kumo
     fetchProvider: http
+
+# T16: safety comes from kumo's own gate, not dsh's sandbox — commands really
+# run on the machine. The sandbox is left fully open; kumo's pre-tool gate is
+# the only permission layer, so dsh escalation never fires.
+- id: sandbox-policy
+  config:
+    mode: danger-full-access
+    workspaceRoot: !!js process.cwd()
+
+# Pin approvals to "ask": when kumo's gate returns `ask`, the approval service
+# must actually reach kumo-approval's select.
+- id: approval
+  config:
+    policy: ask
+
+# The presets service validates that the composed (sandbox, approval) pair
+# matches a preset: kumo-ask = sandbox off + approvals reach kumo's select.
+- id: permission
+  name: '@deepseek-ai/dsh-permission-presets'
+  config:
+    defaultPreset: kumo-ask
+    presets:
+      read-only:
+        sandbox: read-only
+        approval: ask
+        name: Read Only
+        description: Files are read-only for tools.
+      workspace-write:
+        sandbox: workspace-write
+        approval: ask
+        name: Workspace Edit
+        description: Allow edits within the workspace.
+      danger-full-access:
+        sandbox: danger-full-access
+        approval: never
+        name: No Sandbox
+        description: No sandbox.
+      kumo-ask:
+        sandbox: danger-full-access
+        approval: ask
+        name: kumo gate
+        description: Sandbox off; kumo's own gate asks before risky actions.
 
 - insert:
     - id: kumo-startup
@@ -34,6 +76,9 @@
 
     - id: kumo-approval
       name: 'kumo-cli/approval'
+
+    - id: kumo-modes
+      name: 'kumo-cli/modes'
 
     - id: kumo-web-search
       name: 'kumo-cli/web-search'

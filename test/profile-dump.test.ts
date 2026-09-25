@@ -40,21 +40,25 @@ describe("profile composition (T15)", () => {
       expect(out).toContain("includeHarnessIdentity: false");
       expect(out).toContain("You are kumo");
       expect(out).toContain("Your working directory is");
-      // Plugins
-      for (const needle of [
-        "kumo-cli/startup",
-        "kumo-cli/repl",
-        "kumo-cli/render",
-        "kumo-cli/approval",
-        "kumo-cli/web-search",
-      ]) {
-        expect(out).toContain(needle);
-      }
-      // Tools (T15.2) — fetch is already on the dsh-base tool-web row
-      expect(out).toContain("dsh-tool-web");
-      expect(out).toContain("dsh-tool-ask-user");
-      expect(out).toContain("dsh-tool-str-replace-editor");
-      expect(out).toContain("dsh-tool-present");
+    // Plugins
+    for (const needle of [
+      "kumo-cli/startup",
+      "kumo-cli/repl",
+      "kumo-cli/render",
+      "kumo-cli/approval",
+      "kumo-cli/modes",
+      "kumo-cli/web-search",
+    ]) {
+      expect(out).toContain(needle);
+    }
+    // Tools (T15.2) — fetch is already on the dsh-base tool-web row
+    expect(out).toContain("dsh-tool-web");
+    expect(out).toContain("dsh-tool-ask-user");
+    expect(out).toContain("dsh-tool-str-replace-editor");
+    expect(out).toContain("dsh-tool-present");
+    // Modes groundwork (T16): sandbox left fully open, approvals always reach kumo
+    expect(out).toContain("danger-full-access");
+    expect(out).toMatch(/policy: *ask/);
       expect(out).toContain("dsh-subagent");
       // Search wiring (T15.3)
       expect(out).toContain("searchProvider");

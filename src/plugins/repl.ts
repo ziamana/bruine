@@ -1,11 +1,13 @@
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
+import { Text } from "@earendil-works/pi-tui";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { kumoIcons } from "../render/chars.js";
 import { KumoUi } from "../ui/kumo-ui.js";
+import { KUMO_MODES_SERVICE } from "./modes.js";
 import type { DshContext, KumoRepl, KumoStartup } from "./ctx.js";
 
 const require = createRequire(import.meta.url);
@@ -117,7 +119,8 @@ export class Repl {
     this.#done = true;
     // EOF (or /exit) during a turn: let the turn settle before exiting.
     if (this.#turnPromise !== undefined) await this.#turnPromise.catch(() => {});
-    await this.#flushQuietly();
+    // No extra flush here: every turn already flushed, and a second
+    // sessions.flush on the same session hangs in dsh rc.3.
     this.#deps.appExit(0);
   }
 
@@ -206,6 +209,25 @@ async function createAgent(ctx: DshContext): Promise<{ agent: any; selection: an
   return { agent, selection };
 }
 
+/**
+ * dsh's own graceful shutdown can stall (observed with 0.1.5-rc.3); kumo
+ * requests it, then force-exits after a short grace period so the process
+ * never lingers.
+ */
+export function gracefulExit(exit: (code: number) => void): (code: number) => void {
+  return (code) => {
+    try {
+      exit(code);
+    } catch {
+      // the request itself must not keep the process alive
+    }
+    const timer = setTimeout(() => {
+      process.exit(code);
+    }, 4000);
+    timer.unref();
+  };
+}
+
 async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<void> {
   await ctx.get("loader")?.await();
   const sessions = ctx.get("sessions");
@@ -225,6 +247,27 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   };
   const flush = (session: unknown): Promise<unknown> => sessions.flush(session);
 
+  // Slash-command router: /exit is handled by Repl itself; /plan and
+  // /permissions go to kumoModes (T16).
+  const modes = (): any => ctx.get(KUMO_MODES_SERVICE);
+  const router = (
+    text: string,
+    emitLine: (t: string) => void,
+    reply: (s: string) => void,
+  ): void => {
+    const trimmed = text.trim();
+    if (trimmed.startsWith("/") && !EXIT_COMMANDS.has(trimmed)) {
+      const r: string | undefined = modes()?.runCommand?.(trimmed);
+      if (r !== undefined) {
+        reply(r);
+        return;
+      }
+      reply(`Unknown command "${trimmed}". Available: /plan, /permissions, /exit`);
+      return;
+    }
+    emitLine(text);
+  };
+
   const isTTY = process.stdin.isTTY === true && process.stdout.isTTY === true;
 
   if (isTTY) {
@@ -236,10 +279,18 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       {
         onSubmit: (text) => {
           if (text.trim() !== "" && ui !== undefined) ui.rememberHistory(text);
-          emitter.emitLine(text);
+          router(text, (t) => emitter.emitLine(t), (s) => {
+            ui?.addChat(new Text(s, 1, 0));
+            ui?.requestRender();
+          });
         },
         onEscape: () => emitter.emitSigint(),
         onQuit: () => emitter.emitClose(),
+        // T16: Tab toggles Plan/Build, Shift+Tab cycles Ask/Auto/Full.
+        onTab: () => modes()?.togglePlan?.(),
+        onShiftTab: () => {
+          void modes()?.cyclePermission?.();
+        },
       },
       undefined,
       kumoIcons(),
@@ -250,7 +301,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       followup,
       flush,
       appExit: (code) => {
-        void ui?.shutdown().finally(() => exit(code));
+        void ui?.shutdown().finally(() => gracefulExit(exit)(code));
       },
       lines: emitter.source(),
     });
@@ -272,12 +323,20 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     ask: (question) => askViaReadline(rl, question),
   };
   ctx.provide(KUMO_REPL_SERVICE, service);
+  const base = readlineSource(rl);
+  const wrapped: LineSource = {
+    onLine: (cb) => base.onLine((line) => router(line, cb, (s) => console.log(s))),
+    onClose: base.onClose,
+    onSigint: base.onSigint,
+    pause: base.pause,
+    resume: base.resume,
+  };
   const repl = new Repl({
     agent,
     followup,
     flush,
-    appExit: exit,
-    lines: readlineSource(rl),
+    appExit: gracefulExit(exit),
+    lines: wrapped,
   });
   await repl.run(startup?.initialPrompt);
 }

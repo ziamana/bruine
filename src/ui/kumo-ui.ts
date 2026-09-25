@@ -23,6 +23,10 @@ export interface KumoUiHandlers {
   onEscape(): void;
   /** Quit request: ctrl+d, or ctrl+c twice within 500 ms. */
   onQuit(): void;
+  /** Tab: toggle Plan/Build (T16.A). */
+  onTab?: () => void;
+  /** Shift+Tab: cycle Ask/Auto/Full (T16.B). */
+  onShiftTab?: () => void;
 }
 
 /** Overlay container that forwards key input to its SelectList. */
@@ -88,6 +92,14 @@ export class KumoUi {
     this.tui.addChild(this.footer);
 
     this.tui.addInputListener((data: string) => {
+      if (handlers.onTab !== undefined && matchesKey(data, "tab")) {
+        handlers.onTab();
+        return { consume: true };
+      }
+      if (handlers.onShiftTab !== undefined && matchesKey(data, "shift+tab")) {
+        handlers.onShiftTab();
+        return { consume: true };
+      }
       if (matchesKey(data, "escape")) {
         handlers.onEscape();
         return { consume: true };

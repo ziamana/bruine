@@ -97,6 +97,7 @@ describe("approval plugin apply", () => {
   function setupTui(choice: number) {
     const agent = { session: {} };
     const asked: Array<{ title: string; labels: string[] }> = [];
+    const remembered: (string | undefined)[] = [];
     const repl = {
       agent,
       ui: {
@@ -108,32 +109,44 @@ describe("approval plugin apply", () => {
     };
     const describe = (id: string) =>
       id === "t1" ? { tool: "bash", summary: "rm -rf dist" } : undefined;
+    const modes = { rememberFor: (callId?: string) => remembered.push(callId) };
     const fake = fakeCtx();
     apply(fake.ctx as any);
-    for (const { cb } of fake.injected) cb({ kumoRepl: repl, kumoRender: { describe } });
+    for (const { cb } of fake.injected) cb({ kumoRepl: repl, kumoRender: { describe }, kumoModes: modes });
     return {
       asked,
+      remembered,
       request: (req: Record<string, unknown>) =>
         fake.emit("approval/request", { agent, toolName: "bash", ...req }, async () => "unavailable") as Promise<string>,
     };
   }
 
-  test("TUI: Allow once selection allows and shows a two-item select", async () => {
+  test("TUI: Allow once (first option) allows", async () => {
     const { asked, request } = setupTui(0);
     expect(await request({ callId: "t1" })).toBe("allowed-once");
-    expect(asked).toHaveLength(1);
     expect(asked[0].title).toBe("? Allow bash: rm -rf dist");
-    expect(asked[0].labels).toEqual(["Allow once", "Reject"]);
+    expect(asked[0].labels).toEqual(["Allow once", "Always for this session", "Reject"]);
   });
 
-  test("TUI: second option rejects", async () => {
-    const { request } = setupTui(1);
+  test("TUI: second option allows AND remembers for the session (T16)", async () => {
+    const { remembered, request } = setupTui(1);
+    expect(await request({ callId: "t1" })).toBe("allowed-once");
+    expect(remembered).toEqual(["t1"]);
+  });
+
+  test("TUI: third option rejects", async () => {
+    const { request } = setupTui(2);
     expect(await request({ callId: "t1" })).toBe("rejected");
   });
 
   test("TUI: cancel (-1) rejects", async () => {
     const { request } = setupTui(-1);
     expect(await request({})).toBe("rejected");
+  });
+
+  test("non-TTY: 'a' allows for the session", async () => {
+    const { request } = setup("a");
+    expect(await request({ callId: "t1" })).toBe("allowed-once");
   });
 });
 

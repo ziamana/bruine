@@ -51,6 +51,7 @@ export class Repl {
   #deps: ReplDeps;
   #inTurn = false;
   #done = false;
+  #turnPromise: Promise<void> | undefined;
 
   constructor(deps: ReplDeps) {
     this.#deps = deps;
@@ -86,16 +87,19 @@ export class Repl {
     if (!this.#done) this.#prompt();
   }
 
-  async #turn(text: string): Promise<void> {
+  #turn(text: string): Promise<void> {
     this.#inTurn = true;
     this.#deps.lines.pause();
-    try {
-      this.#deps.followup(text);
-      await this.#deps.agent.whenIdle();
-    } finally {
-      this.#inTurn = false;
-      await this.#flushQuietly();
-    }
+    this.#turnPromise = (async () => {
+      try {
+        this.#deps.followup(text);
+        await this.#deps.agent.whenIdle();
+      } finally {
+        this.#inTurn = false;
+        await this.#flushQuietly();
+      }
+    })();
+    return this.#turnPromise;
   }
 
   #onSigint(): void {
@@ -106,6 +110,8 @@ export class Repl {
   async #quit(): Promise<void> {
     if (this.#done) return;
     this.#done = true;
+    // EOF (or /exit) during a turn: let the turn settle before exiting.
+    if (this.#turnPromise !== undefined) await this.#turnPromise.catch(() => {});
     await this.#flushQuietly();
     this.#deps.appExit(0);
   }
@@ -162,8 +168,11 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     sessionId: SessionId(`session-${randomUUID()}`),
     meta: { cwd: process.cwd() },
     agentOptions: { provider: selection.provider, model: selection.model },
-    setup: (agentCtx: unknown) =>
-      installModelSelection(agentCtx as any, { current: selection, assembled: undefined }),
+    setup: (agentCtx: unknown) => {
+      // Block body on purpose: returning the disposer would be treated as a
+      // setup commit object by the agent factory.
+      installModelSelection(agentCtx as any, { current: selection, assembled: undefined });
+    },
   });
   await agent.whenIdle();
 

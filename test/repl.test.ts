@@ -186,4 +186,20 @@ describe("Repl", () => {
     await tick();
     expect(h.followups).toEqual(["one"]);
   });
+
+  test("EOF during a turn waits for the turn before exiting", async () => {
+    const h = harness();
+    await h.repl.run();
+    h.lines.emitLine("long task");
+    await tick();
+    h.lines.emitClose();
+    await tick();
+    expect(h.exits).toEqual([]); // still running the turn
+    h.idle.resolve();
+    await tick();
+    await tick();
+    expect(h.followups).toEqual(["long task"]);
+    expect(h.flushes).toBe(2); // once after the turn, once on quit
+    expect(h.exits).toEqual([0]);
+  });
 });

@@ -37,3 +37,4 @@ You are implementing one ticket of the kumo project.
 | T16 | Modes: Plan/Build (Tab) × Ask/Auto/Full access (Shift+Tab), sandbox off, SAME tools in both modes | T15 |
 | T17 | Cache Hunter test: system+tools byte-identical, messages append-only | T16 |
 | **T18** | **HOTFIX: gate bypasses (12/13) + lockfile leak** | T17 |
+| T19 | Judge really works on local models + 6 remaining gate holes | T18 |

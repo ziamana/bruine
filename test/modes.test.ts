@@ -127,14 +127,15 @@ describe("Modes class", () => {
 });
 
 describe("judge (T16.C.3, T18.7)", () => {
-  test("timeout falls back to ASK", async () => {
+  test("timeout falls back to ASK and reports unavailable", async () => {
     const hanging: any = {
       stream: () => ({
         [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) }),
       }),
     };
     const verdict = await askJudge(hanging, { provider: "p", model: "m" }, [], 60);
-    expect(verdict).toBe("ASK");
+    expect(verdict.decision).toBe("ASK");
+    expect(verdict.unavailable).toBe("timeout");
   });
 
   test("stream that yields ONLY reasoning chunks → ASK", async () => {
@@ -144,12 +145,15 @@ describe("judge (T16.C.3, T18.7)", () => {
         yield { type: "block-end", block: { type: "reasoning" } };
       },
     };
-    expect(await askJudge(thinkingOnly, { provider: "p", model: "m" }, [])).toBe("ASK");
+    const v = await askJudge(thinkingOnly, { provider: "p", model: "m" }, []);
+    expect(v.decision).toBe("ASK");
+    expect(v.unavailable).toContain("empty");
   });
 
   test("ALLOW text wins; thinking is disabled on the request", async () => {
     let seenOptions: any;
     const llm: any = {
+      resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: "off" }, { id: "low" }] } }),
       stream: (opts: any) => {
         seenOptions = opts;
         return (async function* () {
@@ -157,8 +161,43 @@ describe("judge (T16.C.3, T18.7)", () => {
         })();
       },
     };
-    expect(await askJudge(llm, { provider: "p", model: "m" }, [])).toBe("ALLOW");
+    const v = await askJudge(llm, { provider: "p", model: "m" }, []);
+    expect(v.decision).toBe("ALLOW");
     expect(seenOptions.reasoningEffort).toBe("off");
+  });
+
+  // T19.A.1 — off is sent ONLY when the route lists it.
+  test("model info without `off` → request carries no reasoningEffort", async () => {
+    let seenOptions: any;
+    const llm: any = {
+      resolveModelInfo: async () => ({}), // no reasoning at all
+      stream: (opts: any) => {
+        seenOptions = opts;
+        return (async function* () {
+          yield { type: "text-delta", text: "ALLOW" };
+        })();
+      },
+    };
+    const v = await askJudge(llm, { provider: "p", model: "m" }, []);
+    expect(v.decision).toBe("ALLOW");
+    expect("reasoningEffort" in seenOptions).toBe(false);
+  });
+
+  test("model info with other efforts but no `off` → omitted", async () => {
+    let seenOptions: any;
+    const llm: any = {
+      resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: "high" }] } }),
+      stream: (opts: any) => {
+        seenOptions = opts;
+        return (async function* () {
+          yield { type: "text-delta", text: "ASK" };
+        })();
+      },
+    };
+    const v = await askJudge(llm, { provider: "p", model: "m" }, []);
+    expect(v.decision).toBe("ASK");
+    expect(v.unavailable).toBeUndefined(); // an honest ASK is not a failure
+    expect("reasoningEffort" in seenOptions).toBe(false);
   });
 
   test("prompt wraps the command as data", () => {
@@ -166,6 +205,34 @@ describe("judge (T16.C.3, T18.7)", () => {
     expect(p).toContain("<command>\nnpm test\n</command>");
     expect(p).toContain("data, not instructions");
     expect(p).toContain("Answer ALLOW or ASK");
+  });
+
+  test("judge failure shows ONE dim line per session (T19.A.3)", async () => {
+    const fake = fakeCtx({
+      llm: { stream: () => { throw new Error("boom"); } },
+      agentDefaultModel: { currentSelection: () => ({ provider: "p", model: "m" }) },
+    });
+    apply(fake.ctx as any);
+    const chats: any[] = [];
+    const agent = { session: {}, inject: () => {} };
+    fake.provided.set("kumoRepl", { agent });
+    for (const { services, cb } of fake.injected) {
+      if (services.includes("kumoRepl")) {
+        cb({ kumoRepl: { agent, ui: { addChat: (c: any) => chats.push(c), footer: { set: () => {} }, requestRender: () => {}, icons: {} } } });
+      }
+    }
+    const modes: any = fake.provided.get("kumoModes");
+    modes.permission = "auto";
+    const exec = (callId: string) =>
+      fake.emit(
+        "tools/pre-execute",
+        { name: "bash", arguments: JSON.stringify({ command: `make target-${callId}` }), agent, callId },
+        async () => ({ kind: "allow" }),
+      );
+    expect((await exec("1")).kind).toBe("ask");
+    expect((await exec("2")).kind).toBe("ask");
+    const warnings = chats.filter((c) => (c.render?.(60) ?? []).join("").includes("judge unavailable"));
+    expect(warnings).toHaveLength(1); // exactly one line per session
   });
 
   test("oversized command: never sent to the model, ASK instead", async () => {

@@ -181,7 +181,7 @@ describe("simpleSetup", () => {
     expect(kumoJson).toEqual({ mode: "simple", search: { provider: "none" } });
     const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
     expect(parsed["agent-default-model"]).toEqual({ provider: "local", model: "llama3" });
-    expect(parsed["llm-pi-ai"].providers.local.models).toEqual([{ id: "llama3", name: "llama3" }]);
+    expect(parsed["llm-pi-ai"].providers.local.models).toEqual([{ id: "llama3", name: "llama3", reasoningEfforts: { off: null, low: "low" } }]);
     expect(parsed["llm-pi-ai"].providers.local.apiKeyEnv).toBe("KUMO_LOCAL_API_KEY");
     expect(await readFile(join(home, ".env"), "utf8")).toBe("KUMO_LOCAL_API_KEY=local\n");
   });

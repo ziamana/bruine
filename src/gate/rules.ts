@@ -47,13 +47,91 @@ export const READONLY_COMMANDS: ReadonlySet<string> = new Set([
 /** Characters that turn "one simple read-only command" into anything goes (T18.1). */
 const NOT_SIMPLE = /[;&|<>`]|\$\(|\n/;
 
-/** find flags that make it a mutation (T18.2). */
-const FIND_MUTATING = /\s-(exec|execdir|ok|okdir|delete|fprint|fprintf|fls)\b/;
+/** find flags that make it a mutation (T18.2 + T19.B prefix match). */
+const FIND_MUTATING = /\s-(exec|ok|fprint|fls|delete)/;
+/** find flags that WRITE or EXECUTE — never allow, always ask (T19.B). */
+const FIND_DANGEROUS = /\s-(exec|execdir|ok|okdir|fprint|fprintf|fls)/;
+/** Piping anything into an interpreter is a download-and-run shape (T19.B). */
+const PIPE_TO_INTERPRETER = /[|]\s*(sh|bash|zsh|fish|python3?|node|perl|ruby|pwsh|powershell|iex)\b/;
 
 /** `git config` is read-only only in query mode (T18.2). */
-function gitConfigReadonly(words: string[]): boolean {
-  return ["--get", "--get-regexp", "--list", "-l"].includes(words[2] ?? "");
+function gitConfigReadonly(args: string[]): boolean {
+  return ["--get", "--get-regexp", "--list", "-l"].includes(args[0] ?? "");
 }
+
+interface GitParsed {
+  /** Whether -c <key=value> (config injection) was passed before the sub-command. */
+  hasConfig: boolean;
+  sub: string;
+  args: string[];
+}
+
+/**
+ * Skip git's GLOBAL options (-C, -c, --git-dir, --work-tree, …) to reach the
+ * real sub-command (T19.B): `git -C /tmp/r push` is a push.
+ * Returns null when the shape cannot be understood.
+ */
+export function parseGit(words: string[]): GitParsed | null {
+  let i = 1; // words[0] === "git"
+  let hasConfig = false;
+  while (i < words.length) {
+    const w = words[i]!;
+    if (w === "-c") {
+      hasConfig = true;
+      i += 2;
+      continue;
+    }
+    if (w === "-C" || w === "--git-dir" || w === "--work-tree" || w === "--namespace" || w === "--exec-path") {
+      i += 2;
+      continue;
+    }
+    if (/^--(git-dir|work-tree|namespace|exec-path)=/.test(w)) {
+      i += 1;
+      continue;
+    }
+    if (w.startsWith("-")) return null; // unknown global option: unparseable
+    return { hasConfig, sub: w, args: words.slice(i + 1) };
+  }
+  return null;
+}
+
+/** Structural danger for git beyond the plain regexes (T19.B). */
+export function isDangerousGit(command: string): boolean {
+  const words = command.trim().split(/\s+/);
+  if (words[0] !== "git") return false;
+  const parsed = parseGit(words);
+  if (parsed === null) return false;
+  if (parsed.hasConfig) return true; // git -c core.pager='sh -c evil' log
+  if (parsed.sub === "push" || parsed.sub === "clean") return true;
+  if (parsed.sub === "reset" && parsed.args.includes("--hard")) return true;
+  return false;
+}
+
+function gitReadonly(words: string[], command: string): boolean {
+  const parsed = parseGit(words);
+  if (parsed === null || parsed.hasConfig) return false;
+  if (FIND_OUTPUT.test(command) && ["log", "show", "diff"].includes(parsed.sub)) return false;
+  switch (parsed.sub) {
+    case "status":
+    case "ls-files":
+      return true;
+    case "log":
+    case "diff":
+    case "show":
+      return true;
+    case "branch":
+      return !GIT_BRANCH_MUTATING.test(command);
+    case "remote":
+      return parsed.args.length === 0 || (parsed.args.length === 1 && parsed.args[0] === "-v");
+    case "config":
+      return gitConfigReadonly(parsed.args);
+    default:
+      return false;
+  }
+}
+
+/** log/show/diff writing files via --output is a mutation (T19.B row 1). */
+const FIND_OUTPUT = /(?:^|\s)--output\b/;
 
 /** git branch is read-only only without destructive/moving flags (T18.2). */
 const GIT_BRANCH_MUTATING = /\s-(d|D|m|M|c|C)\b|--delete\b|--move\b|--copy\b/;
@@ -69,7 +147,7 @@ export const ALWAYS_ASK_PATTERNS: readonly RegExp[] = [
   /\bkill\b|\bpkill\b|\bkillall\b/,
   /\bchmod\b|\bchown\b/,
   /\bgit\s+(reset\s+--hard|clean)\b/,
-  /\bgit\s+config\s+--global\b/, // T18 row: global config hijack
+  /\bgit\s+config\s+--(global|system)\b/, // T18 row: global config hijack
   /\bgit\s+branch\b[^\n]*(\s-(d|D|m|M|c|C)\b|--delete\b|--move\b|--copy\b)/, // T18 row
   /\bfind\b[^\n]*-(exec|execdir|ok|okdir)\b/, // T18 row: -exec runs anything
   /\bdd\b/,
@@ -94,6 +172,9 @@ export const SENSITIVE_PATTERNS: readonly RegExp[] = [
   /(^|[/\\])\.pypirc\b/,
   /\.[zbo]sh(rc|profile)?\b/,
   /(^|[/\\])\.bashrc\b|(^|[/\\])\.bash_profile\b/,
+  /(^|[/\\])\.profile\b/,
+  /(^|[/\\])\.zprofile\b/,
+  /(^|[/\\])\.config[/\\]fish[/\\]/,
 ];
 
 export interface DecisionContext {
@@ -133,25 +214,7 @@ export function isReadonlyBash(command: string): boolean {
   const words = command.trim().split(/\s+/);
   const first = words[0] ?? "";
   if (first === "find") return !FIND_MUTATING.test(command);
-  if (first === "git") {
-    const sub = words[1] ?? "";
-    switch (sub) {
-      case "status":
-      case "log":
-      case "diff":
-      case "show":
-      case "ls-files":
-        return true;
-      case "branch":
-        return !GIT_BRANCH_MUTATING.test(command);
-      case "remote":
-        return words.length === 2 || (words.length === 3 && words[2] === "-v");
-      case "config":
-        return gitConfigReadonly(words);
-      default:
-        return false;
-    }
-  }
+  if (first === "git") return gitReadonly(words, command);
   return READONLY_COMMANDS.has(first);
 }
 
@@ -211,7 +274,14 @@ export function decide(
   if (ctx.mode === "full") return "allow";
 
   // 3. Danger that no session rule may cover.
-  if (isBash && (ALWAYS_ASK_PATTERNS.some((re) => re.test(command)) || isSensitive(command))) {
+  if (
+    isBash &&
+    (ALWAYS_ASK_PATTERNS.some((re) => re.test(command)) ||
+      isDangerousGit(command) ||
+      FIND_DANGEROUS.test(command) ||
+      PIPE_TO_INTERPRETER.test(command) ||
+      isSensitive(command))
+  ) {
     return "ask";
   }
   if (WRITE_TOOLS.has(name)) {

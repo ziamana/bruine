@@ -104,7 +104,9 @@ describe("Cache Hunter (T17)", () => {
         env,
         stdio: ["pipe", "pipe", "pipe"],
       });
-      child.stdout!.on("data", () => {});
+      child.stdout!.on("data", (d) => {
+        childError += String(d);
+      });
       child.stderr!.on("data", (d) => {
         childError += String(d);
       });
@@ -123,7 +125,7 @@ describe("Cache Hunter (T17)", () => {
         () => mainRequests().length >= 1,
         120_000,
         "first turn",
-        () => `kumo exited: ${String(childExited)}; stderr: ${childError.slice(-900)}; recorded: ${String(fake.requests.length)} (mains ${String(mainRequests().length)})`,
+        () => `kumo exited: ${String(childExited)}; stderr: ${childError.slice(-900).replace(/[\x1b\r\n]+/g, "|")}; recorded: ${String(fake.requests.length)} (mains ${String(mainRequests().length)}); sample: ${JSON.stringify(fake.requests.slice(0, 2).map((r) => { const b = r.body as OpenAiRequestLike; return { roles: (b.messages ?? []).map((m) => `${m.role}:${typeof m.content}`).join(","), top: Object.keys(b).join(","), system: typeof (b as any).system === "string" ? (b as any).system.slice(0, 40) : (b as any).system }; })).slice(0, 3)}`,
       );
 
       // Plan ON (no LLM request — slash command + appended announcement).
@@ -166,7 +168,7 @@ describe("Cache Hunter (T17)", () => {
       // that request still has no plan text.
       const third = JSON.stringify(mains[2]);
       expect(third).toContain("Plan mode is on");
-      const sys3 = (mains[2]!.messages.find((m) => m.role === "system")?.content ?? "") as string;
+      const sys3 = (mains[2]!.messages.find((m) => m.role === "system" || m.role === "developer")?.content ?? "") as string;
       expect(sys3).not.toContain("Plan mode is on");
       expect(sys3).toContain("You are kumo");
     },

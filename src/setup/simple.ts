@@ -129,7 +129,16 @@ export function localServerSettings(hit: ProbeHit, model: string): SettingsDoc {
           api: "openai-completions",
           baseURL: hit.baseUrl,
           apiKeyEnv: LOCAL_API_KEY_ENV,
-          models: [{ id: model, name: model }],
+          // T19.A.2: declare an `off` effort (dsh requires one level beyond
+          // "off") so the Auto-mode judge can ask this model to answer
+          // without thinking.
+          models: [
+            {
+              id: model,
+              name: model,
+              reasoningEfforts: { off: null, low: "low" },
+            },
+          ],
         },
       },
     },
@@ -190,6 +199,9 @@ function emitLines(value: unknown, indent: number): string[] {
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
       if (isContainer(child)) {
         lines.push(`${pad}${yamlKey(key)}:`, ...emitLines(child, indent + 2));
+      } else if (child === null) {
+        // A valueless key (the `off:` spelling in reasoningEfforts).
+        lines.push(`${pad}${yamlKey(key)}:`);
       } else {
         lines.push(`${pad}${yamlKey(key)}: ${yamlScalar(child)}`);
       }

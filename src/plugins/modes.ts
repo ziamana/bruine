@@ -2,7 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
-import { askJudge, judgePrompt, JUDGE_MAX_COMMAND_CHARS, type JudgeLlm, type JudgeRoute } from "../gate/judge.js";
+import { Text } from "@earendil-works/pi-tui";
+import { dim } from "../render/reasoning.js";
+import { askJudge, judgePrompt, JUDGE_MAX_COMMAND_CHARS, type JudgeLlm, type JudgeRoute, type JudgeVerdict } from "../gate/judge.js";
 import { decide, parseArgs, ruleKey, type PermissionMode } from "../gate/rules.js";
 import type { DshContext, KumoRepl } from "./ctx.js";
 
@@ -209,9 +211,9 @@ export function apply(ctx: DshContext): void {
 
   ctx.provide(KUMO_MODES_SERVICE, modes);
 
-  const judge = async (toolName: string, summary: string): Promise<"ALLOW" | "ASK"> => {
+  const judge = async (toolName: string, summary: string): Promise<JudgeVerdict> => {
     // T18.7: oversized commands are never sent to the model.
-    if (summary.length > JUDGE_MAX_COMMAND_CHARS) return "ASK";
+    if (summary.length > JUDGE_MAX_COMMAND_CHARS) return { decision: "ASK" };
     const llm: JudgeLlm | undefined = ctx.get("llm");
     const route = judgeRoute(ctx);
     const message = createUserMessage({
@@ -223,6 +225,24 @@ export function apply(ctx: DshContext): void {
 
   // The gate (T16.C): kumo's own pre-tool decision. The tools array and the
   // system prompt never change, so the prompt cache survives mode flips.
+  let screenUi: { screen: { write(s: string): void }; icons: { fail: string } } | undefined;
+  ctx.inject(["kumoRender"], (c: any) => {
+    screenUi = c.kumoRender?.screen;
+  });
+  let judgeWarned = false;
+  const reportUnavailable = (reason: string): void => {
+    if (judgeWarned) return;
+    judgeWarned = true;
+    const line = `auto: judge unavailable (${reason}), asking instead`;
+    const ui = repl?.ui;
+    if (ui !== undefined) {
+      ui.addChat(new Text(dim(line), 1, 0));
+      ui.requestRender();
+    } else if (screenUi !== undefined) {
+      screenUi.screen.write(`\n${dim(line)}\n`);
+    }
+  };
+
   ctx.on("tools/pre-execute", async (exec: any, next: () => Promise<any>) => {
     const current = repl;
     if (current === undefined || exec.agent !== current.agent) return next();
@@ -254,7 +274,8 @@ export function apply(ctx: DshContext): void {
       case "judge": {
         const verdict = await judge(exec.name, summary);
         via = "fast-model";
-        decision = verdict === "ALLOW" ? { kind: "allow" } : { kind: "ask", reason: summary };
+        if (verdict.unavailable !== undefined) reportUnavailable(verdict.unavailable);
+        decision = verdict.decision === "ALLOW" ? { kind: "allow" } : { kind: "ask", reason: summary };
         break;
       }
       case "ask":

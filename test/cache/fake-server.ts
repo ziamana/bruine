@@ -96,8 +96,13 @@ export interface OpenAiRequestLike {
   tools?: unknown;
 }
 
+/** pi-ai sends `developer` instead of `system` for reasoning models. */
+function isSystemish(m: { role: string }): boolean {
+  return m.role === "system" || m.role === "developer";
+}
+
 function systemMessageOf(body: OpenAiRequestLike): string {
-  const system = (body.messages ?? []).find((m) => m.role === "system");
+  const system = (body.messages ?? []).find(isSystemish);
   return system === undefined ? "" : JSON.stringify(system);
 }
 
@@ -134,8 +139,8 @@ export function checkCacheInvariants(mainBodies: OpenAiRequestLike[]): string[] 
     if (sys !== undefined) failures.push(`request ${String(i)}: system changed — ${sys}`);
     const tools = firstDiffByte(JSON.stringify(prev.tools ?? null), JSON.stringify(curr.tools ?? null));
     if (tools !== undefined) failures.push(`request ${String(i)}: tools changed — ${tools}`);
-    const prevMsgs = (prev.messages ?? []).filter((m) => m.role !== "system");
-    const currMsgs = (curr.messages ?? []).filter((m) => m.role !== "system");
+    const prevMsgs = (prev.messages ?? []).filter((m) => !isSystemish(m));
+    const currMsgs = (curr.messages ?? []).filter((m) => !isSystemish(m));
     if (prevMsgs.length > currMsgs.length) {
       failures.push(
         `request ${String(i)}: history shrank (${String(prevMsgs.length)} → ${String(currMsgs.length)} messages)`,

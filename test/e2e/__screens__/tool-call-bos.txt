@@ -2,7 +2,7 @@
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
  │ Read note.txt                                                                                    
 ✓ read  …  0.6s
-    <path>/tmp/kumo-e2e-project-JAgtam/note.txt</path>
+    <path>/tmp/kumo-e2e-project-2M7w9C/note.txt</path>
     <type>file</type>
     <content>
     1: E2E_READ_SENTINEL

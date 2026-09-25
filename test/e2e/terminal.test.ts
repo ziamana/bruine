@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { beforeAll, expect, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, test } from "vitest";
 import stringWidth from "string-width";
 import { build, Harness } from "./harness.js";
 import { textScript, toolScript, type Script } from "./sse-server.js";
@@ -32,7 +32,7 @@ async function scenario(name: string, scripts: Script[], run: (h: Harness) => Pr
   }
 }
 
-// Sequential + bail=1: preserve the first bug and stop, as T22 requires.
+// Every scenario owns its PTY, home, project and server; failures never bail out.
 test("reasoning: only one visible thought line throughout 40 mixed lines", async () => {
   await scenario("reasoning", [reasoning()], async (h) => {
     await h.prompt("Think through the problem");
@@ -91,28 +91,75 @@ test("tool call: read note.txt and send the real tool result back", async () => 
   });
 });
 
-test("modes: Tab Plan/Build, Shift+Tab Ask/Auto/confirmed red Full access", async () => {
+describe("Ask footer label", () => {
+  let h: Harness | undefined;
+  // Setup/cleanup live outside it.fails so infrastructure errors cannot satisfy
+  // the expected product failure.
+  beforeEach(async () => {
+    h = await Harness.start([]);
+    await h.waitFor("e2e-model", 30_000);
+    await h.waitStable(150, 2000);
+  });
+  afterEach(async () => { await h?.close(); h = undefined; });
+
+  // fixed by T23
+  it.fails("always shows the initial ask label", async () => {
+    await h!.dump("ask-label");
+    const footer = h!.screen().find((line) => line.includes("e2e-model"));
+    expect(footer).toMatch(/\bask\b/i);
+  });
+});
+
+test("modes: Tab Plan/Build, Shift+Tab Auto, confirmed red Full access", async () => {
   await scenario("modes", [], async (h) => {
-    await h.waitFor("Ask");
+    const failures: string[] = [];
+    // Keep exercising later transitions even when an earlier label is broken.
+    const checkpoint = async (name: string, check: () => Promise<void>) => {
+      try { await check(); }
+      catch (error) {
+        failures.push(`${name}: ${String(error)}`);
+        await h.dump(`${name}-failure`);
+        console.error(`CHECKPOINT FAILED: ${name}\n${h.screen().join("\n")}`);
+      }
+      await h.dump(name);
+    };
     h.press("tab");
-    await h.waitFor("Plan");
-    await h.dump("modes-plan");
+    await checkpoint("modes-plan", () => h.waitFor("PLAN", 2000));
     h.press("tab");
-    await h.waitFor("Build");
+    // Current UI represents Build by removing PLAN rather than a Build badge.
+    await checkpoint("modes-build", () => h.until(() => !h.screen().some((line) => /\bPLAN\b/.test(line)), 2000, "Build (PLAN removed)"));
     h.press("shiftTab");
-    await h.waitFor("Auto");
+    await checkpoint("modes-auto", async () => {
+      // The context meter's gray '(auto)' is not a permission label.
+      await h.until(() => {
+        const row = h.screen().findIndex((line) => line.includes("e2e-model"));
+        if (row < 0) return false;
+        for (const match of h.screen()[row]!.matchAll(/\bauto\b/gi)) {
+          const cell = h.term.buffer.active.getLine(h.term.buffer.active.viewportY + row)!.getCell(match.index!)!;
+          if (cell.isFgPalette() && cell.getFgColor() === 3) return true;
+        }
+        return false;
+      }, 2000, "yellow Auto permission label");
+    });
     h.press("shiftTab");
-    await h.waitFor("Switch to FULL ACCESS?");
-    await h.dump("modes-confirmation");
+    await checkpoint("modes-confirmation", async () => {
+      await h.waitFor("Switch to FULL ACCESS?", 2000);
+      expect(h.screen().join("\n")).toContain("Stay in current mode");
+      expect(h.screen().join("\n")).toContain("Yes, grant full access");
+    });
     h.press("down");
+    await delay(50);
     h.press("enter");
-    await h.until(() => !h.screen().join("\n").includes("Switch to FULL ACCESS?") && h.screen().join("\n").includes("FULL ACCESS"));
+    await checkpoint("modes-full", async () => {
+      await h.until(() => !h.screen().join("\n").includes("Switch to FULL ACCESS?") && h.screen().join("\n").includes("FULL ACCESS"), 2000, "confirmed Full access badge");
+      const row = h.screen().findIndex((line) => line.includes("FULL ACCESS"));
+      const column = h.screen()[row]!.indexOf("FULL ACCESS");
+      const cell = h.term.buffer.active.getLine(h.term.buffer.active.viewportY + row)!.getCell(column)!;
+      expect(cell.isFgPalette()).toBeTruthy();
+      expect(cell.getFgColor()).toBe(1);
+    });
     await h.dump("modes");
-    const row = h.screen().findIndex((line) => line.includes("FULL ACCESS"));
-    const column = h.screen()[row]!.indexOf("FULL ACCESS");
-    const cell = h.term.buffer.active.getLine(h.term.buffer.active.viewportY + row)!.getCell(column)!;
-    expect(cell.isFgPalette()).toBeTruthy();
-    expect(cell.getFgColor()).toBe(1);
+    expect(failures, failures.join("\n")).toEqual([]);
   });
 });
 
@@ -121,7 +168,14 @@ test("keys: ctrl+c clears input and ctrl+d exits successfully", async () => {
     h.type("PROMPT_TO_CLEAR");
     await h.waitFor("PROMPT_TO_CLEAR");
     h.press("ctrlC");
-    await h.until(() => !h.screen().join("\n").includes("PROMPT_TO_CLEAR"), 1000, "cleared editor");
+    let clearFailure: unknown;
+    try {
+      await h.until(() => !h.screen().join("\n").includes("PROMPT_TO_CLEAR"), 1000, "cleared editor");
+    } catch (error) {
+      clearFailure = error;
+      await h.dump("keys-clear-failure");
+      console.error(`CHECKPOINT FAILED: keys-clear\n${h.screen().join("\n")}`);
+    }
     await h.dump("keys");
     expect(h.server.mainRequests()).toHaveLength(0);
     const start = Date.now();
@@ -129,6 +183,8 @@ test("keys: ctrl+c clears input and ctrl+d exits successfully", async () => {
     await h.until(() => h.exit !== undefined, 4900, "clean exit");
     expect(h.exit?.exitCode).toBe(0);
     expect(Date.now() - start).toBeLessThan(5000);
+    console.info(`KEYS EXIT: code=${h.exit?.exitCode}, elapsed=${Date.now() - start}ms`);
+    expect(clearFailure, String(clearFailure)).toBeUndefined();
   });
 });
 

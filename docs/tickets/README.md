@@ -34,4 +34,5 @@ You are implementing one ticket of the kumo project.
 | T13a-d | UI rebuilt on pi-tui (pi look, Escape, markdown, footer) | T12 |
 | T14 | Public groundwork: CI 3 OS, pinned dsh, telemetry off, paths, ASCII | T12 |
 | T15 | Identity (kumo + model), short tone, tools (web fetch, ask user, subagents), web search options | T13 |
-| T16 | Modes: Plan/Build (Tab) × Ask/Auto/Full access (Shift+Tab), sandbox off | T15 |
+| T16 | Modes: Plan/Build (Tab) × Ask/Auto/Full access (Shift+Tab), sandbox off, SAME tools in both modes | T15 |
+| T17 | Cache Hunter test: system+tools byte-identical, messages append-only | T16 |

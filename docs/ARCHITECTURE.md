@@ -17,6 +17,9 @@ kumo is a **public product** for **Windows, macOS and Linux**, not a personal to
 | Secrets | OS keyring (`@napi-rs/keyring`: Windows Credential Manager, macOS Keychain, Linux Secret Service). Fallback file chmod 600 (Linux/macOS) with a warning. Never echo a key. |
 | Terminals | Must work in Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal. Provide an ASCII fallback (`*` for `💭`, `>` for `›`) when `KUMO_ASCII=1` or the terminal is not UTF-8. |
 | CI | GitHub Actions matrix: ubuntu, windows, macos × Node 22 and 24. A ticket is done only when CI is green on all 3. |
+| **Prompt cache (critical for local models)** | The request prefix must stay byte-identical across a session. **Never** change the system prompt or the tools array mid-session (modes, skills, MCP, settings). New information (new skill, AGENTS.md change, mode switch) is **appended as a message at the end**. Compaction keeps the same system prompt and tools. No timestamps / token counts / mode badges in the prompt. Source: youtu.be/AkwItxJ9AbA (Cache Hunter test, 2026-09): dsh itself keeps the cache perfectly; Pi lost it by swapping tools on plan→build. |
+| Honest numbers | The footer's tok/s is computed by kumo from its own timestamps, never copied from dsh (the same test found dsh's figure overstated: 79 shown vs 60 real). |
+
 
 
 ---

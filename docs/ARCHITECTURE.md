@@ -172,6 +172,7 @@ API keys: system keyring (`secret-tool` on Linux), fallback `~/.kumo/.env` chmod
 |---|---|
 | **0.1** | `kumo` command, simple setup, interactive chat, live reasoning/text/tool rendering, approvals |
 | 0.2 | full setup: network model discovery (LAN + Tailscale, ports 8080-8090, 11434, 1234, 8000, `GET /v1/models`), API keys, roles, access, theme, skills picker, memory on/off |
+| 0.3 | **local voice input** (hold Space = push-to-talk like Claude Code `/voice`, configurable; STT on the user's machine: small Whisper, or any OpenAI-compatible `/v1/audio/transcriptions` server; offline). Spike first: cross-platform mic capture from a terminal. Decided by Aron 2026-09-25, after the first public release |
 | 0.3 | browser control via Playwright MCP (dsh already has `dsh-mcp-client`) |
 | 0.4 | `kumo doctor`, persistent memory, proof mode |
 | later | mouse/keyboard control, OFF by default |

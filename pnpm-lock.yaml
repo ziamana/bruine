@@ -194,6 +194,12 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.6
+      '@xterm/headless':
+        specifier: ^6.0.0
+        version: 6.0.0
+      node-pty:
+        specifier: ^1.1.0
+        version: 1.1.0
       tsup:
         specifier: ^8.0.0
         version: 8.5.1(postcss@8.5.28)(typescript@5.9.3)(yaml@2.9.1)
@@ -206,7 +212,6 @@ importers:
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
-
 
 packages:
 
@@ -3966,6 +3971,9 @@ packages:
   node-fetch@3.3.2:
     resolution: {integrity: sha512-dRB78srN/l6gqWulah9SrxeYnxeddIG30+GOqK/9OlLVyLg3HPnr6SqOWTWOXKRwC2eGYCkZ59NNuSgvSrpgOA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  node-pty@1.1.0:
+    resolution: {integrity: sha512-20JqtutY6JPXTUnL0ij1uad7Qe1baT46lyolh2sSENDd4sTzKZ4nmAFkeAARDKwmlLjPx6XKRlwRUxwjOy+lUg==}
 
   node-pty@1.2.0-beta.15:
     resolution: {integrity: sha512-vORSzHXi4Ofl7HemVWpuudLqCPdaQb4LfpRCUpE5HPxhp4JYscl8zZwxh11p26v2wvW24WMwnMfLjhRLixrfxA==}
@@ -8573,6 +8581,10 @@ snapshots:
       data-uri-to-buffer: 4.0.1
       fetch-blob: 3.2.0
       formdata-polyfill: 4.0.10
+
+  node-pty@1.1.0:
+    dependencies:
+      node-addon-api: 7.1.1
 
   node-pty@1.2.0-beta.15:
     dependencies:

@@ -1,6 +1,7 @@
 import type { EditorTheme, MarkdownTheme, SelectListTheme } from "@earendil-works/pi-tui";
 
 import { bgEnabled, onBg, paint } from "./palette.js";
+import { highlightCode } from "./highlight.js";
 
 /**
  * Color helpers for the kumo pi-tui theme, backed by the Nuage palette
@@ -53,7 +54,14 @@ export const markdownTheme: MarkdownTheme = {
   linkUrl: (s) => ansi.gray(s),
   code: (s) => ansi.yellow(s),
   codeBlock: (s) => s,
-  codeBlockBorder: (s) => ansi.gray(s),
+  // Fences are not shown as "```": the opening one becomes the language label, the
+  // closing one a blank line. Code lines sit behind a faint bar, highlighted.
+  codeBlockBorder: (s) => {
+    const lang = s.replace(/^```/, "").trim();
+    return lang === "" ? "" : ansi.faint(lang);
+  },
+  codeBlockIndent: ansi.faint("▏") + " ",
+  highlightCode,
   quote: (s) => ansi.gray(s),
   quoteBorder: (s) => ansi.gray(s),
   hr: (s) => ansi.gray(s),

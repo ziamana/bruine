@@ -56,6 +56,11 @@ export const NUAGE = {
   chip: { hex: "#262c3f", basic: 40 },
   edge: { hex: "#4aa8e0", basic: 34 },
   onSky: { hex: "#0c2b3d", basic: 30 },
+  // Diff backgrounds: a quiet green and red band behind added and removed lines.
+  addBg: { hex: "#16301f", basic: 40 },
+  delBg: { hex: "#3a1820", basic: 40 },
+  addFg: { hex: "#b8f0c6", basic: 32 },
+  delFg: { hex: "#ffb3c0", basic: 31 },
 } satisfies Record<string, Swatch>;
 
 /** The roles setTerminalBackdrop is allowed to override. */

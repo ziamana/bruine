@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { TASKS_HELP } from "../ui/task-panel.js";
+import { formatShell, isShellLine, runShell } from "./shell.js";
 import { randomUUID } from "node:crypto";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
 import { Text } from "@earendil-works/pi-tui";
@@ -407,6 +408,13 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     reply: (s: string) => void,
   ): Promise<void> => {
     const trimmed = text.trim();
+    // "!cmd": the user's own shell command, output shown, never sent to the model.
+    if (isShellLine(trimmed)) {
+      const command = trimmed.slice(1).trim();
+      const r = await runShell(command);
+      reply(formatShell(command, r));
+      return;
+    }
     if (!trimmed.startsWith("/")) {
       emitLine(text);
       return;
@@ -505,6 +513,8 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/skills  List the enabled skills",
           "/reload  Re-read settings.yaml and the terminal background",
           "/help  Show commands and keys",
+          "!cmd  Run a shell command yourself (output not sent to the model)",
+          "@file  Attach a file (a list opens as you type)",
           "/exit  Quit kumo (also ctrl+d)",
           `Esc interrupt, ctrl+c clear, ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, ctrl+b cockpit, f2 next model, ${TASKS_HELP}`,
         ].join("\n"),

@@ -7,6 +7,7 @@ import type { RailState } from "./chat-layout.js";
 import { fileLink } from "./links.js";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
+import { diffCounter, diffForCall, renderDiff, type FileDiff } from "./diff-view.js";
 
 const SUMMARY_KEYS = ["command", "cmd", "path", "file_path", "url", "query", "pattern"];
 /** T59: the tools whose call is a change to the workspace. */
@@ -37,6 +38,8 @@ export class ToolCallComponent implements Component {
   #rawArgs = "";
   #startTime: number;
   #done: { ok: boolean; seconds: number; lines: string[]; rest: number } | undefined;
+  /** What a successful edit/write changed, shown instead of "file updated". */
+  #diff: FileDiff | undefined;
   constructor(readonly tool: string, private now: () => number = Date.now, private icons: KumoIcons = kumoIcons()) {
     this.#startTime = now();
   }
@@ -53,7 +56,11 @@ export class ToolCallComponent implements Component {
     // which file, so show only the content lines.
     const lines = sanitize(output)
       .split("\n")
-      .filter((l) => !/^\s*(<(path|type)>.*<\/(path|type)>|<\/?content>)\s*$/.test(l));
+      .filter((l) => !/^\s*(<(path|type)>.*<\/(path|type)>|<\/?content>)\s*$/.test(l))
+      // Read results end with "(End of file - total N lines)": noise once the lines are shown.
+      .filter((l) => !/^\s*\(End of file - total \d+ lines?\)\s*$/.test(l));
+    while (lines.length > 0 && lines.at(-1)!.trim() === "") lines.pop();
+    this.#diff = ok && WRITE_TOOLS.has(this.tool) ? diffForCall(this.tool, this.#rawArgs) : undefined;
     if (lines.at(-1) === "") lines.pop();
     this.#done = { ok, seconds: (this.now() - this.#startTime) / 1000, lines: lines.slice(0, MAX_OUTPUT_LINES), rest: Math.max(0, lines.length - MAX_OUTPUT_LINES) };
   }
@@ -122,11 +129,13 @@ export class ToolCallComponent implements Component {
     // T55 P1a: a duration that says nothing is not printed at all, and one past
     // ten seconds loses its decimal.
     const dur = formatDuration(this.#done.seconds);
-    const durCells = dur === undefined ? 0 : stringWidth(dur) + 2;
+    const counter = this.#diff === undefined ? "" : `  ${diffCounter(this.#diff)}`;
+    const counterCells = this.#diff === undefined ? 0 : 2 + `+${String(this.#diff.added)} -${String(this.#diff.removed)}`.length;
+    const durCells = (dur === undefined ? 0 : stringWidth(dur) + 2) + counterCells;
     const prefixCells = 1 + 1 + 7 + 2;
     const avail = Math.max(0, width - prefixCells - durCells);
     const budget = Math.min(60, avail);
-    const durPart = dur === undefined ? "" : `  ${ansi.faint(dur)}`;
+    const durPart = counter + (dur === undefined ? "" : `  ${ansi.faint(dur)}`);
     // Two renderings of the same summary: the linked one when the line fits, and
     // the plain one for the narrow fallback, because clipCells walks graphemes
     // and must never be handed an escape sequence to cut through.
@@ -142,6 +151,10 @@ export class ToolCallComponent implements Component {
           ? `${mark} ${ansi.text(toolPad)}  ${ansi.gray(linkedPadded)}${durPart}`
           : mark + clipCells(plainHead, Math.max(0, width - 1));
     const out = [head];
+    if (this.#diff !== undefined && this.#diff.lines.length > 0) {
+      out.push(...renderDiff(this.#diff, Math.max(1, width - 2), this.icons.think === "*").map((l) => `  ${l}`));
+      return out;
+    }
     const branch = this.icons.think === "*" ? ">" : "⎿";
     this.#done.lines.forEach((line, i) => out.push(dim(clipCells(`${i === 0 ? `  ${branch} ` : "    "}${line}`, width))));
     if (this.#done.rest > 0) out.push(dim(clipCells(`    ${this.icons.think === "*" ? "..." : "…"} ${this.#done.rest} more lines`, width)));

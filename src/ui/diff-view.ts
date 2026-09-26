@@ -1,0 +1,151 @@
+/**
+ * A compact diff for file changes (edit / write), in the tool call itself: removed
+ * lines on a red band, added lines on a green band, with the real line numbers when
+ * the file can be read after the change. jsdiff (BSD-3) computes the line diff.
+ */
+import { diffLines } from "diff";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import stringWidth from "string-width";
+import { colorDepth, onBg, paint } from "./palette.js";
+import { clipCells } from "../render/reasoning.js";
+
+export interface DiffLine {
+  kind: "add" | "del" | "ctx";
+  text: string;
+  /** Line number in the file after the change (added and context lines). */
+  n?: number;
+}
+
+export interface FileDiff {
+  lines: DiffLine[];
+  added: number;
+  removed: number;
+}
+
+const MAX_DIFF_LINES = 12;
+
+function splitKeep(s: string): string[] {
+  const parts = s.split("\n");
+  if (parts.at(-1) === "") parts.pop();
+  return parts;
+}
+
+/** First line (1-based) where `needle` starts in `hay`, or undefined. */
+function lineOf(hay: string, needle: string): number | undefined {
+  if (needle === "") return undefined;
+  const at = hay.indexOf(needle);
+  if (at < 0) return undefined;
+  return hay.slice(0, at).split("\n").length;
+}
+
+function readAfter(path: string | undefined): string | undefined {
+  if (path === undefined || path === "") return undefined;
+  try {
+    return readFileSync(resolve(process.cwd(), path), "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * One old → new replacement as diff lines, numbered from `start` when known.
+ * Common leading and trailing lines are peeled off first, so "}" → "}\n\nfn b() {\n}"
+ * reads as four added lines after the brace (what a person expects), not as an added
+ * brace plus an unchanged one further down (jsdiff's equally valid alignment).
+ */
+function replacement(oldText: string, newText: string, start: number | undefined): FileDiff {
+  const a = splitKeep(oldText);
+  const b = splitKeep(newText);
+  let head = 0;
+  while (head < a.length && head < b.length && a[head] === b[head]) head += 1;
+  let tail = 0;
+  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail += 1;
+  const lines: DiffLine[] = [];
+  let added = 0;
+  let removed = 0;
+  let n = start;
+  const ctx = (text: string): void => {
+    lines.push({ kind: "ctx", text, ...(n !== undefined ? { n } : {}) });
+    if (n !== undefined) n += 1;
+  };
+  for (const text of b.slice(0, head)) ctx(text);
+  const midOld = a.slice(head, a.length - tail).join("\n");
+  const midNew = b.slice(head, b.length - tail).join("\n");
+  for (const part of diffLines(midOld === "" ? "" : `${midOld}\n`, midNew === "" ? "" : `${midNew}\n`)) {
+    for (const text of splitKeep(part.value)) {
+      if (part.added === true) {
+        lines.push({ kind: "add", text, ...(n !== undefined ? { n } : {}) });
+        added += 1;
+        if (n !== undefined) n += 1;
+      } else if (part.removed === true) {
+        lines.push({ kind: "del", text });
+        removed += 1;
+      } else {
+        ctx(text);
+      }
+    }
+  }
+  for (const text of b.slice(b.length - tail)) ctx(text);
+  return { lines, added, removed };
+}
+
+/** The diff a finished write/edit call made, from its arguments (pure except one file read). */
+export function diffForCall(tool: string, rawArgs: string): FileDiff | undefined {
+  let args: Record<string, unknown>;
+  try {
+    const v: unknown = JSON.parse(rawArgs);
+    if (v === null || typeof v !== "object" || Array.isArray(v)) return undefined;
+    args = v as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+  const path = typeof args.path === "string" ? args.path : typeof args.file_path === "string" ? args.file_path : undefined;
+  if (tool === "write" && typeof args.content === "string") {
+    const lines = splitKeep(args.content).map((text, i) => ({ kind: "add" as const, text, n: i + 1 }));
+    return { lines, added: lines.length, removed: 0 };
+  }
+  if (tool === "edit" && typeof args.old_string === "string" && typeof args.new_string === "string") {
+    const after = readAfter(path);
+    const start = after === undefined ? undefined : lineOf(after, args.new_string);
+    return replacement(args.old_string, args.new_string, start);
+  }
+  if (tool === "multi_edit" && Array.isArray(args.edits)) {
+    const after = readAfter(path);
+    const all: FileDiff = { lines: [], added: 0, removed: 0 };
+    for (const e of args.edits as Array<Record<string, unknown>>) {
+      if (typeof e.old_string !== "string" || typeof e.new_string !== "string") continue;
+      const d = replacement(e.old_string, e.new_string, after === undefined ? undefined : lineOf(after, e.new_string));
+      all.lines.push(...d.lines);
+      all.added += d.added;
+      all.removed += d.removed;
+    }
+    return all.lines.length > 0 ? all : undefined;
+  }
+  return undefined;
+}
+
+/** `+3 -1` for the tool header. */
+export function diffCounter(d: FileDiff): string {
+  return `${paint("mint", `+${String(d.added)}`)} ${paint("rose", `-${String(d.removed)}`)}`;
+}
+
+/** The diff block under the header, clipped to the width, at most 12 lines. */
+export function renderDiff(d: FileDiff, width: number, ascii = false): string[] {
+  const bar = ascii ? "|" : "│";
+  const numW = Math.max(3, ...d.lines.map((l) => String(l.n ?? "").length));
+  const shown = d.lines.slice(0, MAX_DIFF_LINES);
+  const bands = colorDepth() === "truecolor" || colorDepth() === "256";
+  const out = shown.map((l) => {
+    const num = l.n === undefined ? " ".repeat(numW) : String(l.n).padStart(numW);
+    const sign = l.kind === "add" ? "+" : l.kind === "del" ? "-" : " ";
+    const plain = clipCells(`${num} ${bar}${sign}${l.text.replace(/\t/g, "  ")}`, width);
+    if (l.kind === "ctx") return paint("faint", plain);
+    const padded = plain + " ".repeat(Math.max(0, width - stringWidth(plain)));
+    if (bands) return l.kind === "add" ? onBg("addBg", paint("addFg", padded)) : onBg("delBg", paint("delFg", padded));
+    return l.kind === "add" ? paint("mint", plain) : paint("rose", plain);
+  });
+  const rest = d.lines.length - shown.length;
+  if (rest > 0) out.push(paint("faint", `${" ".repeat(numW)} ${ascii ? "..." : "…"} ${String(rest)} more lines`));
+  return out;
+}

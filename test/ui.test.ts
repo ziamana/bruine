@@ -1856,3 +1856,57 @@ describe("tool output display (Nuage polish)", () => {
     expect(text).not.toContain("<content>");
   });
 });
+
+describe("server label (UI polish 2026-09-26)", () => {
+  test("LAN and localhost keep the address, cloud APIs show the provider name", async () => {
+    const { serverLabel } = await import("../src/ui/kumo-ui.js");
+    expect(serverLabel("192.168.1.64", "Ornith (home)")).toBe("192.168.1.64");
+    expect(serverLabel("localhost")).toBe("localhost");
+    expect(serverLabel("100.101.5.2")).toBe("100.101.5.2");
+    expect(serverLabel("token-plan.ap-southeast-1.maas.aliyuncs.com", "Alibaba Cloud (Qwen)")).toBe("Alibaba Cloud (Qwen)");
+    expect(serverLabel("openrouter.ai")).toBe("openrouter.ai");
+    expect(serverLabel("api.deepseek.com")).toBe("deepseek.com");
+  });
+});
+
+describe("file change diff (UI polish 2026-09-26)", () => {
+  test("edit shows removed and added lines with the counter, write shows added lines", async () => {
+    const { diffForCall, renderDiff, diffCounter } = await import("../src/ui/diff-view.js");
+    const d = diffForCall("edit", JSON.stringify({ path: "/nonexistent/x.ts", old_string: "a\nb\n", new_string: "a\nc\nd\n" }))!;
+    expect(d.added).toBe(2);
+    expect(d.removed).toBe(1);
+    const lines = renderDiff(d, 40).map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""));
+    expect(lines.some((l) => l.includes("-b"))).toBe(true);
+    expect(lines.some((l) => l.includes("+c"))).toBe(true);
+    expect(diffCounter(d).replace(/\x1b\[[0-9;]*m/g, "")).toBe("+2 -1");
+    const w = diffForCall("write", JSON.stringify({ path: "n.ts", content: "x\ny\n" }))!;
+    expect(w.added).toBe(2);
+    expect(renderDiff(w, 40).map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""))[0]).toMatch(/^\s*1 │\+x/);
+  });
+  test("a long diff is capped at 12 lines with a count of the rest", async () => {
+    const { diffForCall, renderDiff } = await import("../src/ui/diff-view.js");
+    const content = Array.from({ length: 30 }, (_, i) => `line ${String(i)}`).join("\n");
+    const out = renderDiff(diffForCall("write", JSON.stringify({ path: "big.ts", content }))!, 60);
+    expect(out).toHaveLength(13);
+    expect(out.at(-1)!.replace(/\x1b\[[0-9;]*m/g, "")).toContain("18 more lines");
+  });
+});
+
+describe("code fences (UI polish 2026-09-26)", () => {
+  test("typescript is highlighted, unknown languages stay plain, lines are kept", async () => {
+    const { highlightCode } = await import("../src/ui/highlight.js");
+    const out = highlightCode("export function f() {\n  return 1;\n}", "ts");
+    expect(out).toHaveLength(3);
+    expect(out.map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""))).toEqual(["export function f() {", "  return 1;", "}"]);
+    expect(out[0]).toContain("\x1b[");
+    expect(highlightCode("hello", "klingon")).toEqual(["hello"]);
+  });
+});
+
+describe("diff alignment (UI polish 2026-09-26)", () => {
+  test("appending after a closing brace reads as added lines after it", async () => {
+    const { diffForCall } = await import("../src/ui/diff-view.js");
+    const d = diffForCall("edit", JSON.stringify({ path: "/nonexistent", old_string: "}", new_string: "}\n\nexport function b() {\n}" }))!;
+    expect(d.lines.map((l) => `${l.kind}:${l.text}`)).toEqual(["ctx:}", "add:", "add:export function b() {", "add:}"]);
+  });
+});

@@ -28,6 +28,7 @@ import { QuestionForm } from "./questions.js";
 import { WorkingComponent } from "./working.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
 import { DashboardPanel, DockRow } from "./dock.js";
+import { createAutocomplete } from "./file-complete.js";
 import {
   CollapsedToolsComponent,
   groupRuns,
@@ -147,6 +148,23 @@ export function readKumoJsonForHeader(dshHome?: string): {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * What the header and the cockpit call the server: the address for a machine on your
+ * own network (it tells you which box), the provider's display name for a cloud API
+ * (a 45-character host like token-plan.ap-southeast-1.maas.aliyuncs.com says nothing).
+ */
+export function serverLabel(hostname: string, displayName?: string): string {
+  const h = hostname.toLowerCase();
+  const local =
+    h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h.endsWith(".lan") ||
+    /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) ||
+    /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(h) || h === "::1" || !h.includes(".");
+  if (local) return hostname;
+  if (displayName !== undefined && displayName.trim() !== "") return displayName.trim();
+  // Registrable-looking tail: the last two labels (aliyuncs.com, openrouter.ai).
+  return h.split(".").slice(-2).join(".");
 }
 
 export interface SettingsRoute {
@@ -737,7 +755,8 @@ export class KumoUi {
 
   /** Slash-command + file completion on the editor (T31.1). */
   setAutocompleteCommands(commands: SlashCommand[]): void {
-    this.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, process.cwd()));
+    // "@" files work with or without the fd binary (fallback walker in file-complete.ts).
+    this.editor.setAutocompleteProvider(createAutocomplete(commands, process.cwd()));
     this.editor.setAutocompleteMaxVisible(10);
   }
 
@@ -838,7 +857,7 @@ export class KumoUi {
       try {
         const route = readSettingsRoute();
         if (route?.baseUrl !== undefined && route.baseUrl !== "") {
-          host = new URL(route.baseUrl).hostname;
+          host = serverLabel(new URL(route.baseUrl).hostname, route.providerDisplayName);
         } else if (route?.provider !== undefined && route.provider !== "" && route.provider !== "local") {
           host = route.provider;
         }

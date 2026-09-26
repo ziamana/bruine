@@ -170,6 +170,23 @@ export async function scanProjectSkills(
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export interface AvailableSkill extends SkillMeta {
+  scope: "user" | "project";
+}
+
+/** Skills dsh can use in this session, including project-local skills. */
+export async function readAvailableSkills(homeSkillsDir: string, cwd: string): Promise<AvailableSkill[]> {
+  const byName = new Map<string, AvailableSkill>();
+  for (const skill of await readSkillsUnder(homeSkillsDir)) {
+    byName.set(skill.name, { ...skill, scope: "user" });
+  }
+  // A project skill with the same name is the one relevant to this cwd.
+  for (const skill of await scanProjectSkills(cwd)) {
+    byName.set(skill.name, { ...skill, scope: "project" });
+  }
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 async function readManifest(manifestPath: string): Promise<InstalledSkills> {
   let raw: Record<string, unknown>;
   try {

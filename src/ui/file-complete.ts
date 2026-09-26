@@ -74,6 +74,28 @@ function completionValue(path: string, quoted: boolean): string {
 /** The editor's provider: slash commands + "@" files, with or without fd. */
 export function createAutocomplete(commands: SlashCommand[], basePath: string, fdPath: string | null = findFd()): CombinedAutocompleteProvider {
   const provider = new CombinedAutocompleteProvider(commands, basePath, fdPath);
+  const argumentCommand = (lines: string[], cursorLine: number, cursorCol: number) => {
+    const before = (lines[cursorLine] ?? "").slice(0, cursorCol);
+    const match = /^\/([^\s]+)\s(.*)$/.exec(before);
+    if (match === null) return undefined;
+    const command = commands.find((item) => item.name === `/${match[1]}`);
+    if (command?.getArgumentCompletions === undefined) return undefined;
+    return { command, prefix: match[2] ?? "" };
+  };
+  const originalSuggestions = provider.getSuggestions.bind(provider);
+  const originalFileTrigger = provider.shouldTriggerFileCompletion.bind(provider);
+  // pi-tui matches argument commands without their leading slash, while kumo
+  // stores slash-prefixed names. Handle those arguments before file fallback.
+  provider.getSuggestions = async (lines, cursorLine, cursorCol, options) => {
+    const argument = argumentCommand(lines, cursorLine, cursorCol);
+    if (argument !== undefined && !/(?:^|\s)@\S*$/.test(argument.prefix)) {
+      const items = await argument.command.getArgumentCompletions!(argument.prefix);
+      return items === null || items.length === 0 ? null : { items, prefix: argument.prefix };
+    }
+    return originalSuggestions(lines, cursorLine, cursorCol, options);
+  };
+  provider.shouldTriggerFileCompletion = (lines, cursorLine, cursorCol) =>
+    argumentCommand(lines, cursorLine, cursorCol) !== undefined || originalFileTrigger(lines, cursorLine, cursorCol);
   if (fdPath === null) {
     (provider as unknown as {
       getFuzzyFileSuggestions: (q: string, o: { signal: AbortSignal; isQuotedPrefix?: boolean }) => Promise<unknown[]>;

@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
   migrateAgentsSkills,
+  readAvailableSkills,
   readInstalledSkills,
   scanFoundSkills,
   scanProjectSkills,
@@ -22,6 +23,8 @@ import {
   type FoundSkill,
 } from "../src/setup/skills.js";
 import { initialSkillChecks, savedSkillsList, type CheckItem } from "../src/setup/full.js";
+import { createAutocomplete } from "../src/ui/file-complete.js";
+import { formatAvailableSkills, skillCommand } from "../src/plugins/repl.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -100,6 +103,36 @@ describe("scanFoundSkills (T26)", () => {
     expect((await scanProjectSkills(proj)).map((s) => s.name)).toEqual(["one", "two"]);
     expect(await scanProjectSkills(join(tmpdir(), "definitely-missing-kumo-t26-p"))).toEqual([]);
   });
+});
+
+test("/skills lists usable home and project skills and completes their names", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kumo-skills-menu-"));
+  const homeSkills = join(root, "home", "skills");
+  const project = join(root, "project");
+  await putSkill(join(homeSkills, "apex"), "apex", "Adaptive work");
+  await putSkill(join(homeSkills, "browser"), "browser", "Browser control");
+  await putSkill(join(project, ".agents", "skills", "impeccable"), "impeccable", "Interface design");
+  await putSkill(join(project, ".dsh", "skills", "apex"), "apex", "Project-specific work");
+
+  const skills = await readAvailableSkills(homeSkills, project);
+  expect(skills.map((skill) => skill.name)).toEqual(["apex", "browser", "impeccable"]);
+  expect(skills[0]).toMatchObject({ description: "Project-specific work", scope: "project" });
+  const listed = formatAvailableSkills(skills);
+  expect(listed).toContain("apex");
+  expect(listed).toContain("browser");
+  expect(listed).toContain("impeccable");
+  expect(listed).not.toContain("SECRET BODY");
+
+  const provider = createAutocomplete([skillCommand(homeSkills, project)], project, null);
+  const signal = new AbortController().signal;
+  const all = await provider.getSuggestions(["/skills "], 0, 8, { signal });
+  expect(all?.items.map((item) => item.value)).toEqual(["apex", "browser", "impeccable"]);
+  const filtered = await provider.getSuggestions(["/skills imp"], 0, 11, { signal });
+  expect(filtered?.items.map((item) => item.value)).toEqual(["impeccable"]);
+  const applied = provider.applyCompletion(["/skills imp"], 0, 11, filtered!.items[0]!, filtered!.prefix);
+  expect(applied.lines[0]).toBe("/skills impeccable");
+  const forced = await provider.getSuggestions(["/skills "], 0, 8, { signal, force: true });
+  expect(forced?.items.map((item) => item.value)).toEqual(["apex", "browser", "impeccable"]);
 });
 
 describe("syncSkills links foreign skills (T26)", () => {

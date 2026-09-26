@@ -3,7 +3,7 @@ import { TASKS_HELP } from "../ui/task-panel.js";
 import { formatShell, isShellLine, runShell } from "./shell.js";
 import { randomUUID } from "node:crypto";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
-import { Text } from "@earendil-works/pi-tui";
+import { Text, type SlashCommand } from "@earendil-works/pi-tui";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
@@ -15,7 +15,7 @@ import { KUMO_MODES_SERVICE, NOTICE_ASK, NOTICE_AUTO, NOTICE_FULL } from "./mode
 import kumoEffort, { KUMO_EFFORT_SERVICE } from "./effort.js";
 import kumoModel, { KUMO_MODEL_SERVICE } from "./model.js";
 import { KUMO_RENDER_SERVICE } from "./render.js";
-import { readFileSync } from "node:fs";
+import { readAvailableSkills, type AvailableSkill } from "../setup/skills.js";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import {
@@ -53,7 +53,7 @@ export const KUMO_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/auto", description: "Switch permissions directly" },
   { name: "/ask", description: "Switch permissions directly" },
   { name: "/full", description: "Switch permissions directly" },
-  { name: "/skills", description: "List the enabled skills" },
+  { name: "/skills", description: "List available skills" },
   { name: "/reload", description: "Re-read settings.yaml and the terminal background" },
   { name: "/mouse", description: "Turn mouse selection on or off (the wheel scrolls while off)" },
   { name: "/help", description: "Show commands and keys" },
@@ -77,6 +77,42 @@ export function mergeCommands(
     });
   }
   return out;
+}
+
+function skillDescription(skill: AvailableSkill): string {
+  return skill.description.replace(/[\x00-\x1f\x7f]/g, " ").trim().slice(0, 140);
+}
+
+/** The same available-skill list backs the command output and its preview. */
+export function formatAvailableSkills(skills: AvailableSkill[]): string {
+  if (skills.length === 0) return "No skills available. Run `kumo setup` to add skills.";
+  return [
+    `Available skills (${skills.length}):`,
+    ...skills.map((skill) => {
+      const description = skillDescription(skill);
+      return `  ${skill.name} (${skill.scope})${description === "" ? "" : `  ${description}`}`;
+    }),
+  ].join("\n");
+}
+
+/** Argument preview for `/skills <name>`, read when the editor asks for it. */
+export function skillCommand(homeSkillsDir: string, cwd: string): SlashCommand {
+  return {
+    name: "/skills",
+    description: "List available skills",
+    argumentHint: "[skill name]",
+    getArgumentCompletions: async (prefix) => {
+      const needle = prefix.trim().toLowerCase();
+      const skills = await readAvailableSkills(homeSkillsDir, cwd);
+      return skills
+        .filter((skill) => skill.name.toLowerCase().includes(needle))
+        .map((skill) => ({
+          value: skill.name,
+          label: skill.name,
+          description: skillDescription(skill) || skill.scope,
+        }));
+    },
+  };
 }
 
 /** The terminal line source the loop drives; readline in production, fakes in tests. */
@@ -373,16 +409,19 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   const flush = (session: unknown): Promise<unknown> => sessions.flush(session);
 
   /** Palette items: kumo's commands plus dsh's, no duplicates (kumo wins). */
-  const completeCommandList = (): Array<{ name: string; description?: string }> => {
+  const skillsDir = join(process.env.DSH_HOME ?? join(homedir(), ".kumo"), "skills");
+  const completeCommandList = (): SlashCommand[] => {
+    let commands: SlashCommand[];
     try {
       const svc = ctx.get("commands") as
         | { list?: (agent: unknown) => Array<{ name?: unknown; description?: unknown }> }
         | undefined;
-      return mergeCommands(svc?.list?.(agent) ?? []);
+      commands = mergeCommands(svc?.list?.(agent) ?? []);
     } catch {
       // palette works with kumo's own commands alone
-      return [...KUMO_COMMANDS];
+      commands = [...KUMO_COMMANDS];
     }
+    return commands.map((command) => command.name === "/skills" ? skillCommand(skillsDir, process.cwd()) : command);
   };
 
   // Slash-command router: /exit is handled by Repl itself; the rest is
@@ -510,7 +549,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/effort  Choose the reasoning effort (also ctrl+e)",
           "/model  Switch provider and model (also f2)",
           "/provider  List the providers (also /provider all)",
-          "/skills  List the enabled skills",
+          "/skills  List available skills (or /skills <name>)",
           "/reload  Re-read settings.yaml and the terminal background",
           "/help  Show commands and keys",
           "!cmd  Run a shell command yourself (output not sent to the model)",
@@ -522,15 +561,16 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       return;
     }
     if (cmd === "/skills") {
-      let names: string[] = [];
-      try {
-        const home = process.env.DSH_HOME ?? join(homedir(), ".kumo");
-        const doc = JSON.parse(readFileSync(join(home, "kumo.json"), "utf8")) as { skills?: unknown };
-        if (Array.isArray(doc.skills)) names = doc.skills.filter((s): s is string => typeof s === "string");
-      } catch {
-        names = [];
+      const skills = await readAvailableSkills(skillsDir, process.cwd());
+      const requested = clean.slice(cmd.length).trim();
+      if (requested === "") {
+        reply(formatAvailableSkills(skills));
+      } else {
+        const selected = skills.find((skill) => skill.name.toLowerCase() === requested.toLowerCase());
+        reply(selected === undefined
+          ? `Skill "${requested}" is not available. Run /skills to see the list.`
+          : formatAvailableSkills([selected]));
       }
-      reply(names.length > 0 ? `Enabled skills: ${names.join(", ")}` : "No skills enabled.");
       return;
     }
     if (cmd === "/reload") {

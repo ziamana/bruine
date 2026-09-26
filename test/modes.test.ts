@@ -45,6 +45,20 @@ describe("kumo gate (T16.C)", () => {
     expect(modes.log.length).toBe(2);
   });
 
+  test("records each gate decision by call ID for the approval handler", async () => {
+    const { modes, preExecute } = harness();
+    modes.permission = "auto";
+    expect((await preExecute("bash", { command: "ls" }, "safe")).kind).toBe("allow");
+    expect(modes.decisionFor("safe")).toBe("allow");
+    modes.permission = "ask";
+    expect((await preExecute("bash", { command: "ls" }, "needs-approval")).kind).toBe("ask");
+    expect(modes.decisionFor("needs-approval")).toBe("ask");
+    modes.permission = "full";
+    expect((await preExecute("bash", { command: "ls" }, "full-access")).kind).toBe("allow");
+    expect(modes.decisionFor("full-access")).toBe("allow");
+    expect(modes.decisionFor("missing")).toBeUndefined();
+  });
+
   test("delegates other agents' calls to next()", async () => {
     const { preExecute, otherAgent } = harness();
     const d = await preExecute("bash", { command: "ls" }, "c9", otherAgent);

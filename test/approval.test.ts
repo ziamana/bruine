@@ -94,7 +94,7 @@ describe("approval plugin apply", () => {
 
   // T13d — TUI mode: approval becomes a pi-tui select.
 
-  function setupTui(choice: number) {
+  function setupTui(choice: number, gateDecision: "allow" | "ask" | "deny" | null = "ask") {
     const agent = { session: {} };
     const asked: Array<{ title: string; labels: string[] }> = [];
     const remembered: (string | undefined)[] = [];
@@ -109,7 +109,10 @@ describe("approval plugin apply", () => {
     };
     const describe = (id: string) =>
       id === "t1" ? { tool: "bash", summary: "rm -rf dist" } : undefined;
-    const modes = { rememberFor: (callId?: string) => remembered.push(callId) };
+    const modes = {
+      rememberFor: (callId?: string) => remembered.push(callId),
+      decisionFor: (_callId?: string) => gateDecision ?? undefined,
+    };
     const fake = fakeCtx();
     apply(fake.ctx as any);
     for (const { cb } of fake.injected) cb({ kumoRepl: repl, kumoRender: { describe }, kumoModes: modes });
@@ -126,6 +129,24 @@ describe("approval plugin apply", () => {
     expect(await request({ callId: "t1" })).toBe("allowed-once");
     expect(asked[0].title).toBe("? Allow bash: rm -rf dist");
     expect(asked[0].labels).toEqual(["Allow once", "Always for this session", "Reject"]);
+  });
+
+  test("TUI: a call allowed by the gate skips the approval select", async () => {
+    const { asked, request } = setupTui(2, "allow");
+    expect(await request({ callId: "t1" })).toBe("allowed-once");
+    expect(asked).toEqual([]);
+  });
+
+  test("TUI: a denied call cannot open the approval select", async () => {
+    const { asked, request } = setupTui(0, "deny");
+    expect(await request({ callId: "t1" })).toBe("rejected");
+    expect(asked).toEqual([]);
+  });
+
+  test("TUI: a call without a gate decision delegates", async () => {
+    const { asked, request } = setupTui(0, null);
+    expect(await request({ callId: "t1" })).toBe("unavailable");
+    expect(asked).toEqual([]);
   });
 
   test("TUI: second option allows AND remembers for the session (T16)", async () => {

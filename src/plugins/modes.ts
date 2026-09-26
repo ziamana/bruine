@@ -49,6 +49,7 @@ export interface KumoModesService {
   togglePlan(): void;
   cyclePermission(): Promise<PermissionMode>;
   rememberFor(callId: string | undefined): void;
+  decisionFor(callId: string | undefined): "allow" | "ask" | "deny" | undefined;
   readonly log: ModesLogEntry[];
   onChange(cb: () => void): () => void;
   describe(): { plan: boolean; permission: PermissionMode; badges: string[] };
@@ -88,6 +89,7 @@ export class Modes implements KumoModesService {
   readonly log: ModesLogEntry[] = [];
   readonly sessionAllowed = new Set<string>();
   readonly pendingKeys = new Map<string, string>();
+  #decisions = new Map<string, "allow" | "ask" | "deny">();
   #listeners: Array<() => void> = [];
   #confirmFullAccess: (() => Promise<boolean>) | undefined;
   /** Announce plan toggles into the model context (cache-safe: appended message). */
@@ -152,6 +154,18 @@ export class Modes implements KumoModesService {
   rememberFor(callId: string | undefined): void {
     const key = callId === undefined ? undefined : this.pendingKeys.get(callId);
     if (key !== undefined) this.sessionAllowed.add(key);
+  }
+
+  decisionFor(callId: string | undefined): "allow" | "ask" | "deny" | undefined {
+    return callId === undefined ? undefined : this.#decisions.get(callId);
+  }
+
+  recordDecision(callId: string | undefined, decision: "allow" | "ask" | "deny"): void {
+    if (callId === undefined) return;
+    // Calls that never request approval still get a decision. Bound their history.
+    this.#decisions.delete(callId);
+    this.#decisions.set(callId, decision);
+    if (this.#decisions.size > 256) this.#decisions.delete(this.#decisions.keys().next().value!);
   }
 
   describe(): { plan: boolean; permission: PermissionMode; badges: string[] } {
@@ -365,6 +379,7 @@ export function apply(ctx: DshContext): void {
       }
     }
     modes.log.push({ tool: exec.name, summary, decision: decision.kind, via });
+    modes.recordDecision(exec.callId === undefined ? undefined : String(exec.callId), decision.kind);
     return decision;
   });
 }

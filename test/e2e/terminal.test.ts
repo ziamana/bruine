@@ -384,6 +384,29 @@ test("approval: Down Down Enter rejects write without creating the file", async 
   });
 });
 
+test("approval: Auto runs bash ls without a select, while Ask still asks", async () => {
+  await scenario("auto-bash-ls", [
+    toolScript("bash", { command: "ls", description: "list project files" }, "auto_ls"), textScript("AUTO_LS_DONE"),
+  ], async (h) => {
+    await h.prompt("List the project files");
+    await h.until(() => h.screen().join("\n").includes("AUTO_LS_DONE"), 6000, "Auto bash ls result");
+    const screen = h.screen().join("\n");
+    expect(screen).not.toContain("? Allow bash");
+    const result = h.server.mainRequests()[1]?.body.messages.find((m) => m.role === "tool" && m.tool_call_id === "auto_ls");
+    expect(JSON.stringify(result?.content)).toContain("note.txt");
+  }, false, "auto");
+
+  await scenario("ask-bash-ls", [
+    toolScript("bash", { command: "ls", description: "list project files" }, "ask_ls"), textScript("ASK_LS_DONE"),
+  ], async (h) => {
+    await h.prompt("List the project files");
+    await h.waitFor("? Allow bash: ls");
+    expect(h.screen().join("\n")).toContain("Allow once");
+    h.press("enter");
+    await h.waitFor("ASK_LS_DONE");
+  }, false, "ask");
+});
+
 test.each(["reasoning", "tool"] as const)("Escape stops the %s spinner and leaves no live frame", async (kind) => {
   const script: Script = kind === "reasoning"
     ? { chunks: [{ delta: { reasoning_content: "Complete sentence. Incomplete" } }], finishDelayMs: 20000 }

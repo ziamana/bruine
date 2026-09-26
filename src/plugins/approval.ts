@@ -2,6 +2,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { dim } from "../render/reasoning.js";
 import { echoLine } from "../ui/questions.js";
 import type { DshContext, KumoRepl } from "./ctx.js";
+import type { KumoModesService } from "./modes.js";
 import type { RenderService } from "./render.js";
 
 /** Stable Cordis plugin name. */
@@ -50,7 +51,7 @@ export function parseAnswer(line: string): boolean {
 export function apply(ctx: DshContext): void {
   let repl: KumoRepl | undefined;
   let render: RenderService | undefined;
-  let modes: { rememberFor(callId: string | undefined): void } | undefined;
+  let modes: Pick<KumoModesService, "rememberFor" | "decisionFor"> | undefined;
   ctx.inject(["kumoRepl"], (c: any) => {
     repl = c.kumoRepl;
   });
@@ -130,6 +131,13 @@ export function apply(ctx: DshContext): void {
     (request: ApprovalRequestLike, next: () => Promise<ApprovalOutcome>) => {
       if (repl === undefined || request.agent !== repl.agent) return next();
       if (request.signal?.aborted) return "cancelled";
+
+      if (modes !== undefined) {
+        const decision = modes.decisionFor(request.callId);
+        if (decision === "allow") return "allowed-once";
+        if (decision === "deny") return "rejected";
+        if (decision !== "ask") return next();
+      }
 
       const ui = repl.ui;
       if (ui !== undefined) {

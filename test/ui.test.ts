@@ -36,6 +36,28 @@ class FakeTerminal implements Terminal {
   setProgress(): void {}
 }
 
+test("KumoUi.clearTasks clears the panel for future /new wiring", () => {
+  const ui = new KumoUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), UNICODE_ICONS);
+  ui.setTasks([{ content: "Pending work", status: "in_progress" }]);
+  expect(ui.taskPanel.visible).toBe(true);
+  ui.clearTasks();
+  expect(ui.taskPanel.visible).toBe(false);
+  expect(ui.taskPanel.tasks).toEqual([]);
+});
+
+test("ctrl+t expands and collapses the task list", async () => {
+  const terminal = new FakeTerminal();
+  const ui = new KumoUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, terminal, UNICODE_ICONS);
+  ui.setTasks(Array.from({ length: 9 }, (_, i) => ({ content: `Task ${i}`, status: i === 4 ? "in_progress" : "pending" })));
+  ui.start();
+  expect(ui.taskPanel.render(60)).toHaveLength(7);
+  terminal.onInput?.("\x14");
+  expect(ui.taskPanel.render(60)).toHaveLength(10);
+  terminal.onInput?.("\x14");
+  expect(ui.taskPanel.render(60)).toHaveLength(7);
+  await ui.shutdown();
+});
+
 describe("ReasoningComponent (T25.3 word by word)", () => {
   test("shows Thinking alone before the first complete word", () => {
     const r = new ReasoningComponent(() => 0, UNICODE_ICONS);
@@ -808,6 +830,27 @@ describe("suggest ghost (T28B)", () => {
 });
 
 describe("T23 regressions", () => {
+  test("todo writes restore the last snapshot and never create a tool chat line", () => {
+    const fake = fakeCtx();
+    const chats: any[] = [];
+    const lists: unknown[] = [];
+    const session = { snapshotEvents: () => [
+      { type: "todo/write", data: { todos: [{ content: "Old", status: "pending" }] } },
+      { type: "todo/write", data: { todos: [{ content: "Latest", status: "in_progress" }] } },
+    ] };
+    const agent = { session };
+    const ui = { icons: UNICODE_ICONS, addChat: (c: any) => chats.push(c), setTasks: (items: unknown) => lists.push(items), requestRender: () => {}, footer: { set: () => {} } };
+    const detach = attachTui(fake.ctx as any, agent, ui as any, {});
+    expect(lists).toEqual([[{ content: "Latest", status: "in_progress" }]]);
+    fake.emit("agent/assistant-stream", { agent, frame: { type: "chunk", chunk: { type: "tool-call-delta", id: "t", name: "todo_write", argumentsDelta: "{}" } } });
+    fake.emit("session/event", session, { type: "tool/call", data: { callId: "t", name: "todo_write", arguments: "{}" } });
+    fake.emit("session/event", session, { type: "todo/write", data: { todos: [{ content: "Done", status: "completed" }] } });
+    fake.emit("session/event", session, { type: "tool/result", data: { message: { content: [{ type: "tool-result", toolCallId: "t", content: [], isError: false }] } } });
+    expect(chats).toEqual([]);
+    expect(lists.at(-1)).toEqual([{ content: "Done", status: "completed" }]);
+    detach();
+  });
+
   test("streamed arguments are replaced by durable arguments, not concatenated", () => {
     const fake = fakeCtx();
     const chats: any[] = [];

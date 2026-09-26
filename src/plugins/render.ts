@@ -13,6 +13,7 @@ import { WorkingComponent } from "../ui/working.js";
 import { MODE_ANNOUNCEMENTS } from "./modes.js";
 import { TpsMeter } from "../ui/tps.js";
 import { ansi } from "../ui/theme.js";
+import { TaskPanel, taskItems, type TaskItem } from "../ui/task-panel.js";
 import type { DshContext, KumoRepl } from "./ctx.js";
 
 /** Stable Cordis plugin name. */
@@ -68,6 +69,20 @@ interface SessionEvent {
   data: any;
 }
 
+/** A restored session carries its last whole-list write in the event log. */
+function restoreTasks(session: any): ReturnType<typeof taskItems> {
+  try {
+    const events = session?.snapshotEvents?.() as SessionEvent[] | undefined;
+    if (!Array.isArray(events)) return undefined;
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (events[i]?.type === "todo/write") return taskItems(events[i]?.data?.todos);
+    }
+  } catch {
+    // A missing or unavailable history leaves the panel empty.
+  }
+  return undefined;
+}
+
 /**
  * Wire the live stream and the durable session log onto the pi-tui chat
  * components (T13a-d). Exported so tests can drive it with fake events.
@@ -80,6 +95,10 @@ export function attachTui(
 ): () => void {
   const tps = new TpsMeter();
   const tools = new Map<string, ToolCallComponent>();
+  const todoToolIds = new Set<string>();
+  const setUiTasks = (tasks: TaskItem[]): void => {
+    (ui as unknown as { setTasks?: (items: TaskItem[]) => void }).setTasks?.(tasks);
+  };
   let reasoning: ReasoningComponent | undefined;
   let text: AssistantTextComponent | undefined;
   let working: WorkingComponent | undefined;
@@ -235,6 +254,8 @@ export function attachTui(
       case "tool-call-delta": {
         trackDelta();
         const id = String(chunk.id);
+        if (chunk.name === "todo_write") todoToolIds.add(id);
+        if (todoToolIds.has(id)) return;
         if (chunk.name !== undefined) ensureTool(id, chunk.name);
         tools.get(id)?.args(chunk.argumentsDelta ?? "");
         ui.requestRender();
@@ -304,6 +325,10 @@ export function attachTui(
       case "tool/call": {
         hideWorking();
         const id = String(event.data.callId);
+        if (event.data.name === "todo_write") {
+          todoToolIds.add(id);
+          return;
+        }
         const comp = ensureTool(id, event.data.name);
         if (event.data.arguments) comp.setArgs(event.data.arguments);
         ui.requestRender();
@@ -312,12 +337,18 @@ export function attachTui(
       case "tool/result": {
         const block = event.data.message?.content?.[0];
         if (block === undefined || block.type !== "tool-result") return;
+        if (todoToolIds.delete(String(block.toolCallId))) return;
         const output = block.content
           .filter((b: any) => b.type === "text")
           .map((b: any) => b.text)
           .join("\n");
         tools.get(String(block.toolCallId))?.result(block.isError !== true, output);
         ui.requestRender();
+        return;
+      }
+      case "todo/write": {
+        const tasks = taskItems(event.data?.todos);
+        if (tasks !== undefined) setUiTasks(tasks);
         return;
       }
       case "turn/end": {
@@ -385,6 +416,9 @@ export function attachTui(
         return;
     }
   });
+
+  const restored = restoreTasks(agent.session);
+  if (restored !== undefined) setUiTasks(restored);
 
   function suggestionsEnabled(): boolean {
     try {
@@ -507,6 +541,15 @@ export function attach(
   ui: ScreenUi,
 ): () => void {
   const started = new Set<string>();
+  const todoToolIds = new Set<string>();
+  const taskPanel = new TaskPanel(ui.icons);
+  const showTasks = (raw: unknown): void => {
+    const tasks = taskItems(raw);
+    if (tasks === undefined) return;
+    taskPanel.setTasks(tasks);
+    const lines = taskPanel.plainLines();
+    if (lines.length > 0) ui.screen.write(`${lines.join("\n")}\n`);
+  };
 
   const offStream = ctx.on("agent/assistant-stream", ({ agent: subject, frame }: any) => {
     if (subject !== agent) return;
@@ -537,6 +580,8 @@ export function attach(
         return;
       case "tool-call-delta": {
         const id = String(chunk.id);
+        if (chunk.name === "todo_write") todoToolIds.add(id);
+        if (todoToolIds.has(id)) return;
         if (chunk.name !== undefined && !started.has(id)) {
           started.add(id);
           ui.tools.start(id, chunk.name);
@@ -557,6 +602,10 @@ export function attach(
     switch (event.type) {
       case "tool/call": {
         const id = String(event.data.callId);
+        if (event.data.name === "todo_write") {
+          todoToolIds.add(id);
+          return;
+        }
         if (started.has(id)) return; // already streamed live
         started.add(id);
         ui.tools.start(id, event.data.name);
@@ -566,6 +615,7 @@ export function attach(
       case "tool/result": {
         const block = event.data.message?.content?.[0];
         if (block === undefined || block.type !== "tool-result") return;
+        if (todoToolIds.delete(String(block.toolCallId))) return;
         const output = block.content
           .filter((b: any) => b.type === "text")
           .map((b: any) => b.text)
@@ -574,6 +624,9 @@ export function attach(
         started.delete(String(block.toolCallId));
         return;
       }
+      case "todo/write":
+        showTasks(event.data?.todos);
+        return;
       case "turn/end": {
         ui.reasoning.end();
         ui.text.end();
@@ -589,6 +642,9 @@ export function attach(
         return;
     }
   });
+
+  const restored = restoreTasks(agent.session);
+  if (restored !== undefined) showTasks(restored);
 
   return () => {
     offStream();

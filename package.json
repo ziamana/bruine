@@ -1,17 +1,29 @@
 {
   "name": "kumo-code",
   "version": "0.0.1",
-  "description": "Interactive terminal agent built on DeepSeek Harness (dsh)",
+  "description": "Interactive terminal coding agent that runs your own models, local or OpenAI-compatible",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "TODO_GITHUB_URL"
+    "url": "git+https://github.com/kumo-code/kumo.git"
   },
-  "homepage": "TODO_GITHUB_URL#readme",
+  "homepage": "https://github.com/kumo-code/kumo#readme",
   "bugs": {
-    "url": "TODO_GITHUB_URL/issues"
+    "url": "https://github.com/kumo-code/kumo/issues"
   },
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "coding-assistant",
+    "llm",
+    "local-llm",
+    "llama.cpp",
+    "openai-compatible",
+    "terminal",
+    "tui"
+  ],
   "bin": {
     "kumo": "dist/bin.js"
   },

@@ -59,3 +59,17 @@ You are implementing one ticket of the kumo project.
 | T37 | `/model`: switch provider + model in the session, from dsh's own `llm` catalog | T34 |
 | T38 | f2 walks the recent routes; the reasoning effort follows the model | T37 |
 | T39 | `/provider`: every provider, its endpoint, key and models (read-only) | T37 |
+| T41 | Publishable: README, real repository/homepage/bugs, no TODO placeholder | T40 |
+| T42 | Headless: `kumo -p "task"` one-shot, `--output-format text\|json\|stream-json` | T41 |
+| T43 | Secrets in the OS keyring, or stop promising it in ARCHITECTURE | T41 |
+| T44 | Resume a session: `--continue`, `--resume`, `/sessions` | T42 |
+| T45 | `kumo doctor` | T41 |
+| T46 | Scrollback, a prompt history that survives a restart, `ctrl+r` | T44 |
+| T47 | `@file` completion that respects .gitignore | T46 |
+| T48 | The missing small commands, and `!shell` | T44 |
+| T49 | CLI flags (`--add-dir`, `--dangerously-skip-permissions`, `--debug`, `--model`) + project trust | T42 |
+| T50 | MCP servers in the wizard, `--mcp-config` | T45 |
+| T51 | Turn-end notification, checkpoint and rewind | T46 |
+| T52 | `kumo logs`, `--debug`, `--log-file` | T45 |
+| T53 | Split `src/setup/full.ts` and make it unit-testable | T45 |
+| T54 | Cleanups: the dead simple setup, the judge, a stale e2e report | T53 |

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { beforeAll, expect, it, test } from "vitest";
@@ -50,6 +51,52 @@ const footerCell = (h: Harness, label: string) => {
   return h.term.buffer.active.getLine(h.term.buffer.active.viewportY + row)!.getCell(col)!;
 };
 const runningThought = (line: string) => /^\s*[·✢✺✶✻✽] Thinking/.test(line);
+
+test("headless -p writes only the answer and exits; json has a completed result", async () => {
+  const h = await Harness.start([
+    textScript("HEADLESS_TEXT_OK"), textScript("HEADLESS_JSON_OK"),
+    toolScript("read", { file_path: "note.txt" }), textScript("HEADLESS_STREAM_OK"),
+    toolScript("bash", { command: "touch denied.txt" }), textScript("HEADLESS_DENIED_OK"),
+    textScript("HEADLESS_STDIN_OK"),
+  ]);
+  try {
+    await h.waitFor("e2e-model");
+    h.child.kill();
+    await h.until(() => h.exit !== undefined);
+    const invoke = (args: string[], input?: string) => new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+      const env = { ...process.env, KUMO_HOME: h.home, DSH_HOME: h.home, KUMO_LOCAL_API_KEY: "e2e", KUMO_NO_UPDATE_CHECK: "1", DSH_TELEMETRY_DISABLED: "1" };
+      const child = spawn(process.execPath, [join(process.cwd(), "dist", "bin.js"), ...args], {
+        cwd: h.project, env, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+      });
+      if (input !== undefined) child.stdin!.end(input);
+      let stdout = "";
+      let stderr = "";
+      child.stdout!.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr!.on("data", (chunk) => { stderr += String(chunk); });
+      child.once("error", reject);
+      child.once("close", (code) => resolve({ code, stdout, stderr }));
+    });
+    const plain = await invoke(["-p", "Say yes"]);
+    expect(plain).toMatchObject({ code: 0, stdout: "HEADLESS_TEXT_OK" });
+    const json = await invoke(["-p", "Say yes again", "--output-format", "json"]);
+    expect(json.code, json.stderr).toBe(0);
+    expect(JSON.parse(json.stdout)).toMatchObject({ ok: true, text: "HEADLESS_JSON_OK", reason: "completed", tools: [] });
+    const stream = await invoke(["-p", "Read the note", "--output-format", "stream-json"]);
+    expect(stream.code, stream.stderr).toBe(0);
+    const events = stream.stdout.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool", name: "read" }));
+    expect(events.at(-1)).toMatchObject({ ok: true, text: "HEADLESS_STREAM_OK", reason: "completed" });
+    const denied = await invoke(["-p", "Try an edit", "--output-format", "json"]);
+    expect(denied.code, denied.stderr).toBe(0);
+    expect(JSON.parse(denied.stdout)).toMatchObject({ ok: true, tools: [{ name: "bash", decision: "deny" }] });
+    expect(existsSync(join(h.project, "denied.txt"))).toBe(false);
+    const stdin = await invoke(["-p", "-"], "Read this task from stdin");
+    expect(stdin).toMatchObject({ code: 0, stdout: "HEADLESS_STDIN_OK" });
+    expect(h.server.errors).toEqual([]);
+  } finally {
+    await h.close();
+  }
+});
 
 async function scenario(name: string, scripts: Script[], run: (h: Harness) => Promise<void>, ascii = false, permissionMode = "ask") {
   let h: Harness | undefined;
@@ -186,7 +233,8 @@ test("tool call: read note.txt and send the real tool result back", async () => 
     expect(h.screen().join("\n")).toContain("note.txt");
     const header = h.screen().findIndex(line => line.includes("✓ read"));
     expect(h.screen()[header]).toMatch(/^  ▍ ✓/);
-    expect(h.screen()[header - 1]?.trim()).toBe("");
+    // The tool card's rail now includes its top padding row.
+    expect(h.screen()[header - 1]).toMatch(/^  ▍\s*$/);
     expect(h.screen()[header + 1]).toContain("⎿");
     expect(h.screen().find(line => line.includes("READ_FINISHED"))).toMatch(/^  READ_FINISHED/);
     const prompt = h.screen().findIndex(line => line.includes("› Read note.txt"));
@@ -675,6 +723,31 @@ test("/new: two turns, new conversation, next request has only new history (T31.
     // T55: the context is marked with its absolute cost. The window is no longer
     // printed, so the marking is checked for shape rather than for a literal.
     expectContextMarking(footer(h));
+  });
+});
+
+test("/resume restores a saved project's context after /new", async () => {
+  await scenario("slash-resume", [textScript("FIRST_DONE"), textScript("RESUMED_DONE")], async (h) => {
+    await h.prompt("First hello");
+    await h.waitFor("FIRST_DONE");
+    await h.prompt("/new");
+    await h.waitFor("New conversation.");
+    await h.prompt("/resume");
+    await h.waitFor("Resume a conversation");
+    h.press("enter");
+    await h.waitFor("Resumed:");
+    expect(h.screen().join("\n")).toContain("First hello");
+    await h.prompt("Followup question");
+    await h.waitFor("RESUMED_DONE");
+    expect(JSON.stringify(h.server.mainRequests()[1]?.body.messages)).toContain("First hello");
+  });
+});
+
+test("/verify reports missing project checks without a model request", async () => {
+  await scenario("slash-verify", [], async (h) => {
+    await h.prompt("/verify");
+    await h.waitFor("No standard checks found");
+    expect(h.server.mainRequests()).toHaveLength(0);
   });
 });
 

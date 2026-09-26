@@ -1,4 +1,7 @@
 import { describe, expect, test } from "vitest";
+import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   decide,
   parseArgs,
@@ -34,7 +37,7 @@ describe("bash command table (auto mode) — ≥20 commands", () => {
     ["git diff HEAD", "allow"],
     ["git show abc123", "allow"],
     ["find . -name '*.ts'", "allow"],
-    ["find /tmp -delete", "judge"], // mutation via -delete
+    ["find /tmp -delete", "ask"], // mutation via -delete, outside the project: ask (BOS 2026-09-26)
     ["tree -L 2", "judge"], // T18.2: tree has -o
     ["echo hello", "allow"],
     ["node --version", "judge"],
@@ -251,6 +254,48 @@ describe("parseArgs", () => {
     expect(parseArgs("{oops")).toEqual({});
     expect(parseArgs('[1,2]')).toEqual({});
     expect(parseArgs('{"command":"ls"}')).toEqual({ command: "ls" });
+  });
+});
+
+describe("read-only gate regressions", () => {
+  test("commands that execute helpers cannot pass as read-only", () => {
+    for (const command of ["rg --pre ./runner token .", "rg --pre=./runner token .", "git diff --ext-diff", "git log --textconv", "printenv KUMO_TEST_SECRET"]) {
+      expect(bash(command, ctx()), command).toBe("ask");
+      expect(bash(command, ctx({ plan: true })), command).toBe("deny");
+    }
+  });
+
+  test("a project symlink cannot make an outside write look local", () => {
+    const project = mkdtempSync(join(tmpdir(), "kumo-gate-project-"));
+    const outside = mkdtempSync(join(tmpdir(), "kumo-gate-outside-"));
+    try {
+      symlinkSync(outside, join(project, "link"), process.platform === "win32" ? "junction" : "dir");
+      expect(realpathSync(join(project, "link"))).toBe(realpathSync(outside));
+      expect(decide("write", { file_path: "link/new.txt" }, ctx({ projectDir: project }))).toBe("ask");
+      expect(decide("write", { file_path: "inside/new.txt" }, ctx({ projectDir: project }))).toBe("allow");
+    } finally {
+      rmSync(project, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("reading an obvious credential file asks before its contents enter model context", () => {
+    expect(decide("read", { file_path: ".env.local" }, ctx())).toBe("ask");
+    expect(decide("read_image", { path: ".ssh/id_ed25519" }, ctx())).toBe("ask");
+    expect(decide("read", { file_path: "src/main.ts" }, ctx())).toBe("allow");
+  });
+
+  test("reading a harmless-looking symlink to a credential also asks", () => {
+    const project = mkdtempSync(join(tmpdir(), "kumo-gate-project-"));
+    const outside = mkdtempSync(join(tmpdir(), "kumo-gate-outside-"));
+    try {
+      writeFileSync(join(outside, ".env"), "KEY=example\n");
+      symlinkSync(join(outside, ".env"), join(project, "notes.txt"));
+      expect(decide("read", { file_path: "notes.txt" }, ctx({ projectDir: project }))).toBe("ask");
+    } finally {
+      rmSync(project, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });
 

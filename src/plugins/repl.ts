@@ -16,6 +16,9 @@ import kumoEffort, { KUMO_EFFORT_SERVICE } from "./effort.js";
 import kumoModel, { KUMO_MODEL_SERVICE } from "./model.js";
 import { KUMO_RENDER_SERVICE } from "./render.js";
 import { readAvailableSkills, type AvailableSkill } from "../setup/skills.js";
+import { recentSessions, restoredDialogue, sessionChoice } from "./session-history.js";
+import { formatVerification, runVerification } from "./verify.js";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import {
@@ -47,6 +50,8 @@ const EXIT_COMMANDS = new Set(["/exit", "/quit"]);
 /** kumo's own slash commands (T31.1): source of truth for the palette. */
 export const KUMO_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/new", description: "Start a new conversation" },
+  { name: "/resume", description: "Resume a saved conversation in this project" },
+  { name: "/verify", description: "Run this project's typecheck and tests" },
   { name: "/compact", description: "Summarize the conversation to free context" },
   { name: "/plan", description: "Toggle Plan / Build (also Shift+Tab)" },
   { name: "/permissions", description: "Choose Ask / Auto / Full access" },
@@ -297,8 +302,9 @@ export function askViaReadline(rl: ReadlineInterface, question: string): Promise
   });
 }
 
-async function createAgent(ctx: DshContext): Promise<{
+async function createAgent(ctx: DshContext, resumeSessionId?: string): Promise<{
   agent: any;
+  dispose(): Promise<void>;
   selection: any;
   selectionRef: { current: any; assembled: unknown };
 } | undefined> {
@@ -312,18 +318,23 @@ async function createAgent(ctx: DshContext): Promise<{
     current: { provider: string; model: string; reasoningEffort?: string } | undefined;
     assembled: unknown;
   } = { current: selection, assembled: undefined };
-  const { agent } = await agents.create({
+  const setup = (agentCtx: unknown): void => {
+    // Returning the disposer would be treated as a setup commit object.
+    installModelSelection(agentCtx as any, selectionRef as any);
+  };
+  const handle = resumeSessionId === undefined ? await agents.create({
     sessionId: SessionId(`session-${randomUUID()}`),
     meta: { cwd: process.cwd() },
     agentOptions: { provider: selection.provider, model: selection.model },
-    setup: (agentCtx: unknown) => {
-      // Block body on purpose: returning the disposer would be treated as a
-      // setup commit object by the agent factory.
-      installModelSelection(agentCtx as any, selectionRef as any);
-    },
+    setup,
+  }) : await agents.resume({
+    resumeSessionId: SessionId(resumeSessionId),
+    agentOptions: { provider: selection.provider, model: selection.model },
+    setup,
   });
+  const { agent } = handle;
   await agent.whenIdle();
-  return { agent, selection, selectionRef };
+  return { agent, dispose: () => handle.dispose(), selection, selectionRef };
 }
 
 /**
@@ -350,8 +361,24 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   const sessions = ctx.get("sessions");
   const startup: KumoStartup | undefined = ctx.get("kumoStartup");
   if (sessions === undefined) return;
-  const created = await createAgent(ctx);
+  const query = ctx.get("sessionQuery");
+  const availableSessions = (excludeId?: string) => recentSessions(query, process.cwd(), excludeId);
+  const continuing = process.env.KUMO_CONTINUE === "1";
+  let latest: Awaited<ReturnType<typeof availableSessions>>[number] | undefined;
+  try { if (continuing) latest = (await availableSessions())[0]; }
+  catch { /* a broken listing must not prevent a fresh conversation */ }
+  let resumeNotice = "";
+  let created: Awaited<ReturnType<typeof createAgent>>;
+  try {
+    created = await createAgent(ctx, latest?.id);
+    if (latest !== undefined) resumeNotice = `Resumed: ${latest.title}`;
+    else if (continuing) resumeNotice = "No saved conversation in this project. Started a new one.";
+  } catch (error) {
+    created = await createAgent(ctx);
+    resumeNotice = `Could not resume the previous conversation: ${error instanceof Error ? error.message : String(error)}`;
+  }
   if (created === undefined) return;
+  let currentHandle = created;
   let { agent } = created;
   const { selection, selectionRef } = created;
 
@@ -430,6 +457,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   let repl: Repl | undefined;
   let ui: KumoUi | undefined;
   let startNewConversation: () => Promise<void> = async () => {};
+  let resumeConversation: () => Promise<void> = async () => {};
   const setPermission = (next: "ask" | "auto" | "full"): void => {
     const m = modes();
     if (m === undefined || m === null) return;
@@ -542,6 +570,8 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       reply(
         [
           "/new  Start a new conversation",
+          "/resume  Resume a saved conversation in this project",
+          "/verify  Run this project's typecheck and tests on demand",
           "/compact  Summarize the conversation to free context",
           "/plan  Toggle Plan / Build (also Shift+Tab)",
           "/permissions  Choose Ask / Auto / Full access",
@@ -618,6 +648,15 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       await startNewConversation();
       return;
     }
+    if (cmd === "/resume") {
+      await resumeConversation();
+      return;
+    }
+    if (cmd === "/verify") {
+      ui?.showNotice("Running project checks…");
+      reply(formatVerification(await runVerification(process.cwd())));
+      return;
+    }
     ui?.showNotice(`Unknown command ${clean}. Type / to see the list.`);
     if (ui === undefined) reply(`Unknown command "${clean}". Available: /plan, /permissions, /exit`);
   };
@@ -668,31 +707,38 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     const service: KumoRepl = { agent, ui, selection: selectionRef };
     ctx.provide(KUMO_REPL_SERVICE, service);
 
-    startNewConversation = async (): Promise<void> => {
+    const showSavedDialogue = (saved: typeof agent): void => {
+      for (const message of restoredDialogue(saved.session)) {
+        if (message.role === "user") ui?.addUserPrompt(message.text);
+        else ui?.addChat(new Text(message.text, 1, 0));
+      }
+    };
+    if (latest !== undefined && resumeNotice.startsWith("Resumed:")) showSavedDialogue(agent);
+    if (resumeNotice !== "") ui.showNotice(resumeNotice);
+
+    const settleForSwitch = async (): Promise<boolean> => {
+      if (ui === undefined || repl === undefined) return false;
+      if (!repl.isInTurn()) return true;
+      const choice = await ui.askChoice("A reply is running. Stop it and switch conversations? (y/N)", [
+        { value: "no", label: "No, keep going" },
+        { value: "yes", label: "Yes, stop it" },
+      ]);
+      if (choice !== 1) return false;
+      agent.cancel({ kind: "user" });
+      await repl.idle();
+      return true;
+    };
+
+    const activateConversation = async (next: NonNullable<Awaited<ReturnType<typeof createAgent>>>, notice: string, restore: boolean): Promise<void> => {
       if (ui === undefined || repl === undefined) return;
-      if (repl.isInTurn()) {
-        const choice = await ui.askChoice("A reply is running. Stop it and start a new conversation? (y/N)", [
-          { value: "no", label: "No, keep going" },
-          { value: "yes", label: "Yes, stop it" },
-        ]);
-        if (choice !== 1) return;
-        agent.cancel({ kind: "user" });
-        await repl.idle();
-      }
-      await flush(agent.session);
-      const created2 = await createAgent(ctx);
-      if (created2 === undefined || ui === undefined) {
-        ui?.showNotice("Could not start a new conversation.");
-        return;
-      }
+      const previous = currentHandle;
       repl.stop();
-      agent = created2.agent;
-      service.agent = created2.agent;
-      // T34: the effort plugin reads the live agent's selection; follow the new agent.
-      (service as any).selection = created2.selectionRef;
-      effort()?.rebind?.(created2.selectionRef);
-      // T37: same for the model picker, so /model acts on the new agent.
-      modelPicker()?.rebind?.(created2.selectionRef);
+      agent = next.agent;
+      currentHandle = next;
+      service.agent = next.agent;
+      (service as any).selection = next.selectionRef;
+      effort()?.rebind?.(next.selectionRef);
+      modelPicker()?.rebind?.(next.selectionRef);
       const m = modes();
       if (m !== undefined && m !== null) {
         m.plan = false;
@@ -701,20 +747,20 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       ui.clearChat();
       ui.clearTasks();
       ui.pendingImages.clear();
-      ui.footer.set({ contextUsed: 0, tps: 0, pp: undefined, cachePct: undefined });
+      ui.footer.set({ model: next.selection.model, provider: next.selection.provider, contextUsed: 0, tps: 0, pp: undefined, cachePct: undefined });
+      if (restore) showSavedDialogue(next.agent);
       ui.updateHeader();
-      ui.showNotice("New conversation.");
+      ui.showNotice(notice);
+      await previous.dispose().catch(() => undefined);
       const fresh = new Repl({
-        agent: created2.agent,
-        // T29: a prompt typed while the new turn is already running takes the
-        // same path, so an image pasted mid-turn is not silently dropped.
+        agent: next.agent,
         followup: (t: string) => {
           const images = ui?.pendingImages.resolve(t) ?? [];
           if (images.length === 0) {
-            created2.agent.followup(createUserMessage({ content: [{ type: "text", text: t }], source: { kind: "user" } }));
+            next.agent.followup(createUserMessage({ content: [{ type: "text", text: t }], source: { kind: "user" } }));
             return;
           }
-          void sendWithImages(t, images, created2.agent);
+          void sendWithImages(t, images, next.agent);
         },
         flush,
         appExit: (code: number) => {
@@ -724,6 +770,36 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       });
       repl = fresh;
       await fresh.run();
+    };
+
+    startNewConversation = async (): Promise<void> => {
+      if (!(await settleForSwitch())) return;
+      await flush(agent.session);
+      const created2 = await createAgent(ctx);
+      if (created2 === undefined) {
+        ui?.showNotice("Could not start a new conversation.");
+        return;
+      }
+      await activateConversation(created2, "New conversation.", false);
+    };
+
+    resumeConversation = async (): Promise<void> => {
+      if (ui === undefined || !(await settleForSwitch())) return;
+      await flush(agent.session);
+      let choices: Awaited<ReturnType<typeof availableSessions>>;
+      try { choices = await availableSessions(String(agent.session.id)); }
+      catch (error) { ui.showNotice(`Could not list conversations: ${error instanceof Error ? error.message : String(error)}`, { red: true }); return; }
+      if (choices.length === 0) { ui.showNotice("No other saved conversation in this project."); return; }
+      const choice = await ui.askChoice("Resume a conversation", choices.map((row) => ({ value: row.id, label: sessionChoice(row) })));
+      if (choice < 0 || choice >= choices.length) return;
+      const selected = choices[choice]!;
+      try {
+        const resumed = await createAgent(ctx, selected.id);
+        if (resumed === undefined) throw new Error("session service unavailable");
+        await activateConversation(resumed, `Resumed: ${selected.title}`, true);
+      } catch (error) {
+        ui.showNotice(`Could not resume: ${error instanceof Error ? error.message : String(error)}`, { red: true });
+      }
     };
 
     // T33b: a route written before T34 has no compat block, so /effort and

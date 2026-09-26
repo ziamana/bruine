@@ -209,7 +209,7 @@ describe("slash palette source of truth (T31.1)", () => {
     const { KUMO_COMMANDS, mergeCommands } = await import("../src/plugins/repl.js");
     // T56 added /mouse: taking the mouse costs the wheel, so the choice has to
     // be reachable without restarting.
-    expect(KUMO_COMMANDS).toHaveLength(12);
+    expect(KUMO_COMMANDS).toHaveLength(14);
     const names = KUMO_COMMANDS.map((c) => c.name);
     for (const n of ["/new", "/compact", "/plan", "/permissions", "/auto", "/ask", "/full", "/skills", "/reload", "/mouse", "/help", "/exit"]) {
       expect(names).toContain(n);

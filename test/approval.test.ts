@@ -96,6 +96,7 @@ describe("approval plugin apply", () => {
 
   function setupTui(choice: number, gateDecision: "allow" | "ask" | "deny" | null = "ask") {
     const agent = { session: {} };
+    const child = { session: { id: "child" } };
     const asked: Array<{ title: string; labels: string[] }> = [];
     const remembered: (string | undefined)[] = [];
     const repl = {
@@ -112,12 +113,14 @@ describe("approval plugin apply", () => {
     const modes = {
       rememberFor: (callId?: string) => remembered.push(callId),
       decisionFor: (_callId?: string) => gateDecision ?? undefined,
+      governs: (subject: unknown) => subject === agent || subject === child,
     };
     const fake = fakeCtx();
     apply(fake.ctx as any);
     for (const { cb } of fake.injected) cb({ kumoRepl: repl, kumoRender: { describe }, kumoModes: modes });
     return {
       asked,
+      child,
       remembered,
       request: (req: Record<string, unknown>) =>
         fake.emit("approval/request", { agent, toolName: "bash", ...req }, async () => "unavailable") as Promise<string>,
@@ -135,6 +138,12 @@ describe("approval plugin apply", () => {
     const { asked, request } = setupTui(2, "allow");
     expect(await request({ callId: "t1" })).toBe("allowed-once");
     expect(asked).toEqual([]);
+  });
+
+  test("TUI: an owned subagent's ask still reaches the select", async () => {
+    const { asked, child, request } = setupTui(0, "ask");
+    expect(await request({ agent: child, callId: "t1" })).toBe("allowed-once");
+    expect(asked).toHaveLength(1);
   });
 
   test("TUI: a denied call cannot open the approval select", async () => {

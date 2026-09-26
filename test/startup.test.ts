@@ -46,6 +46,13 @@ describe("kumo-startup", () => {
     expect(fake.provided.get(KUMO_STARTUP_SERVICE)).toEqual({});
   });
 
+  test("headless flags publish ordered prompts and output format", () => {
+    const { fake } = run(["-p", "first", "--print", "second", "--output-format", "json"]);
+    expect(fake.provided.get(KUMO_STARTUP_SERVICE)).toEqual({
+      headless: { prompts: ["first", "second"], format: "json" },
+    });
+  });
+
   test("--help exits 0 without providing", () => {
     const { fake, exits } = run(["--help"]);
     expect(exits).toEqual([0]);

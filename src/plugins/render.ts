@@ -824,6 +824,10 @@ export function attach(
 
 export function apply(ctx: DshContext): void {
   const service: RenderService = {};
+  if (process.env.KUMO_HEADLESS === "1") {
+    ctx.provide(KUMO_RENDER_SERVICE, service);
+    return;
+  }
   if (process.stdin.isTTY === true && process.stdout.isTTY === true) {
     // TUI mode: components only; the screen service stays empty.
     ctx.provide(KUMO_RENDER_SERVICE, service);

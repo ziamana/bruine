@@ -50,6 +50,7 @@ export interface KumoModesService {
   cyclePermission(): Promise<PermissionMode>;
   rememberFor(callId: string | undefined): void;
   decisionFor(callId: string | undefined): "allow" | "ask" | "deny" | undefined;
+  governs(agent: unknown): boolean;
   readonly log: ModesLogEntry[];
   onChange(cb: () => void): () => void;
   describe(): { plan: boolean; permission: PermissionMode; badges: string[] };
@@ -78,6 +79,9 @@ function readKumoJson(env: NodeJS.ProcessEnv = process.env): Record<string, unkn
 }
 
 function readDefaultMode(env: NodeJS.ProcessEnv = process.env): PermissionMode {
+  if (env.KUMO_HEADLESS === "1" && (env.KUMO_PERMISSION_MODE === "ask" || env.KUMO_PERMISSION_MODE === "auto" || env.KUMO_PERMISSION_MODE === "full")) {
+    return env.KUMO_PERMISSION_MODE;
+  }
   const doc = readKumoJson(env) as { permissionMode?: unknown; access?: unknown };
   const v = doc.permissionMode ?? doc.access;
   return v === "auto" || v === "full" || v === "ask" ? v : "auto";
@@ -101,6 +105,7 @@ export class Modes implements KumoModesService {
    * plain field because the gate reads it on every tool call.
    */
   governed: unknown;
+  governs: (agent: unknown) => boolean = () => false;
   /** Transient notice above the editor (T24.4), not in chat history. */
   showNotice: ((text: string, opts?: { red?: boolean }) => void) | undefined;
 
@@ -219,6 +224,34 @@ function judgeRoute(ctx: DshContext): JudgeRoute {
 export function apply(ctx: DshContext): void {
   const modes = new Modes(readDefaultMode());
 
+  modes.governs = (subject: unknown): boolean => {
+    const root = repl?.agent ?? modes.governed;
+    if (root === undefined || subject === undefined) return false;
+    if (subject === root) return true;
+    const registry = ctx.get("agents") as {
+      list?(): Array<{ session?: { id?: unknown } }>;
+      isOwnedBy?(id: unknown, owner: unknown): boolean;
+    } | undefined;
+    if (registry?.list === undefined || registry.isOwnedBy === undefined) return false;
+    const owned = new Set<unknown>([root]);
+    const candidates = registry.list();
+    // The registry exposes direct ownership, so walk it to cover descendants.
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const candidate of candidates) {
+        if (owned.has(candidate) || candidate.session?.id === undefined) continue;
+        for (const parent of owned) {
+          if (!registry.isOwnedBy(candidate.session.id, parent)) continue;
+          owned.add(candidate);
+          changed = true;
+          break;
+        }
+      }
+    }
+    return owned.has(subject);
+  };
+
   let repl: KumoRepl | undefined;
   ctx.inject(["kumoRepl"], (c: any) => {
     repl = c.kumoRepl;
@@ -320,8 +353,7 @@ export function apply(ctx: DshContext): void {
     // T42: the gate governs the REPL agent *and* whatever agent a headless run
     // registered. It used to bail out when there was no REPL, which meant a
     // REPL-less process ran every tool undecided with the sandbox open.
-    const governed = repl?.agent ?? modes.governed;
-    if (governed === undefined || exec.agent !== governed) return next();
+    if (!modes.governs(exec.agent)) return next();
     // There is a terminal to ask on only when a REPL published a UI. Without
     // one, `ask` has no answer, so it becomes `deny`: failing open would make
     // the gate decorative.

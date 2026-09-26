@@ -30,6 +30,7 @@
   "exports": {
     "./startup": "./dist/plugins/startup.js",
     "./repl": "./dist/plugins/repl.js",
+    "./headless": "./dist/plugins/headless.js",
     "./render": "./dist/plugins/render.js",
     "./approval": "./dist/plugins/approval.js",
     "./modes": "./dist/plugins/modes.js",

@@ -22,6 +22,7 @@ export interface DshContext {
 /** The service published by kumo-startup and consumed by kumo-repl. */
 export interface KumoStartup {
   initialPrompt?: string;
+  headless?: { prompts: string[]; format: "text" | "json" | "stream-json" };
 }
 
 /** The service published by kumo-repl once its agent exists. */

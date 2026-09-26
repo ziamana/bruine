@@ -64,6 +64,21 @@ describe("kumo gate (T16.C)", () => {
     const d = await preExecute("bash", { command: "ls" }, "c9", otherAgent);
     expect(d.kind).toBe("delegate");
   });
+
+  test("governs subagents and their descendants, but not unrelated agents", async () => {
+    const h = harness();
+    const child = { session: { id: "child" } };
+    const grandchild = { session: { id: "grandchild" } };
+    h.fake.provided.set("agents", {
+      list: () => [h.agent, child, grandchild, h.otherAgent],
+      isOwnedBy: (id: string, owner: unknown) =>
+        (id === "child" && owner === h.agent) || (id === "grandchild" && owner === child),
+    });
+    h.modes.plan = true;
+    expect((await h.preExecute("write", { file_path: "a.txt" }, "child-write", child)).kind).toBe("deny");
+    expect((await h.preExecute("bash", { command: "touch a.txt" }, "grandchild-bash", grandchild)).kind).toBe("deny");
+    expect((await h.preExecute("write", { file_path: "a.txt" }, "other-write", h.otherAgent)).kind).toBe("delegate");
+  });
 });
 
 describe("the gate without a terminal (T42)", () => {

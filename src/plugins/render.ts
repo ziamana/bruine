@@ -215,8 +215,11 @@ export function attachTui(
     const now = typeof f.time === "number" ? f.time : Date.now();
     if (f.type === "start") {
       tps.startCall(now);
-      hideWorking();
       closeLive();
+      // A call starts the moment the request is sent; a local server then prefills in
+      // silence for seconds. Keep (or show) Working until the first content delta.
+      // Hiding it here made it vanish instantly on llama.cpp (BOS, real server, 2026-09-26).
+      showWorking();
       return;
     }
     if (f.type === "end") {
@@ -233,14 +236,15 @@ export function attachTui(
       tps.delta(now);
       ui.footer.set({ tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
     };
-    hideWorking();
     switch (chunk.type) {
       case "reasoning-delta":
+        hideWorking();
         trackDelta();
         ensureReasoning().push(chunk.text);
         ui.requestRender();
         return;
       case "text-delta":
+        hideWorking();
         trackDelta();
         needBreak = true;
         currentAnswer += String(chunk.text ?? "");
@@ -261,6 +265,7 @@ export function attachTui(
         }
         return;
       case "tool-call-delta": {
+        hideWorking();
         trackDelta();
         const id = String(chunk.id);
         if (chunk.name === "todo_write") todoToolIds.add(id);
@@ -315,7 +320,17 @@ export function attachTui(
         if (trimmed === "") return;
         if (MODE_ANNOUNCEMENTS.has(trimmed)) return;
         lastUser = trimmed;
-        ui.addChat(userMessageComponent(trimmed));
+        {
+          // dsh emits turn/start before the durable user/message event, so Working may
+          // already be on screen: re-add it after the prompt so it sits below it.
+          const chat = (ui as unknown as { chat?: { children: unknown[] } }).chat;
+          const hadWorking =
+            working !== undefined ||
+            (chat?.children ?? []).some((c) => (c as { constructor?: { name?: string } }).constructor?.name === "WorkingComponent");
+          if (hadWorking) hideWorking();
+          ui.addChat(userMessageComponent(trimmed));
+          if (hadWorking) showWorking();
+        }
         return;
       }
       case "turn/start":

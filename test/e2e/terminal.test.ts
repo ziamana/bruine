@@ -266,6 +266,11 @@ test("working: delayed first chunk shows Working within 200ms (T24.3, T27b.5)", 
     h.press("enter");
     await h.until(() => h.screen().join("\n").includes("Working"), 2000, "Working visible");
     expect(Date.now() - start).toBeLessThan(1500);
+    // Real llama.cpp: headers and the role chunk arrive at once, then seconds of silent
+    // prefill. Working must STAY on screen during that silence, not just flash.
+    await delay(1200);
+    await h.flush();
+    expect(h.screen().join("\n")).toContain("Working");
     await h.waitFor("WORKING_DONE");
     await h.dump("working");
   });
@@ -623,6 +628,8 @@ test("/new: two turns, new conversation, next request has only new history (T31.
     expect(lastBody).not.toContain("First hello");
     expect(lastBody).not.toContain("Second hello");
     expect(h.screen().join("\n")).not.toContain("First hello");
+    // The context window of the route survives /new (real screen showed "ctx 0% of ?").
+    expect(footer(h)).toContain("of 100k");
   });
 });
 

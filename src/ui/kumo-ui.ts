@@ -218,7 +218,8 @@ export class KumoUi {
     this.chat = new ChatTranscript(icons);
     this.editor = new PlainGlyphEditor(this.tui, editorTheme);
     this.editor.onSubmit = (text) => {
-      this.showWorking();
+      // Working is shown by the render plugin on turn/start, AFTER the prompt echo
+      // (showing it here put it above the user's message on the real server).
       // T30: the update notice stays until the first prompt.
       if (this.#persistentNotice !== undefined) {
         this.noticeBox.removeChild(this.#persistentNotice);

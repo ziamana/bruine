@@ -525,7 +525,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       }
       ui.clearChat();
       ui.clearTasks();
-      ui.footer.set({ contextUsed: 0, contextWindow: 0, tps: 0, pp: undefined, cachePct: undefined });
+      ui.footer.set({ contextUsed: 0, tps: 0, pp: undefined, cachePct: undefined });
       ui.updateHeader();
       ui.showNotice("New conversation.");
       const fresh = new Repl({

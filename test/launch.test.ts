@@ -54,6 +54,11 @@ describe("buildLaunch", () => {
     expect(env.DSH_TELEMETRY_DISABLED).toBe("1");
   });
 
+  test("tool catalog defaults to lean and accepts the full setting", () => {
+    expect(buildLaunch([], { KUMO_TOOLS: "full" }, "/home/x").env.KUMO_TOOLS).toBe("lean");
+    expect(buildLaunch([], {}, "/home/x", { tools: "full" }).env.KUMO_TOOLS).toBe("full");
+  });
+
   test("kumo.json telemetry opt-in does not disable (T14.3)", () => {
     const { env } = buildLaunch([], {}, "/home/x", { telemetry: true });
     expect(env.DSH_TELEMETRY_DISABLED).toBeUndefined();

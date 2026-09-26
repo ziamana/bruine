@@ -66,26 +66,31 @@ function ensureBundleInstalled(
   if (existsSync(marker)) return;
 
   const spec = selfPackageRoot() ?? `${pkg.name}@${pkg.version}`;
-  console.log(`kumo: first run: installing the kumo bundle into ${profileDir}…`);
-  const { status, error } = runDsh(
+  console.log("Setting up kumo (one time)…");
+  const { status, error, output } = runDsh(
     dshEntry,
     ["plugin", "--profile", "kumo", "add", spec],
     env,
+    true,
   );
   if (error) {
+    if (output) process.stderr.write(output);
     if (error.code === "ENOENT") console.error(DSH_MISSING);
     else console.error(`kumo: ${error.message}`);
     process.exit(1);
   }
   if (status !== 0) {
+    if (output) process.stderr.write(output);
     console.error(`kumo: could not install the kumo bundle (dsh plugin exited ${status}).`);
     process.exit(1);
   }
+  console.log("Ready.");
 }
 
 interface KumoJson {
   telemetry?: boolean;
   updateCheck?: boolean;
+  tools?: "lean" | "full";
 }
 
 function readKumoJson(dshHome: string): KumoJson {
@@ -302,9 +307,11 @@ async function main(): Promise<void> {
   }
 
   const dshEntry = resolveDshEntry();
+  const settings = readKumoJson(dshHome);
   const { command, args, env } = buildLaunch(argv, process.env, os.homedir(), {
     dshEntry,
-    telemetry: readKumoJson(dshHome).telemetry,
+    telemetry: settings.telemetry,
+    tools: settings.tools,
   });
 
   if (!existsSync(join(dshHome, "settings.yaml"))) {

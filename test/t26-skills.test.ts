@@ -376,6 +376,10 @@ describe("kumo launch migration (T26b)", () => {
         }
         // Give the announcement a tick to reach stdout (printed before dsh spawns).
         for (let i = 0; i < 20 && !out.includes("kept your 1 skill"); i++) await sleep(100);
+        expect(out).toContain("Setting up kumo (one time)…");
+        expect(out).toContain("Ready.");
+        expect(out).not.toContain("Already up to date");
+        expect(out).not.toContain("dependencies:");
         expect(out).toContain("kept your 1 skill from .agents/skills");
         const entries = await readInstalledSkills(join(kumoHome, "skills"));
         expect(entries).toEqual([

@@ -54,8 +54,14 @@ describe("profile composition (T15)", () => {
     // Tools (T15.2) — fetch is already on the dsh-base tool-web row
     expect(out).toContain("dsh-tool-web");
     expect(out).toContain("dsh-tool-ask-user");
-    expect(out).toContain("dsh-tool-str-replace-editor");
-    expect(out).toContain("dsh-tool-present");
+    for (const id of [
+      "plan-mode", "tool-subagent-control", "tool-subagent-list-agents",
+      "tool-subagent-fork", "tool-workflow", "tool-goal", "tool-ralph",
+      "tool-str-replace-editor", "tool-present",
+    ]) {
+      const row = out.split(`- id: ${id}\n`)[1]?.split(/\n(?:# == |\- id: )/)[0];
+      expect(row, id).toContain("disabled: !!js process.env.KUMO_TOOLS !== 'full'");
+    }
     // Modes groundwork (T16): sandbox left fully open, approvals always reach kumo
     expect(out).toContain("danger-full-access");
     expect(out).toMatch(/policy: *ask/);

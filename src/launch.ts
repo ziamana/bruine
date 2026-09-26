@@ -21,6 +21,8 @@ export interface LaunchOptions {
   /** kumo.json `telemetry`. dsh telemetry is ON upstream, so kumo disables it
    * unless the user opted in. */
   telemetry?: boolean;
+  /** Fixed at startup from kumo.json; never changed during a session. */
+  tools?: "lean" | "full";
   /** Path implementation, injectable (path.win32) for cross-platform tests. */
   pathMod?: typeof path;
 }
@@ -40,6 +42,7 @@ export function buildLaunch(
     if (value !== undefined) out[key] = value;
   }
   out.DSH_HOME = env.KUMO_HOME ?? pathMod.join(home, ".kumo");
+  out.KUMO_TOOLS = opts.tools === "full" ? "full" : "lean";
   if (opts.telemetry !== true) {
     out.DSH_TELEMETRY_DISABLED = "1";
   }
@@ -76,13 +79,19 @@ export function dshInvocation(entry: string | undefined, args: string[]): { comm
 }
 
 /** Launch a pinned-dsh subcommand synchronously, inheriting stdio. */
-export function runDsh(entry: string | undefined, args: string[], env: Record<string, string>): {
+export function runDsh(entry: string | undefined, args: string[], env: Record<string, string>, capture = false): {
   status: number | null;
   error?: NodeJS.ErrnoException;
+  output?: string;
 } {
   const inv = dshInvocation(entry, args);
-  const result = spawnSync(inv.command, inv.args, { stdio: "inherit", env });
-  return { status: result.status, ...(result.error ? { error: result.error as NodeJS.ErrnoException } : {}) };
+  const result = spawnSync(inv.command, inv.args, {
+    stdio: capture ? ["inherit", "pipe", "pipe"] : "inherit",
+    encoding: capture ? "utf8" : undefined,
+    env,
+  });
+  const output = capture ? `${String(result.stdout ?? "")}${String(result.stderr ?? "")}` : undefined;
+  return { status: result.status, ...(result.error ? { error: result.error as NodeJS.ErrnoException } : {}), ...(capture ? { output } : {}) };
 }
 
 /** The launcher-only flags kumo answers itself (T11.2: first argument only). */

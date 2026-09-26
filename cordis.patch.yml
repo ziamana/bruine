@@ -73,6 +73,23 @@
         name: kumo gate
         description: Sandbox off; kumo's own gate asks before risky actions.
 
+# Keep the model-facing catalog fixed for each session. The launcher reads
+# kumo.json before dsh starts; an absent tools setting selects lean.
+- id: plan-mode
+  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+- id: tool-subagent-control
+  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+- id: tool-subagent-list-agents
+  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+- id: tool-subagent-fork
+  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+- id: tool-workflow
+  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+- id: tool-goal
+  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+- id: tool-ralph
+  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+
 - insert:
     - id: kumo-startup
       name: 'kumo-code/startup'
@@ -98,6 +115,8 @@
 
     - id: tool-str-replace-editor
       name: '@deepseek-ai/dsh-tool-str-replace-editor'
+      disabled: !!js process.env.KUMO_TOOLS !== 'full'
 
     - id: tool-present
       name: '@deepseek-ai/dsh-tool-present'
+      disabled: !!js process.env.KUMO_TOOLS !== 'full'

@@ -162,6 +162,15 @@ describe("Cache Hunter (T17)", () => {
       const mains = mainRequests();
       expect(mains.length, `main-session requests; stderr: ${childError}`).toBeGreaterThanOrEqual(3);
 
+      const names = (mains[0]!.tools as Array<{ function?: { name?: string }; name?: string }> | undefined ?? [])
+        .map((tool) => tool.function?.name ?? tool.name);
+      for (const kept of ["read", "write", "edit", "bash", "glob", "grep", "read_image", "web_fetch", "web_search", "ask_user_question", "todo_write", "subagent", "skill", "job_list", "job_output", "job_kill"]) {
+        expect(names, `lean catalog is missing ${kept}`).toContain(kept);
+      }
+      for (const dropped of ["workflow", "ralph", "create_goal", "get_goal", "update_goal", "list_agents", "send_message", "interrupt_agent", "subagent_fork", "present", "str_replace_editor", "exit_plan_mode"]) {
+        expect(names, `lean catalog contains ${dropped}`).not.toContain(dropped);
+      }
+
       const failures = checkCacheInvariants(mains);
       expect(failures, failures.join("\n")).toEqual([]);
 

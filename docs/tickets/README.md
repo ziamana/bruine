@@ -79,3 +79,4 @@ You are implementing one ticket of the kumo project.
 | T58 | Welcome wordmark: one mark, one motion language, tied to observed state | T55 |
 | T59 | What the turn did to the files: a `changed` line under the receipt, measured with git | T55 |
 | T60 | Keys are keys, not bytes: `matchesKey` everywhere, releases dropped, a scan that forbids byte comparisons | T13a |
+| T61 | Browser control for everyone: shipped skill, opt-in setup step, gate rules for @playwright/cli | T35 |

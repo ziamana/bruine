@@ -65,7 +65,12 @@ export function variantStats(header: HeaderRow, runs: RunRow[]): VariantStats {
     tasks: perTask.size,
     runs: runs.length,
     passes,
-    passRate: runs.length === 0 ? 0 : passes / runs.length,
+    // Infrastructure errors (status "error") are excluded from the rate: they say
+    // nothing about the model. Timeouts stay in: too slow is a real failure.
+    passRate: (() => {
+      const scored = runs.filter((run) => run.status !== "error").length;
+      return scored === 0 ? 0 : passes / scored;
+    })(),
     spread,
     medianWallSec: median(runs.map((run) => run.wallSec)),
     medianTokens: median(

@@ -82,13 +82,20 @@ function rowFor(
     ...(metrics.unreadable === undefined ? [] : [metrics.unreadable]),
     ...(check.passed === null ? [`check could not run on this machine (exit ${String(check.exitCode)})`] : []),
   ];
+  // A run where kumo itself failed before the model did anything (bad model id,
+  // server down, auth) is broken infrastructure, not a model failure: counting it
+  // as "fail" would corrupt the pass rate of a whole overnight run.
+  const infraBroken =
+    check.passed !== true && kumoErrors.length > 0 && (metrics.outputTokens ?? 0) === 0 && (metrics.toolCalls ?? 0) === 0;
   const status = timedOut
     ? "timeout"
-    : check.passed === true
-      ? "pass"
-      : check.passed === false
-        ? "fail"
-        : "error";
+    : infraBroken
+      ? "error"
+      : check.passed === true
+        ? "pass"
+        : check.passed === false
+          ? "fail"
+          : "error";
   return {
     kind: "run",
     task: plan.task.id,
@@ -123,9 +130,10 @@ async function main(): Promise<number> {
     return 2;
   }
 
-  const { provider, model } = parseRoute(opts.route);
+  const { provider, model: asked } = parseRoute(opts.route);
   const routes = await readSettingsRoutes(opts.settings);
-  const route = pickRoute(routes, provider, model);
+  const route = pickRoute(routes, provider, asked);
+  const model = route.modelId ?? asked;
   const variant = await readVariant(join(repoRoot, "bench", "variants"), opts.variant);
   const modelName = routeModelName(route, model);
   const persona = variantPersona(variant, modelName);

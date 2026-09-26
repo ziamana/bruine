@@ -15,6 +15,8 @@ export interface ProviderRoute {
   config: Record<string, unknown>;
   /** The model entry, when the route declares it. */
   model?: Record<string, unknown>;
+  /** The exact model id to request (resolved from an alias like `ornith`). */
+  modelId?: string;
 }
 
 export interface SettingsRoutes {
@@ -56,8 +58,24 @@ export function pickRoute(
     );
   }
   const models = routes.modelsOf(provider);
-  const entry = models.find((m) => m["id"] === model);
-  return { provider, config, ...(entry !== undefined ? { model: entry } : {}) };
+  const exact = models.find((m) => m["id"] === model);
+  if (exact !== undefined) return { provider, config, model: exact, modelId: model };
+  // Friendly alias: `local/ornith` matches the one entry whose name or file name
+  // contains "ornith" (case-insensitive). Ambiguous or unknown aliases fail loudly:
+  // a wrong model id makes every run fail with UNKNOWN_MODEL (BOS, first real run).
+  const needle = model.toLowerCase();
+  const hits = models.filter((m) => {
+    const id = String(m["id"] ?? "");
+    const name = String(m["name"] ?? "");
+    const base = (id.split(/[\\/]/).at(-1) ?? id).toLowerCase();
+    return name.toLowerCase().includes(needle) || base.includes(needle);
+  });
+  if (hits.length === 1) return { provider, config, model: hits[0]!, modelId: String(hits[0]!["id"]) };
+  if (models.length === 0) return { provider, config, modelId: model };
+  const known = models.map((m) => `${String(m["id"])}${typeof m["name"] === "string" ? ` (${m["name"]})` : ""}`);
+  throw new Error(
+    `route "${provider}/${model}": ${hits.length === 0 ? "no" : "several"} model(s) match "${model}" in provider "${provider}" (known: ${known.join(", ")})`,
+  );
 }
 
 /** Human name of a route: the model entry's `name:`, else its id. */

@@ -750,3 +750,22 @@ describe("bench end to end (fake kumo)", () => {
     await rm(home, { recursive: true, force: true });
   });
 });
+
+describe("BOS review of the first real run (2026-09-26)", () => {
+  test("route alias: local/ornith resolves to the one matching model id", async () => {
+    const { pickRoute } = await import("../bench/lib/route.js");
+    const models = [{ id: "/m/Ornith-1.5-9B.gguf", name: "Ornith 1.5 9B" }, { id: "/m/Qwen3.8-27B.gguf" }];
+    const routes = { providers: { local: {} }, defaultRoute: undefined, modelsOf: () => models } as any;
+    expect(pickRoute(routes, "local", "ornith").modelId).toBe("/m/Ornith-1.5-9B.gguf");
+    expect(pickRoute(routes, "local", "/m/Qwen3.8-27B.gguf").modelId).toBe("/m/Qwen3.8-27B.gguf");
+    expect(() => pickRoute(routes, "local", "gguf")).toThrow(/several/);
+    expect(() => pickRoute(routes, "local", "llama")).toThrow(/no model/);
+  });
+  test("infrastructure errors are excluded from the pass rate", async () => {
+    const { variantStats } = await import("../bench/lib/summary.js");
+    const row = (task: string, status: string, pass: boolean) => ({ kind: "run", task, repeat: 1, status, pass, wallSec: 1, outputTokens: 10, toolCalls: 1, errors: [] }) as any;
+    const s = variantStats({ variant: "dsh", route: "local/x" } as any, [row("a", "pass", true), row("b", "error", false), row("c", "fail", false)]);
+    expect(s.passRate).toBe(0.5);
+    expect(s.broken).toBe(1);
+  });
+});

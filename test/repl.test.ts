@@ -205,11 +205,11 @@ describe("Repl", () => {
 });
 
 describe("slash palette source of truth (T31.1)", () => {
-  test("kumo commands: 10 items incl. new/compact/help/exit", async () => {
+  test("kumo commands: 11 items incl. new/compact/reload/help/exit", async () => {
     const { KUMO_COMMANDS, mergeCommands } = await import("../src/plugins/repl.js");
-    expect(KUMO_COMMANDS).toHaveLength(10);
+    expect(KUMO_COMMANDS).toHaveLength(11);
     const names = KUMO_COMMANDS.map((c) => c.name);
-    for (const n of ["/new", "/compact", "/plan", "/permissions", "/auto", "/ask", "/full", "/skills", "/help", "/exit"]) {
+    for (const n of ["/new", "/compact", "/plan", "/permissions", "/auto", "/ask", "/full", "/skills", "/reload", "/help", "/exit"]) {
       expect(names).toContain(n);
     }
     const merged = mergeCommands([

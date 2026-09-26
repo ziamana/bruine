@@ -54,4 +54,8 @@ You are implementing one ticket of the kumo project.
 | T34 | Effort really sent (chat_template_kwargs), /effort + ctrl+e, preserve_thinking for the cache | T31 + T30 |
 | T35 | `kumo setup` on an existing install: prefill from settings.yaml, change-one-thing menu, Skip everywhere | T33b |
 | T36 | kumo-bench: ~20 tasks, variants of the system prompt, verdict on Qwen 3.8 27B | T33b |
-| T29 | Paste an image (clipboard ctrl+v, vision models only) | after first public release |
+| T29 | Paste an image (clipboard ctrl+v, vision gate, dsh attachment store) | done 2026-09-26 |
+| T40 | Console band: painted bottom zone on the terminal's real background (OSC 11), no background at 16 colors | T27 |
+| T37 | `/model`: switch provider + model in the session, from dsh's own `llm` catalog | T34 |
+| T38 | f2 walks the recent routes; the reasoning effort follows the model | T37 |
+| T39 | `/provider`: every provider, its endpoint, key and models (read-only) | T37 |

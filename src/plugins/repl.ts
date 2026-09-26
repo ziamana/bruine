@@ -11,10 +11,21 @@ import { KumoUi, readSettingsRoute } from "../ui/kumo-ui.js";
 import { fetchProps, isPrivateIPv4 } from "../setup/discover.js";
 import { KUMO_MODES_SERVICE, NOTICE_ASK, NOTICE_AUTO, NOTICE_FULL } from "./modes.js";
 import kumoEffort, { KUMO_EFFORT_SERVICE } from "./effort.js";
+import kumoModel, { KUMO_MODEL_SERVICE } from "./model.js";
 import { KUMO_RENDER_SERVICE } from "./render.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import {
+  attachFailureNotice,
+  buildUserContent,
+  NO_STORE_NOTICE,
+  type AttachmentStoreLike,
+  type UserContentPart,
+} from "../image/attach.js";
+import { stripImageChips } from "../image/pending.js";
+import { NO_VISION_NOTICE } from "../image/vision.js";
+import type { ClipboardImage } from "../image/clipboard.js";
 import type { DshContext, KumoRepl, KumoStartup } from "./ctx.js";
 
 const require = createRequire(import.meta.url);
@@ -41,6 +52,7 @@ export const KUMO_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/ask", description: "Switch permissions directly" },
   { name: "/full", description: "Switch permissions directly" },
   { name: "/skills", description: "List the enabled skills" },
+  { name: "/reload", description: "Re-read settings.yaml and the terminal background" },
   { name: "/help", description: "Show commands and keys" },
   { name: "/exit", description: "Quit kumo (also ctrl+d)" },
 ];
@@ -304,13 +316,56 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   let { agent } = created;
   const { selection, selectionRef } = created;
 
-  const followup = (text: string): void => {
-    agent.followup(
+  const send = (parts: UserContentPart[]): void => {
+    agent.followup(createUserMessage({ content: parts, source: { kind: "user" } }));
+  };
+
+  /**
+   * T29: the dsh attachment store, when this build has one. dsh-base ships the
+   * local backend, so this is normally there; a build without it still sends
+   * the words.
+   */
+  const attachmentStore = (): AttachmentStoreLike | undefined => {
+    const store = ctx.get("attachments") as AttachmentStoreLike | undefined;
+    return typeof store?.saveImage === "function" ? store : undefined;
+  };
+
+  /**
+   * T29: a prompt carrying `[Image N]` chips. The chips stay in the text when
+   * an image really was attached, because the label and the image belong
+   * together; when none was, they are stripped so the model is never told about
+   * an image it cannot see.
+   */
+  const sendWithImages = async (text: string, images: ClipboardImage[], target: typeof agent = agent): Promise<void> => {
+    if (ui !== undefined && (await ui.routeSeesImages()) === "no") {
+      ui.showNotice(NO_VISION_NOTICE, { red: true });
+      ui.pendingImages.release(images);
+      target.followup(createUserMessage({ content: [{ type: "text", text: stripImageChips(text) }], source: { kind: "user" } }));
+      return;
+    }
+    const built = await buildUserContent(text, images, attachmentStore());
+    ui?.pendingImages.release(images);
+    if (built.noStore) ui?.showNotice(NO_STORE_NOTICE, { red: true });
+    else if (built.failures.length > 0) ui?.showNotice(attachFailureNotice(built.failures), { red: true });
+    const label = built.attached > 0 ? text : stripImageChips(text);
+    target.followup(
       createUserMessage({
-        content: [{ type: "text", text }],
+        content: built.attached > 0 ? built.parts : [{ type: "text", text: label }],
         source: { kind: "user" },
       }),
     );
+  };
+
+  const followup = (text: string): void => {
+    const images = ui?.pendingImages.resolve(text) ?? [];
+    if (images.length === 0) {
+      send([{ type: "text", text }]);
+      return;
+    }
+    // The store validates and normalizes the bytes, so the send is async. The
+    // prompt echo already happened, and a refusal costs the image, not the
+    // message.
+    void sendWithImages(text, images);
   };
   const flush = (session: unknown): Promise<unknown> => sessions.flush(session);
 
@@ -343,6 +398,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     else m.showNotice?.(NOTICE_FULL, { red: true });
   };
   const effort = (): any => ctx.get(KUMO_EFFORT_SERVICE);
+  const modelPicker = (): any => ctx.get(KUMO_MODEL_SERVICE);
   const router = async (
     text: string,
     emitLine: (t: string) => void,
@@ -398,6 +454,22 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       }
       return;
     }
+    // T37: /model and /provider are answered by the model plugin (picker,
+    // direct route, or the read-only provider list).
+    if (cmd === "/model" || cmd === "/provider") {
+      const picker = modelPicker();
+      if (picker === undefined || picker === null) {
+        reply(`${cmd} is not available in this build.`);
+        return;
+      }
+      const t: string | undefined = await Promise.resolve(
+        cmd === "/model"
+          ? picker.runCommand(clean)
+          : picker.runProviderCommand(clean.replace(/^\/provider\s*/, "")),
+      );
+      if (t !== undefined) reply(t);
+      return;
+    }
     if (cmd === "/ask" || cmd === "/auto" || cmd === "/full") {
       if (cmd === "/full") {
         if (ui !== undefined) {
@@ -418,10 +490,13 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/permissions  Choose Ask / Auto / Full access",
           "/auto /ask /full  Switch permissions directly",
           "/effort  Choose the reasoning effort (also ctrl+e)",
+          "/model  Switch provider and model (also f2)",
+          "/provider  List the providers (also /provider all)",
           "/skills  List the enabled skills",
+          "/reload  Re-read settings.yaml and the terminal background",
           "/help  Show commands and keys",
           "/exit  Quit kumo (also ctrl+d)",
-          `Esc interrupt, ctrl+c clear, ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, ctrl+b cockpit, ${TASKS_HELP}`,
+          `Esc interrupt, ctrl+c clear, ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, ctrl+b cockpit, f2 next model, ${TASKS_HELP}`,
         ].join("\n"),
       );
       return;
@@ -436,6 +511,27 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         names = [];
       }
       reply(names.length > 0 ? `Enabled skills: ${names.join(", ")}` : "No skills enabled.");
+      return;
+    }
+    if (cmd === "/reload") {
+      if (ui === undefined) {
+        reply("/reload needs the terminal UI. In a piped run there is nothing to redraw.");
+        return;
+      }
+      // Never a silent lie: a route that moved under us is named, not adopted.
+      const report = await ui.reload();
+      const lines = [`Reloaded. Route still ${report.live}.`];
+      if (report.route === "moved" && report.moved !== undefined) {
+        lines.push(`settings.yaml now points at ${report.moved}. This session is still on ${report.live}: /model to switch.`);
+      } else if (report.route === "unreadable") {
+        lines.push("settings.yaml could not be read; kept what this session started with.");
+      }
+      lines.push(
+        report.background === "read"
+          ? "Terminal background re-read; the painted surfaces follow it."
+          : "The terminal did not report a background; the painted surfaces are unchanged.",
+      );
+      reply(lines.join("\n"));
       return;
     }
     if (cmd === "/compact") {
@@ -535,6 +631,8 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       // T34: the effort plugin reads the live agent's selection; follow the new agent.
       (service as any).selection = created2.selectionRef;
       effort()?.rebind?.(created2.selectionRef);
+      // T37: same for the model picker, so /model acts on the new agent.
+      modelPicker()?.rebind?.(created2.selectionRef);
       const m = modes();
       if (m !== undefined && m !== null) {
         m.plan = false;
@@ -542,15 +640,21 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       }
       ui.clearChat();
       ui.clearTasks();
+      ui.pendingImages.clear();
       ui.footer.set({ contextUsed: 0, tps: 0, pp: undefined, cachePct: undefined });
       ui.updateHeader();
       ui.showNotice("New conversation.");
       const fresh = new Repl({
         agent: created2.agent,
+        // T29: a prompt typed while the new turn is already running takes the
+        // same path, so an image pasted mid-turn is not silently dropped.
         followup: (t: string) => {
-          created2.agent.followup(
-            createUserMessage({ content: [{ type: "text", text: t }], source: { kind: "user" } }),
-          );
+          const images = ui?.pendingImages.resolve(t) ?? [];
+          if (images.length === 0) {
+            created2.agent.followup(createUserMessage({ content: [{ type: "text", text: t }], source: { kind: "user" } }));
+            return;
+          }
+          void sendWithImages(t, images, created2.agent);
         },
         flush,
         appExit: (code: number) => {
@@ -624,6 +728,10 @@ export function apply(ctx: DshContext): void {
   // reasoning effort of the live selection. Mounted here so the profile's
   // bundle patch stays untouched.
   ctx.plugin?.(kumoEffort);
+  // T37: kumo-model owns /model and /provider — the provider/model picker and
+  // the switch of the live route. Mounted here so the profile's bundle patch
+  // stays untouched.
+  ctx.plugin?.(kumoModel);
   const exit = ctx.get("appExit") as ((code: number) => void) | undefined;
   if (exit === undefined) {
     throw new Error("kumo-repl: the launcher must provide ctx.appExit before the tree mounts");

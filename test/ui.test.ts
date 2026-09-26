@@ -1,4 +1,4 @@
-import { Text, type Terminal } from "@earendil-works/pi-tui";
+import { Text, visibleWidth, type Terminal } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -477,6 +477,176 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     expect(text).toContain("\x1b[31m");
   });
 
+  test("a blank line separates the transcript from the task panel", () => {
+    const { ui } = makeUi();
+    ui.addChat(new Text("last chat block", 1, 0));
+    ui.setTasks([{ content: "Add the panel", status: "in_progress" }]);
+    const lines = ui.tui.render(80).map(strip);
+    const tasks = lines.findIndex((l) => l.includes("Tasks  0/1"));
+    expect(tasks).toBeGreaterThan(0);
+    expect(lines[tasks - 1]!.trim()).toBe("");
+  });
+
+  test("the task panel adds no gap of its own once it is hidden", () => {
+    const { ui } = makeUi();
+    ui.addChat(new Text("last chat block", 1, 0));
+    ui.setTasks([{ content: "Add the panel", status: "in_progress" }]);
+    ui.clearTasks();
+    const lines = ui.tui.render(80).map(strip);
+    const last = lines.findIndex((l) => l.includes("last chat block"));
+    expect(lines[last + 1]!.trim()).toBe("");
+    expect(lines.join("\n")).not.toContain("Tasks");
+  });
+
+  test("/reload re-reads settings.yaml and never adopts a route it did not switch to (T40)", async () => {
+    const { readSettingsRoute, routeLabel } = await import("../src/ui/kumo-ui.js");
+    const { writeFileSync, mkdirSync } = await import("node:fs");
+    const home = mkdtempSync(join(tmpdir(), "kumo-reload-"));
+    const settings = [
+      "llm-pi-ai:",
+      "  providers:",
+      "    local:",
+      "      baseURL: 'http://127.0.0.1:8080/v1'",
+      "      models:",
+      "      - id: 'first.gguf'",
+      "        name: 'First'",
+      "        contextWindow: 100000",
+      "agent-default-model:",
+      "  provider: 'local'",
+      "  model: 'first.gguf'",
+      "",
+    ].join("\n");
+    writeFileSync(join(home, "settings.yaml"), settings);
+    const savedHome = process.env.DSH_HOME;
+    const savedColor = process.env.KUMO_COLOR;
+    process.env.DSH_HOME = home;
+    process.env.KUMO_COLOR = "basic";
+    const { resetColorDepth } = await import("../src/ui/palette.js");
+    resetColorDepth();
+    try {
+      const { ui, terminal } = makeUi();
+      ui.footer.set({ provider: "local", model: "first.gguf", modelName: "First" });
+      expect(ui.liveRouteLabel()).toBe("local / First");
+
+      // Nothing moved: the report says so instead of inventing a change.
+      const same = await ui.reload();
+      expect(same).toEqual({ route: "unchanged", live: "local / First", moved: undefined, background: "kept" });
+      // A 16-color terminal paints nothing, so there is no background to re-read.
+      expect(terminal.writes.join("")).not.toContain("\x1b]11;?");
+
+      // settings.yaml now names another model. The session has NOT moved, and the
+      // report must name both sides rather than quietly showing the new one.
+      // replaceAll, or the default route would still name the old model.
+      writeFileSync(join(home, "settings.yaml"), settings.replaceAll("first.gguf", "second.gguf").replace("'First'", "'Second'"));
+      const moved = await ui.reload();
+      expect(moved.route).toBe("moved");
+      expect(moved.live).toBe("local / First");
+      expect(moved.moved).toBe("local / Second");
+      // The header and the footer still show the live route: no silent lie.
+      expect(ui.liveRouteLabel()).toBe("local / First");
+      expect(ui.footer.state.model).toBe("first.gguf");
+      expect(ui.headerFirstLine()).toContain("First");
+
+      // A settings.yaml that cannot be parsed is reported, never guessed at.
+      writeFileSync(join(home, "settings.yaml"), "llm-pi-ai: [\n  broken: :\n");
+      const broken = await ui.reload();
+      expect(broken.route).toBe("unreadable");
+      expect(broken.live).toBe("local / First");
+    } finally {
+      resetColorDepth();
+      if (savedHome === undefined) delete process.env.DSH_HOME;
+      else process.env.DSH_HOME = savedHome;
+      if (savedColor === undefined) delete process.env.KUMO_COLOR;
+      else process.env.KUMO_COLOR = savedColor;
+      resetColorDepth();
+    }
+  });
+
+  test("/reload re-probes the terminal background on a color terminal (T40)", async () => {
+    const { bgCode, resetColorDepth, setTerminalBackdrop } = await import("../src/ui/palette.js");
+    const savedColor = process.env.KUMO_COLOR;
+    const savedBg = process.env.KUMO_BG;
+    process.env.KUMO_COLOR = "truecolor";
+    delete process.env.KUMO_BG;
+    resetColorDepth();
+    try {
+      // A terminal that never answers: the query goes out, the surfaces stay.
+      const quiet = makeUi();
+      const kept = await quiet.ui.reload();
+      expect(kept.background).toBe("kept");
+      expect(quiet.terminal.writes.join("")).toContain("\x1b]11;?\x07");
+      expect(quiet.ui.tui.render(80).join("\n")).toContain(bgCode("surface", "truecolor"));
+
+      // A terminal that answers. A fresh UI, because pi-tui answers OSC 11
+      // queries in order and the shell above left an unanswered one at the head
+      // of the queue; a reply would have settled that one instead.
+      const live = makeUi();
+      const reply = "\x1b]11;rgb:fefe/fefe/fefe\x07";
+      live.ui.start();
+      live.terminal.onInput?.(reply);
+      const pending = live.ui.reload();
+      live.terminal.onInput?.(reply);
+      const read = await pending;
+      expect(read.background).toBe("read");
+      // A light terminal, so the painted surfaces are not the authored ones.
+      const probed = bgCode("surface", "truecolor");
+      expect(probed).not.toBe("\x1b[48;2;28;32;48m");
+      expect(live.ui.tui.render(80).join("\n")).toContain(probed);
+      await live.ui.shutdown();
+    } finally {
+      setTerminalBackdrop();
+      resetColorDepth();
+      if (savedColor === undefined) delete process.env.KUMO_COLOR;
+      else process.env.KUMO_COLOR = savedColor;
+      if (savedBg === undefined) delete process.env.KUMO_BG;
+      else process.env.KUMO_BG = savedBg;
+      resetColorDepth();
+    }
+  });
+
+  test("routeLabel names a route the way the header does", async () => {
+    const { routeLabel } = await import("../src/ui/kumo-ui.js");
+    expect(routeLabel({ provider: "local", model: "a.gguf", name: "Ornith" })).toBe("local / Ornith");
+    expect(routeLabel({ model: "a.gguf" })).toBe("a");
+    expect(routeLabel({ provider: "local", model: "a.gguf" })).toBe("local / a");
+  });
+
+  test("the console band follows the terminal's real background (T40)", async () => {
+    const { bgCode, resetColorDepth, setTerminalBackdrop } = await import("../src/ui/palette.js");
+    const savedDepth = process.env.KUMO_COLOR;
+    const savedBg = process.env.KUMO_BG;
+    process.env.KUMO_COLOR = "truecolor";
+    delete process.env.KUMO_BG;
+    resetColorDepth();
+    try {
+      const { ui, terminal } = makeUi();
+      const authored = bgCode("surface", "truecolor");
+      expect(ui.tui.render(80).join("\n")).toContain(authored);
+
+      // The query for the terminal's own background really goes out on the wire,
+      // and a terminal that never answers simply keeps the authored surfaces.
+      expect(await ui.probeBackdrop()).toBeUndefined();
+      expect(terminal.writes.join("")).toContain("\x1b]11;?\x07");
+      expect(ui.tui.render(80).join("\n")).toContain(authored);
+
+      // Once a light background is known, every painted surface follows it.
+      setTerminalBackdrop({ r: 255, g: 255, b: 255 });
+      const probed = bgCode("surface", "truecolor");
+      expect(probed).not.toBe(authored);
+      const after = ui.tui.render(80).join("\n");
+      expect(after).toContain(probed);
+      expect(after).not.toContain(authored);
+    } finally {
+      setTerminalBackdrop();
+      resetColorDepth();
+      if (savedDepth === undefined) delete process.env.KUMO_COLOR;
+      else process.env.KUMO_COLOR = savedDepth;
+      if (savedBg === undefined) delete process.env.KUMO_BG;
+      else process.env.KUMO_BG = savedBg;
+      resetColorDepth();
+    }
+  });
+
   test("header shows model and host, animation frames are block/braille without emoji (T27.4)", async () => {
     const { ui } = makeUi();
     ui.footer.set({ model: "Ornith 1.5 9B", provider: "local", modelName: "Ornith 1.5 9B" });
@@ -493,6 +663,62 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     expect(shouldAnimateStartup({ stdoutTTY: true, env: {}, ascii: false })).toBe(true);
     expect(headerHost({ models: { main: { baseUrl: "http://192.168.1.64:8081/v1" } } }, "local")).toBe("192.168.1.64");
     expect(headerHost({ models: { main: { provider: "openrouter" } } }, undefined)).toBe("openrouter");
+  });
+
+  test("the wordmark never freezes: the sweep loops instead of stopping after one pass", async () => {
+    const saved = { tty: process.stdout.isTTY, anim: process.env.KUMO_NO_ANIMATION };
+    process.stdout.isTTY = true;
+    delete process.env.KUMO_NO_ANIMATION;
+    const ui = new KumoUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} });
+    const phases: string[] = [];
+    const realSetText = ui.header.setText.bind(ui.header);
+    ui.header.setText = (t: string) => {
+      realSetText(t);
+      phases.push(t);
+    };
+    try {
+      // A plain (non-fancy) header is the deterministic path: the cloud frames.
+      expect(ui.fancyHeader).toBe(false);
+      ui.start();
+      // 6 frames at 70 ms: two full passes prove the wrap, not just the start.
+      await new Promise((r) => setTimeout(r, 1000));
+      expect(phases.length).toBeGreaterThanOrEqual(12);
+      // And it cycles rather than repeating one still frame.
+      expect(new Set(phases).size).toBe(6);
+      // stopHeaderAnimation leaves a frozen header and no live timer.
+      ui.stopHeaderAnimation();
+      const after = phases.length;
+      await new Promise((r) => setTimeout(r, 250));
+      expect(phases.length).toBe(after);
+    } finally {
+      await ui.shutdown();
+      process.stdout.isTTY = saved.tty;
+      if (saved.anim === undefined) delete process.env.KUMO_NO_ANIMATION;
+      else process.env.KUMO_NO_ANIMATION = saved.anim;
+    }
+  });
+
+  test("no animation, no looping timer: CI and KUMO_NO_ANIMATION never spin", async () => {
+    const saved = { tty: process.stdout.isTTY, ci: process.env.CI };
+    process.stdout.isTTY = true;
+    process.env.CI = "1";
+    const ui = new KumoUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} });
+    const phases: string[] = [];
+    const realSetText = ui.header.setText.bind(ui.header);
+    ui.header.setText = (t: string) => {
+      realSetText(t);
+      phases.push(t);
+    };
+    try {
+      ui.start();
+      await new Promise((r) => setTimeout(r, 300));
+      expect(phases.length).toBe(0);
+    } finally {
+      await ui.shutdown();
+      process.stdout.isTTY = saved.tty;
+      if (saved.ci === undefined) delete process.env.CI;
+      else process.env.CI = saved.ci;
+    }
   });
 
   test("settings.yaml-only home resolves host, pretty name and window (T28b.1)", async () => {
@@ -781,6 +1007,117 @@ describe("attachTui wiring", () => {
   });
 });
 
+describe("a question form survives the turn it interrupts", () => {
+  test("a notice while the form is up does not wipe it, and is shown after", async () => {
+    const terminal = new FakeTerminal();
+    const ui = new KumoUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, terminal, UNICODE_ICONS);
+    await ui.start();
+    const painted = () => ui.tui.render(80).map(strip).join("\n");
+    const pending = ui.askQuestions([
+      { id: "q1", question: "Quelle base ?", options: [{ label: "SQLite" }] },
+    ]);
+    // Any turn event that reports a notice while the form owns the box. It used
+    // to clear the box, so the form vanished while still holding every key.
+    ui.showNotice("Compaction needs an idle session", { red: true });
+    expect(painted()).toContain("Quelle base ?");
+    terminal.onInput?.("\r");
+    await pending;
+    await new Promise((r) => setTimeout(r, 20));
+    expect(painted()).toContain("Compaction needs an idle session");
+    await ui.shutdown();
+  });
+
+  test("typing answers the question, no Other… detour needed", async () => {
+    const terminal = new FakeTerminal();
+    const ui = new KumoUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, terminal, UNICODE_ICONS);
+    await ui.start();
+    const answers = ui.askQuestions([
+      { id: "q1", question: "Quelle base ?", options: [{ label: "SQLite" }, { label: "Redis" }] },
+    ]);
+    for (const ch of "utilise postgres") terminal.onInput?.(ch);
+    expect(ui.tui.render(80).map(strip).join("\n")).toContain("utilise postgres");
+    terminal.onInput?.("\r");
+    expect(await answers).toEqual([{ id: "q1", selected: [], custom: "utilise postgres" }]);
+    await ui.shutdown();
+  });
+});
+
+describe("the suggestion is drawn in the editor, not above it", () => {
+  async function started() {
+    const terminal = new FakeTerminal();
+    const ui = new KumoUi(
+      "test",
+      { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} },
+      terminal,
+      UNICODE_ICONS,
+    );
+    await ui.start();
+    return { ui, terminal };
+  }
+
+  test("it sits inside the input line, in italics, and keeps the editor box", async () => {
+    const { ui } = await started();
+    ui.editor.setGhost("run the tests");
+    const lines = ui.editor.render(60);
+    // The box is still there: it used to be replaced by one lone dim line.
+    expect(lines).toHaveLength(3);
+    expect(lines.filter((l) => strip(l).includes("─")).length).toBe(2);
+    const row = lines[1]!;
+    expect(row).toContain("\x1b[3mrun the tests\x1b[23m");
+    // Right after the cursor, inside the input line, not on a line of its own.
+    // strip() leaves pi-tui's private cursor marker behind; drop it and the
+    // cursor cell, and the input line is exactly the suggestion.
+    expect(strip(row).replace(/\x1b_pi:c\x07/g, "").trim()).toBe("run the tests");
+    await ui.shutdown();
+  });
+
+  test("a long suggestion is clipped to the width, never spills over", async () => {
+    const { ui } = await started();
+    ui.editor.setGhost("veux tu que je relance aussi les tests de la suite complete du projet");
+    for (const width of [60, 40, 20, 12]) {
+      for (const line of ui.editor.render(width)) {
+        // visibleWidth, not stringWidth: pi-tui marks the cursor column with an
+        // invisible private sequence that string-width counts as 5 cells.
+        expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+        expect(line).not.toMatch(/\x1b\[[0-9;]*$/);
+      }
+    }
+    await ui.shutdown();
+  });
+
+  test("Tab accepts it, and typing anything replaces it", async () => {
+    const { ui, terminal } = await started();
+    ui.editor.setGhost("run the tests");
+    terminal.onInput?.("\t");
+    expect(ui.editor.getText()).toBe("run the tests");
+    expect(ui.editor.ghost).toBe("");
+
+    const second = await started();
+    second.ui.editor.setGhost("run the tests");
+    second.terminal.onInput?.("x");
+    expect(second.ui.editor.ghost).toBe("");
+    expect(second.ui.editor.getText()).toBe("x");
+    await ui.shutdown();
+    await second.ui.shutdown();
+  });
+
+  test("Enter never sends a suggestion by accident", async () => {
+    const sent: string[] = [];
+    const terminal = new FakeTerminal();
+    const ui = new KumoUi(
+      "test",
+      { onSubmit: (t) => sent.push(t), onEscape: () => {}, onQuit: () => {} },
+      terminal,
+      UNICODE_ICONS,
+    );
+    await ui.start();
+    ui.editor.setGhost("run the tests");
+    terminal.onInput?.("\r");
+    expect(sent).toEqual([]);
+    await ui.shutdown();
+  });
+});
+
 describe("suggest ghost (T28B)", () => {
   async function setupSuggest(llm: unknown) {
     const { mkdtemp, writeFile } = await import("node:fs/promises");
@@ -1003,6 +1340,122 @@ describe("settings.yaml reader (real YAML, kumo's own list style)", () => {
     expect(readSettingsRoute(home)).toEqual({
       provider: "local", model: "/m/Ornith.gguf", baseUrl: "http://192.168.1.64:8081/v1", name: "Ornith 1.5 9B", contextWindow: 100096,
     });
+  });
+});
+
+describe("every provider in settings.yaml (T37)", () => {
+  test("all routes come back, not only the default one", async () => {
+    const { writeFileSync } = await import("node:fs");
+    const { readSettingsProviders } = await import("../src/ui/kumo-ui.js");
+    const home = mkdtempSync(join(tmpdir(), "kumo-providers-"));
+    writeFileSync(join(home, "settings.yaml"), [
+      "llm-pi-ai:",
+      "  providers:",
+      "    local:",
+      "      displayName: Local Server",
+      "      baseURL: 'http://192.168.1.64:8081/v1'",
+      "      apiKeyEnv: KUMO_LOCAL_API_KEY",
+      "      models:",
+      "        - id: '/m/Ornith.gguf'",
+      "          name: 'Ornith 1.5 9B'",
+      "          contextWindow: 100096",
+      "    openrouter:",
+      "      apiKeyEnv: OPENROUTER_API_KEY",
+      "      models:",
+      "        - id: 'qwen/qwen3-32b'",
+      "    empty:",
+      "      displayName: No Models Yet",
+      "agent-default-model:",
+      "  provider: 'local'",
+      "  model: '/m/Ornith.gguf'",
+      "",
+    ].join("\n"));
+    expect(readSettingsProviders(home)).toEqual([
+      {
+        id: "local",
+        displayName: "Local Server",
+        baseUrl: "http://192.168.1.64:8081/v1",
+        apiKeyEnv: "KUMO_LOCAL_API_KEY",
+        models: [{ id: "/m/Ornith.gguf", name: "Ornith 1.5 9B", contextWindow: 100096 }],
+      },
+      { id: "openrouter", apiKeyEnv: "OPENROUTER_API_KEY", models: [{ id: "qwen/qwen3-32b" }] },
+      { id: "empty", displayName: "No Models Yet", models: [] },
+    ]);
+  });
+
+  test("a missing, empty or broken settings.yaml is an empty list, never a throw", async () => {
+    const { writeFileSync } = await import("node:fs");
+    const { readSettingsProviders } = await import("../src/ui/kumo-ui.js");
+    const home = mkdtempSync(join(tmpdir(), "kumo-providers-"));
+    expect(readSettingsProviders(join(home, "nope"))).toEqual([]);
+    writeFileSync(join(home, "settings.yaml"), "");
+    expect(readSettingsProviders(home)).toEqual([]);
+    writeFileSync(join(home, "settings.yaml"), "llm-pi-ai:\n  providers:\n    a: not-a-map\n    b: null\n");
+    expect(readSettingsProviders(home)).toEqual([]);
+    writeFileSync(join(home, "settings.yaml"), "llm-pi-ai: [oops\n");
+    expect(readSettingsProviders(home)).toEqual([]);
+  });
+});
+
+describe("the picker overlay (T37)", () => {
+  test("askChoice starts the cursor on the row the caller names", async () => {
+    const terminal = new FakeTerminal();
+    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
+    ui.start();
+    const p = ui.askChoice(
+      "Model",
+      [{ value: "a", label: "alpha" }, { value: "b", label: "beta" }, { value: "c", label: "gamma" }],
+      { initial: 2 },
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    expect(strip(ui.tui.render(60).join("\n"))).toContain("→ gamma");
+    terminal.onInput?.("\r");
+    expect(await p).toBe(2);
+    await ui.shutdown();
+  });
+
+  test("an out-of-range initial is ignored rather than throwing", async () => {
+    const terminal = new FakeTerminal();
+    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
+    ui.start();
+    const p = ui.askChoice("Model", [{ value: "a", label: "alpha" }], { initial: 9 });
+    await new Promise((r) => setTimeout(r, 50));
+    terminal.onInput?.("\r");
+    expect(await p).toBe(0);
+    await ui.shutdown();
+  });
+
+  test("resetRouteCache drops the memoized host so a new route shows its own", async () => {
+    const { writeFileSync, mkdtempSync: mk } = await import("node:fs");
+    const { tmpdir: tmp } = await import("node:os");
+    const home = mk(join(tmp(), "kumo-header-"));
+    const settings = (baseUrl: string): string =>
+      [
+        "llm-pi-ai:",
+        "  providers:",
+        "    local:",
+        `      baseURL: '${baseUrl}'`,
+        "      models:",
+        "        - id: m",
+        "agent-default-model:",
+        "  provider: 'local'",
+        "  model: 'm'",
+        "",
+      ].join("\n");
+    writeFileSync(join(home, "settings.yaml"), settings("http://192.168.1.64:8081/v1"));
+    vi.stubEnv("DSH_HOME", home);
+    const terminal = new FakeTerminal();
+    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
+    ui.start();
+    ui.footer.set({ model: "m", provider: "local" });
+    expect(strip(ui.headerFirstLine())).toContain("192.168.1.64");
+    writeFileSync(join(home, "settings.yaml"), settings("http://127.0.0.1:9999/v1"));
+    // Memoized: still the old host until the route cache is dropped.
+    expect(strip(ui.headerFirstLine())).toContain("192.168.1.64");
+    ui.resetRouteCache();
+    expect(strip(ui.headerFirstLine())).toContain("127.0.0.1");
+    await ui.shutdown();
+    vi.unstubAllEnvs();
   });
 });
 

@@ -1,4 +1,4 @@
-import type { Component } from "@earendil-works/pi-tui";
+import { truncateToWidth, type Component } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
 import { ansi } from "./theme.js";
 
@@ -89,9 +89,16 @@ export class QuestionForm implements Component {
         lines.push(`${cursor}${padCells(o.label, labelW)}${desc}`);
       }
     });
-    lines.push("", ansi.dim("↑↓ move · Enter choose · Space toggle (multi) · Esc skip"));
+    lines.push("", ansi.dim("↑↓ move · Enter choose · Space toggle (multi) · type to answer freely · Esc skip"));
     // Same 2-column left padding as the chat transcript (T28b.5).
-    return lines.map((l) => `  ${l}`.slice(0, Math.max(3, width)));
+    //
+    // The clip has to be cell- and ANSI-aware. A raw `slice(0, width)` counts
+    // UTF-16 units and cuts escape sequences in half, and the dangling `\x1b[36m`
+    // it leaves behind bleeds cyan into every line below: a long question, or a
+    // narrow terminal, turned the form into unreadable overlapping text.
+    // `truncateToWidth` re-closes what it cuts, which is why this is not the
+    // plain-text `clipCells` the task panel uses.
+    return lines.map((l) => truncateToWidth(`  ${l}`, width));
   }
 
   invalidate(): void {}
@@ -192,6 +199,16 @@ export class QuestionForm implements Component {
         if (this.#checked[this.#index]!.has(c)) this.#checked[this.#index]!.delete(c);
         else this.#checked[this.#index]!.add(c);
       }
+      return;
+    }
+    // Typing is an answer. Before this, a letter did nothing at all unless you
+    // had already walked to "Other…" and pressed Enter, so the form looked
+    // broken: you typed and nothing happened, with nothing on screen to say why.
+    if (!data.startsWith("\x1b") && [...data].some((ch) => (ch.codePointAt(0) ?? 0) > 32)) {
+      this.#otherMode[this.#index] = true;
+      this.#otherText[this.#index] = data;
+      // Put the cursor on "Other…" so the marker matches what is being typed.
+      this.#cursor[this.#index] = opts.length - 1;
       return;
     }
     if (data === "\r" || data === "\n") {

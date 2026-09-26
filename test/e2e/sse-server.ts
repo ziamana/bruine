@@ -5,6 +5,8 @@ export interface RequestBody {
   messages: Array<{ role: string; content?: unknown; tool_call_id?: string }>;
   tools?: unknown[];
   stream?: boolean;
+  /** T37: the route on the wire — what a `/model` switch must change. */
+  model?: string;
   /** T34: chat-template thinking switches (only sent with the compat block). */
   chat_template_kwargs?: Record<string, unknown>;
   reasoning_effort?: string;
@@ -34,6 +36,8 @@ export interface ServerOptions {
   props?: unknown;
   /** Fail the first N MAIN requests with these statuses, in order (T33b). */
   failFirstMain?: Array<{ status: number; body: unknown }>;
+  /** Ids GET /v1/models advertises (T37: the model picker's live catalogue). */
+  models?: string[];
 }
 
 /** Identity once, then indexed argument fragments, then a tool_calls finish. */
@@ -61,7 +65,12 @@ export async function startServer(scripts: Script[], opts: ServerOptions = {}) {
   const server = createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/v1/models") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ object: "list", data: [{ id: "e2e-model", object: "model", owned_by: "e2e" }] }));
+      res.end(
+        JSON.stringify({
+          object: "list",
+          data: (opts.models ?? ["e2e-model"]).map((id) => ({ id, object: "model", owned_by: "e2e" })),
+        }),
+      );
       return;
     }
     if (req.method === "GET" && req.url === "/props" && opts.props !== undefined) {

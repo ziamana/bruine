@@ -10,6 +10,7 @@ import {
   CombinedAutocompleteProvider,
   type Component,
   type OverlayHandle,
+  type RgbColor,
   type SelectItem,
   type SlashCommand,
   type TUI,
@@ -17,8 +18,8 @@ import {
 } from "@earendil-works/pi-tui";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi, editorTheme, selectListTheme } from "./theme.js";
-import { colorDepth, gradientStops } from "./palette.js";
-import { ChatTranscript, Margin, PlainGlyphEditor } from "./chat-layout.js";
+import { bgEnabled, colorDepth, gradientStops, setTerminalBackdrop } from "./palette.js";
+import { ChatTranscript, ConsoleBand, Gap, Margin, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
 import { displayModel } from "./footer.js";
 import { QuestionForm } from "./questions.js";
@@ -26,6 +27,21 @@ import { WorkingComponent } from "./working.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
 import { DashboardPanel, DockRow } from "./dock.js";
 import { CollapsedToolsComponent, groupRuns, turnSummary, type GroupedTool } from "./tool-group.js";
+import {
+  draggedImagePath,
+  readClipboardImage,
+  readImageFile,
+  rejectionNotice,
+  type ClipboardRead,
+} from "../image/clipboard.js";
+import { PendingImages } from "../image/pending.js";
+
+/** T29: where a paste gets its bytes; injectable so tests never spawn a tool. */
+export type ClipboardImageReader = () => Promise<ClipboardRead>;
+
+const defaultClipboardRead: ClipboardImageReader = () => readClipboardImage();
+
+import { NO_VISION_NOTICE, probeVision, settingsEntryAnswer, type VisionAnswer } from "../image/vision.js";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -155,6 +171,75 @@ export interface SettingsRoute {
   providerDisplayName?: string;
   /** True when the model entry carries compat.thinkingFormat (T34/T33b). */
   hasCompat?: boolean;
+  /** T29: what the route's own model entry says about images. */
+  vision?: VisionAnswer;
+}
+
+/** What a `/reload` found. `route: "moved"` never means the session moved. */
+export interface ReloadReport {
+  /** Whether settings.yaml still points at the route this session is on. */
+  route: "unchanged" | "moved" | "unreadable";
+  /** The route the session is really on, as `provider / model`. */
+  live: string;
+  /** The route settings.yaml now names, when it is not the live one. */
+  moved: string | undefined;
+  /** Whether the terminal answered OSC 11 for its background. */
+  background: "read" | "kept";
+}
+
+/** One `provider / model` label, the way the header and the footer name it. */
+export function routeLabel(route: { provider?: string; model?: string; name?: string }): string {
+  const model = displayModel(route.model, route.name);
+  return route.provider === undefined || route.provider === "" ? model : `${route.provider} / ${model}`;
+}
+
+/** One `llm-pi-ai.providers` entry as kumo needs to show it (T37). */
+export interface SettingsProvider {
+  id: string;
+  displayName?: string;
+  baseUrl?: string;
+  /** The env var holding the key, when the route declares one. */
+  apiKeyEnv?: string;
+  models: Array<{ id: string; name?: string; contextWindow?: number }>;
+}
+
+/**
+ * T37: every provider settings.yaml declares, not only the default one. The
+ * model picker needs the whole set: a route that setup already wrote is
+ * offered even when the server does not advertise it right now (a llama.cpp
+ * server swaps its loaded model without kumo knowing).
+ */
+export function readSettingsProviders(dshHome?: string): SettingsProvider[] {
+  try {
+    const home = dshHome ?? process.env.DSH_HOME ?? join(homedir(), ".kumo");
+    const p = join(home, "settings.yaml");
+    if (!existsSync(p)) return [];
+    const doc = parseYaml(readFileSync(p, "utf8")) as any;
+    const providers = doc?.["llm-pi-ai"]?.providers;
+    if (providers === null || typeof providers !== "object") return [];
+    const out: SettingsProvider[] = [];
+    for (const [id, route] of Object.entries(providers as Record<string, any>)) {
+      if (route === null || typeof route !== "object") continue;
+      const models: SettingsProvider["models"] = [];
+      if (Array.isArray(route.models)) {
+        for (const entry of route.models) {
+          if (entry === null || typeof entry !== "object" || typeof entry.id !== "string") continue;
+          const model: SettingsProvider["models"][number] = { id: entry.id };
+          if (typeof entry.name === "string") model.name = entry.name;
+          if (typeof entry.contextWindow === "number") model.contextWindow = entry.contextWindow;
+          models.push(model);
+        }
+      }
+      const provider: SettingsProvider = { id, models };
+      if (typeof route.displayName === "string") provider.displayName = route.displayName;
+      if (typeof route.baseURL === "string") provider.baseUrl = route.baseURL;
+      if (typeof route.apiKeyEnv === "string") provider.apiKeyEnv = route.apiKeyEnv;
+      out.push(provider);
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 /** settings.yaml reader: default route + baseURL/name/window (real YAML parser; the hand-written one broke on kumo's own list style). */
@@ -187,6 +272,11 @@ function parseKumoSettingsYaml(text: string): SettingsRoute | undefined {
   if (typeof entry?.contextWindow === "number") out.contextWindow = entry.contextWindow;
   if (typeof route?.displayName === "string") out.providerDisplayName = route.displayName;
   if (entry?.compat?.thinkingFormat !== undefined) out.hasCompat = true;
+  // T29: only carried when settings.yaml actually declares it. Silence means
+  // "ask the server", not "no images", and a missing key keeps this route
+  // object exactly as it was before T29.
+  const vision = settingsEntryAnswer(entry);
+  if (vision !== "unknown") out.vision = vision;
   return out;
 }
 
@@ -207,15 +297,22 @@ export class KumoUi {
   readonly dock: DockRow;
   readonly header: Text;
   readonly version: string;
+  /** T29: the images the `[Image N]` chips in the editor stand for. */
+  readonly pendingImages = new PendingImages();
   #lastCtrlC = 0;
   #animation: ReturnType<typeof setInterval> | undefined;
   #closed = false;
   #noticeTimer: ReturnType<typeof setTimeout> | undefined;
   #persistentNotice: Component | undefined;
+  /** A notice that arrived while a question form owned the box. */
+  #pendingNotice: { text: string; red: boolean; persistent?: boolean } | undefined;
   #confirming = false;
   #animTimer: ReturnType<typeof setInterval> | undefined;
   #cachedHost: string | undefined;
   #toolsCollapsed = true;
+  /** T29: the last vision answer, kept per route so ctrl+v stays instant. */
+  #visionKey: string | undefined;
+  #visionAnswer: VisionAnswer | undefined;
 
   constructor(
     version: string,
@@ -277,7 +374,7 @@ export class KumoUi {
 
     this.tui.addChild(this.header);
     this.tui.addChild(this.chat);
-    this.tui.addChild(new Margin(this.taskPanel));
+    this.tui.addChild(new Margin(new Gap(this.taskPanel)));
     this.tui.addChild(new Margin(this.noticeBox));
     // Cockpit (Nuage + Cockpit mix): live speed/cache/context next to the editor on
     // wide color terminals; ctrl+b hides it. Basic/ASCII terminals keep the plain editor.
@@ -298,8 +395,8 @@ export class KumoUi {
     );
     this.dock.visible = this.fancyHeader;
     this.footer.compact = (w) => this.dock.shown(w);
-    this.tui.addChild(new Margin(this.dock));
-    this.tui.addChild(new Margin(this.footer));
+    // The editor, the cockpit and the footer share one painted surface (T40).
+    this.tui.addChild(new ConsoleBand([this.dock, this.footer]));
 
     // T30: the launcher ran the 24 h registry check in the background; the
     // session only reads its cached result — never any network here, never
@@ -312,6 +409,21 @@ export class KumoUi {
         (!data.startsWith("\x1b") && [...data].some((ch) => (ch.codePointAt(0) ?? 0) >= 32))
       ) {
         handlers.onUserActivity?.();
+      }
+      if (matchesKey(data, "ctrl+v") && !this.#confirming) {
+        void this.pasteClipboardImage();
+        return { consume: true };
+      }
+      // T29: a dropped image arrives as a bracketed paste carrying its path.
+      // Only a single-chunk paste is claimed, so a split paste still reaches
+      // the editor as the text it is.
+      if (data.includes("\x1b[200~") && data.includes("\x1b[201~") && !this.#confirming) {
+        const start = data.indexOf("\x1b[200~") + "\x1b[200~".length;
+        const file = draggedImagePath(data.slice(start, data.indexOf("\x1b[201~")));
+        if (file !== undefined) {
+          void this.pasteDroppedImage(file);
+          return { consume: true };
+        }
       }
       if (matchesKey(data, "ctrl+t")) {
         if (this.#confirming) return { consume: true };
@@ -374,7 +486,10 @@ export class KumoUi {
       const ghost = this.editor.ghost;
       const empty = this.editor.getText() === "";
       if (ghost !== "" && empty) {
-        if (data === "\x1b[C" || data === "\x06") {
+        // Tab accepts, like every other shell suggestion. It cannot steal the
+        // editor's completion: a suggestion only ever shows on an empty
+        // buffer, and completion only matters once something has been typed.
+        if (data === "\x1b[C" || data === "\x06" || matchesKey(data, "tab")) {
           this.editor.setText(ghost);
           this.editor.clearGhost();
           this.requestRender();
@@ -396,36 +511,67 @@ export class KumoUi {
   start(): void {
     this.tui.setFocus(this.editor);
     this.tui.start();
-    if (shouldAnimateStartup({ ascii: this.icons.think === "*" })) {
-      let i = 0;
-      this.#animTimer = setInterval(() => {
-        if (this.#closed) {
-          if (this.#animTimer !== undefined) clearInterval(this.#animTimer);
-          this.#animTimer = undefined;
-          return;
-        }
-        const frames = this.fancyHeader ? 12 : STARTUP_FRAMES.length;
-        if (i < frames) {
-          if (this.fancyHeader) {
-            // A light band sweeps across the wordmark once (~0.8 s).
-            this.header.setText(this.headerText(i / frames));
-          } else {
-            const frame = STARTUP_FRAMES[i]!;
-            this.header.setText(
-              `${frame}\n${ansi.gray("escape interrupt · ctrl+c clear · ctrl+d exit · / commands")}`,
-            );
-          }
-          this.requestRender();
-          i += 1;
-        } else {
-          if (this.#animTimer !== undefined) clearInterval(this.#animTimer);
-          this.#animTimer = undefined;
-          this.updateHeader();
-          this.requestRender();
-        }
-      }, 70);
-      this.#animTimer.unref?.();
+    void this.probeBackdrop();
+    if (!shouldAnimateStartup({ ascii: this.icons.think === "*" })) return;
+    let i = 0;
+    // The wordmark never freezes: one full sweep of the light band, then
+    // straight back to the first frame, so the header keeps exactly the look
+    // it has when the app opens instead of settling into a still picture.
+    this.#animTimer = setInterval(() => {
+      if (this.#closed) {
+        this.stopHeaderAnimation();
+        return;
+      }
+      const frames = this.fancyHeader ? 12 : STARTUP_FRAMES.length;
+      if (this.fancyHeader) {
+        this.header.setText(this.headerText(i / frames));
+      } else {
+        const frame = STARTUP_FRAMES[i]!;
+        this.header.setText(
+          `${frame}\n${ansi.gray("escape interrupt · ctrl+c clear · ctrl+d exit · / commands")}`,
+        );
+      }
+      this.requestRender();
+      i = (i + 1) % frames;
+    }, 70);
+    this.#animTimer.unref?.();
+  }
+
+  /**
+   * Stop the looping header animation. The header is left on its live text
+   * (`updateHeader` is a no-op while closed), which is also what `close` needs.
+   */
+  stopHeaderAnimation(): void {
+    if (this.#animTimer === undefined) return;
+    clearInterval(this.#animTimer);
+    this.#animTimer = undefined;
+    this.updateHeader();
+    this.requestRender();
+  }
+
+  /**
+   * Ask the terminal for its real background (OSC 11) and re-derive the painted
+   * surfaces from it, so the console band sits on the terminal's own palette
+   * instead of imposing the hand-tuned dark Nuage values on a light or tinted
+   * terminal.
+   *
+   * The query is a non-printing sequence, so it cannot disturb what is on
+   * screen, and pi-tui keeps swallowing the reply after the timeout, so a slow
+   * terminal can never leak the response into the input stream as keystrokes.
+   * A terminal that never answers simply keeps the authored surfaces.
+   */
+  async probeBackdrop(): Promise<RgbColor | undefined> {
+    if (this.#closed || !bgEnabled()) return undefined;
+    let rgb: RgbColor | undefined;
+    try {
+      rgb = await this.tui.queryTerminalBackgroundColor({ timeoutMs: 150 });
+    } catch {
+      return undefined;
     }
+    if (rgb === undefined || this.#closed) return undefined;
+    setTerminalBackdrop(rgb);
+    this.requestRender();
+    return rgb;
   }
 
   requestRender(): void {
@@ -471,6 +617,69 @@ export class KumoUi {
     this.editor.addToHistory(text);
   }
 
+  /**
+   * T29 — can the model behind the current route see an image? settings.yaml
+   * answers first, then one probe of the server's own `/v1/models`, and the
+   * answer is cached per route so ctrl+v never waits on the network twice.
+   */
+  async routeSeesImages(): Promise<VisionAnswer> {
+    const route = readSettingsRoute();
+    if (route === undefined) return "unknown";
+    if (route.vision !== undefined && route.vision !== "unknown") return route.vision;
+    const key = `${route.baseUrl ?? ""}|${route.model}`;
+    if (this.#visionKey === key && this.#visionAnswer !== undefined) return this.#visionAnswer;
+    const answer = route.baseUrl === undefined ? "unknown" : await probeVision(route.baseUrl, route.model);
+    this.#visionKey = key;
+    this.#visionAnswer = answer;
+    return answer;
+  }
+
+  /**
+   * T29 — turn one clipboard result into a chip. Returns whether the image is
+   * now in the editor, so the caller knows whether to consume the key.
+   */
+  async #attachClipboard(read: ClipboardRead): Promise<boolean> {
+    switch (read.kind) {
+      case "image":
+        this.editor.insertTextAtCursor(this.pendingImages.add(read.image));
+        this.requestRender();
+        return true;
+      case "no-tool":
+        // One line, because a notice that wraps is a notice nobody reads. Drag
+        // and drop needs no helper at all, so it is the way out that works
+        // right now, whatever the machine is missing.
+        this.showNotice(`Cannot paste an image: ${read.install}. Or drag the image in.`, { red: true });
+        return false;
+      case "rejected":
+        this.showNotice(rejectionNotice(read.reason), { red: true });
+        return false;
+      case "failed":
+        this.showNotice(rejectionNotice(read.detail), { red: true });
+        return false;
+      default:
+        this.showNotice("No image in the clipboard.");
+        return false;
+    }
+  }
+
+  /** T29 — ctrl+v: read the OS clipboard, and refuse a model that cannot see. */
+  async pasteClipboardImage(read: ClipboardImageReader = defaultClipboardRead): Promise<boolean> {
+    if ((await this.routeSeesImages()) === "no") {
+      this.showNotice(NO_VISION_NOTICE, { red: true });
+      return false;
+    }
+    return this.#attachClipboard(await read());
+  }
+
+  /** T29 — a dropped image path becomes the same chip as a clipboard paste. */
+  async pasteDroppedImage(file: string, read?: () => Promise<ClipboardRead>): Promise<boolean> {
+    if ((await this.routeSeesImages()) === "no") {
+      this.showNotice(NO_VISION_NOTICE, { red: true });
+      return false;
+    }
+    return this.#attachClipboard(await (read?.() ?? readImageFile(file)));
+  }
+
   /** Slash-command + file completion on the editor (T31.1). */
   setAutocompleteCommands(commands: SlashCommand[]): void {
     this.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, process.cwd()));
@@ -511,6 +720,57 @@ export class KumoUi {
     if (has) return;
     this.chat.addChild(new WorkingComponent(Date.now, this.icons));
     this.requestRender();
+  }
+
+  /**
+   * T37: the route changed under us, so the memoized header host is stale.
+   * The vision answer is keyed by route and re-probes on its own.
+   */
+  resetRouteCache(): void {
+    this.#cachedHost = undefined;
+  }
+
+  /**
+   * `/reload`: re-read what the terminal and `settings.yaml` say, in place, and
+   * redraw. It is deliberately not a code reload: the modules are already loaded,
+   * so a change in `src/` still needs a build and a restart. What it does cover is
+   * everything kumo memoized at startup and would otherwise show stale for the
+   * whole session: the header's host, the route behind the footer, and the painted
+   * surfaces (the terminal background, re-probed with OSC 11).
+   *
+   * The route is never swapped from here. The agent is bound to the route it
+   * started on, and a header that advertised a route the session is not on would
+   * be a lie; a moved route is reported instead, with the command that does move.
+   */
+  async reload(): Promise<ReloadReport> {
+    this.resetRouteCache();
+    const report: ReloadReport = { route: "unchanged", live: this.liveRouteLabel(), moved: undefined, background: "kept" };
+    try {
+      const route = readSettingsRoute();
+      if (route === undefined) {
+        report.route = "unreadable";
+      } else {
+        const wanted = routeLabel(route);
+        if (wanted !== report.live) {
+          report.route = "moved";
+          report.moved = wanted;
+        }
+      }
+    } catch {
+      report.route = "unreadable";
+    }
+    // A terminal that answers OSC 11 re-derives the surfaces; one that does not
+    // leaves the current ones, which is what `background: "kept"` says out loud.
+    report.background = (await this.probeBackdrop()) === undefined ? "kept" : "read";
+    this.updateHeader();
+    this.requestRender();
+    return report;
+  }
+
+  /** The route the session is really on, as the header and footer show it. */
+  liveRouteLabel(): string {
+    const st = this.footer.state;
+    return routeLabel({ provider: st.provider, model: st.model, name: st.modelName });
   }
 
   /** Header first line (T27.4, T28b.1): settings route first, kumo.json fallback. */
@@ -672,6 +932,13 @@ export class KumoUi {
   /** Transient dim (or red) notice directly above the editor for 3 s (T24.4). */
   showNotice(text: string, opts: { red?: boolean } = {}): void {
     if (this.#closed) return;
+    // A question form owns the notice box while it is up. Clearing it here took
+    // the form off the screen while it kept every key, so the form vanished and
+    // the user's Enter went nowhere: the request never resolved.
+    if (this.#confirming) {
+      this.#pendingNotice = { text, red: opts.red === true };
+      return;
+    }
     this.clearNoticeBox();
     const line = new Text(opts.red === true ? ansi.red(text) : ansi.dim(text), 1, 0);
     this.noticeBox.addChild(line);
@@ -699,6 +966,10 @@ export class KumoUi {
   /** A dim notice that stays (T30 update line) until the first prompt. */
   showPersistentNotice(text: string): void {
     if (this.#closed) return;
+    if (this.#confirming) {
+      this.#pendingNotice = { text, red: false, persistent: true };
+      return;
+    }
     this.clearNoticeBox();
     const line = new Text(ansi.dim(text), 1, 0);
     this.#persistentNotice = line;
@@ -764,13 +1035,18 @@ export class KumoUi {
   /**
    * A pi-tui select above the editor (T27b.1, never over chat lines).
    * Resolves with the chosen index, or -1 on cancel (escape).
+   * T37: `initial` starts the cursor on a row (the current route), so Enter
+   * without moving keeps what is already in use.
    */
-  askChoice(title: string, items: SelectItem[]): Promise<number> {
+  askChoice(title: string, items: SelectItem[], opts: { initial?: number } = {}): Promise<number> {
     if (this.#closed) return Promise.resolve(-1);
     this.clearNoticeBox();
     this.#confirming = true;
     const titleText = new Text(ansi.yellow(title), 1, 0);
     const list = new SelectList(items, Math.max(items.length, 5), selectListTheme);
+    if (opts.initial !== undefined && opts.initial >= 0 && opts.initial < items.length) {
+      list.setSelectedIndex(opts.initial);
+    }
     this.noticeBox.addChild(titleText);
     this.noticeBox.addChild(list);
     this.requestRender();
@@ -814,7 +1090,14 @@ export class KumoUi {
         this.clearNoticeBox();
         this.tui.setFocus(this.editor);
         this.requestRender();
+        // Whatever arrived while the form was up is shown now, not swallowed.
+        const pending = this.#pendingNotice;
+        this.#pendingNotice = undefined;
         resolve(answers);
+        if (pending !== undefined) {
+          if (pending.persistent === true) this.showPersistentNotice(pending.text);
+          else this.showNotice(pending.text, { red: pending.red });
+        }
       };
       form.onDone = (a) => finish(a === undefined ? undefined : a);
       this.tui.setFocus(form);
@@ -827,10 +1110,7 @@ export class KumoUi {
     this.#closed = true;
     clearInterval(this.#animation);
     this.#animation = undefined;
-    if (this.#animTimer !== undefined) {
-      clearInterval(this.#animTimer);
-      this.#animTimer = undefined;
-    }
+    this.stopHeaderAnimation();
     if (this.#noticeTimer !== undefined) {
       clearTimeout(this.#noticeTimer);
       this.#noticeTimer = undefined;

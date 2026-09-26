@@ -1,7 +1,7 @@
 import { truncateToWidth, type Component } from "@earendil-works/pi-tui";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
-import { colorDepth, onBg, paint } from "./palette.js";
+import { bgEnabled, onBg, paint } from "./palette.js";
 import { SpeedHistory } from "./dock.js";
 
 export interface FooterState {
@@ -137,16 +137,16 @@ export class FooterComponent implements Component {
     }
     parts.push(model, effort);
     // Modes come first so a narrow window or long model name cannot hide them.
-    if (!plain && colorDepth() !== "basic" && colorDepth() !== "none") {
+    if (!plain && bgEnabled()) {
       // Nuage: pills. The mode pill is filled, the metrics sit on a quiet chip.
       const modePill =
         modeName === "FULL ACCESS"
           ? onBg("rose", paint("onSky", ` ${modeName} `))
           : modeName === "ask"
-            ? onBg("chip", paint("muted", ` ${modeName} `))
+            ? ansi.chipBg(paint("muted", ` ${modeName} `))
             : onBg("sky", paint("onSky", ` ${modeName} `));
       const planPill = planOn ? onBg("lavender", paint("onSky", " plan ")) : "";
-      const pill = (text: string): string => onBg("chip", ` ${text} `);
+      const pill = (text: string): string => ansi.chipBg(` ${text} `);
       const pills = this.compact(width) ? [] : parts.slice(0, -2).map(pill);
       const tail = paint("faint", `  ${model}  ${sep}  `) + paint("muted", effort);
       const line = [modePill, planPill, ...pills].filter((x) => x !== "").join(" ") + tail;

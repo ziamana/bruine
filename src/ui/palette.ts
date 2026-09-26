@@ -1,9 +1,17 @@
 /**
- * kumo's palette ("Nuage"): soft sky blues and lavender on the terminal's own
- * background. 24-bit color when the terminal says so, a 256-color approximation
- * otherwise, and the classic 16 ANSI colors as the last resort (and in tests).
+ * kumo's palette ("Nuage"): soft sky blues and lavender. 24-bit color when the
+ * terminal says so, a 256-color approximation otherwise, and the classic 16 ANSI
+ * colors as the last resort (and in tests).
  *
- * KUMO_COLOR=truecolor|256|basic forces a depth; NO_COLOR disables color.
+ * The transcript keeps the terminal's own background; only the bottom console
+ * band and the prompt band are painted, and only when the terminal can render
+ * a background that is not its default. Those surfaces are authored here for a
+ * dark terminal and re-derived from the real background once the terminal
+ * answers OSC 11 (setTerminalBackdrop), so the band also works on a light or
+ * tinted terminal.
+ *
+ * KUMO_COLOR=truecolor|256|basic|none forces a depth; NO_COLOR disables color;
+ * KUMO_BG=0 keeps every background transparent.
  */
 
 export type ColorDepth = "truecolor" | "256" | "basic" | "none";
@@ -38,17 +46,85 @@ export const NUAGE = {
   text: { hex: "#e6e9f2", basic: 37 },
   muted: { hex: "#8a90a6", basic: 90 },
   faint: { hex: "#5b6178", basic: 90 },
-  // Backgrounds (surfaces drawn on top of the terminal background).
+  // Painted surfaces (the console band and the prompt band). These are the
+  // authored values for a dark terminal; setTerminalBackdrop re-derives them
+  // from the background the terminal reports.
   surface: { hex: "#1c2030", basic: 40 },
   chip: { hex: "#262c3f", basic: 40 },
+  edge: { hex: "#4aa8e0", basic: 34 },
   onSky: { hex: "#0c2b3d", basic: 30 },
 } satisfies Record<string, Swatch>;
+
+/** The roles setTerminalBackdrop is allowed to override. */
+const PROBED_ROLES = ["surface", "chip", "edge"] as const;
+type ProbedRole = (typeof PROBED_ROLES)[number];
 
 export type PaletteRole = keyof typeof NUAGE;
 
 function rgb(hex: string): [number, number, number] {
   const n = Number.parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function toHex(c: [number, number, number]): string {
+  return `#${c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function mix(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+/** Relative luminance, 0 (black) to 1 (white). */
+function luma(c: [number, number, number]): number {
+  return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+}
+
+/** Blend two hex colors; t is clamped to 0..1. Returns "#rrggbb". */
+export function blendHex(from: string, to: string, t: number): string {
+  return toHex(mix(rgb(from), rgb(to), Math.max(0, Math.min(1, t))));
+}
+
+/** What a background role resolves to once the terminal has been asked. */
+export type Backdrop = Record<ProbedRole, string>;
+
+/**
+ * The surfaces to paint over a terminal whose background is `bg`. On a dark
+ * terminal they are a cool veil just above the background; on a light one they
+ * are a pale panel just below it, so the band is visible either way and the
+ * authored palette is only the fallback for a terminal that never answers.
+ */
+export function deriveBackdrop(bg: { r: number; g: number; b: number }): Backdrop {
+  const base: [number, number, number] = [bg.r, bg.g, bg.b];
+  if (luma(base) > 0.5) {
+    const surface = toHex(mix(base, [214, 221, 238], 0.78));
+    return {
+      surface,
+      chip: toHex(mix(rgb(surface), [255, 255, 255], 0.45)),
+      edge: toHex(mix(base, [40, 104, 160], 0.85)),
+    };
+  }
+  return {
+    surface: toHex(mix(base, [43, 52, 82], 0.62)),
+    chip: toHex(mix(base, [58, 68, 102], 0.62)),
+    edge: toHex(mix(base, [74, 168, 224], 0.9)),
+  };
+}
+
+/** Backgrounds probed from the terminal; empty until a reply lands. */
+const probed: Partial<Record<ProbedRole, string>> = {};
+
+/** Adopt the terminal's real background (OSC 11) for the painted surfaces. */
+export function setTerminalBackdrop(bg?: { r: number; g: number; b: number }): Backdrop | undefined {
+  for (const role of PROBED_ROLES) delete probed[role];
+  if (bg === undefined) return undefined;
+  const next = deriveBackdrop(bg);
+  for (const role of PROBED_ROLES) probed[role] = next[role];
+  return next;
+}
+
+/** The surfaces currently in force (tests reset this with resetColorDepth). */
+export function resetTerminalBackdrop(): void {
+  for (const role of PROBED_ROLES) delete probed[role];
 }
 
 /** Nearest xterm-256 color cube index for an RGB triple. */
@@ -77,14 +153,36 @@ export function fgCode(role: PaletteRole | string, depth: ColorDepth): string {
 }
 
 export function bgCode(role: PaletteRole | string, depth: ColorDepth): string {
-  const sw: Swatch = typeof role === "string" && role.startsWith("#") ? { hex: role, basic: 40 } : NUAGE[role as PaletteRole];
+  if (typeof role === "string" && role.startsWith("#")) return bgEscape(role, 40, depth);
+  const sw: Swatch = NUAGE[role as PaletteRole];
+  return bgEscape(probed[role as ProbedRole] ?? sw.hex, sw.basic, depth);
+}
+
+function bgEscape(hex: string, basic: number, depth: ColorDepth): string {
   if (depth === "none") return "";
   if (depth === "truecolor") {
-    const [r, g, b] = rgb(sw.hex);
+    const [r, g, b] = rgb(hex);
     return `\x1b[48;2;${String(r)};${String(g)};${String(b)}m`;
   }
-  if (depth === "256") return `\x1b[48;5;${String(to256(sw.hex))}m`;
-  return `\x1b[${String(sw.basic + 10)}m`;
+  if (depth === "256") return `\x1b[48;5;${String(to256(hex))}m`;
+  return `\x1b[${String(basic + 10)}m`;
+}
+
+/** KUMO_BG=0 (or none/off/false) keeps every background transparent. */
+export function bgOptOut(env: NodeJS.ProcessEnv = process.env): boolean {
+  const v = (env.KUMO_BG ?? "").toLowerCase();
+  return v === "0" || v === "none" || v === "off" || v === "false";
+}
+
+/**
+ * Whether kumo may paint a background at all. On 16 colors the ANSI background
+ * codes are pure black or cyan, which reads as damage rather than as a surface,
+ * so every painted surface is dropped there and the app falls back to the
+ * terminal's own background.
+ */
+export function bgEnabled(depth: ColorDepth = colorDepth()): boolean {
+  if (bgOptOut()) return false;
+  return depth === "truecolor" || depth === "256";
 }
 
 let cachedDepth: ColorDepth | undefined;
@@ -95,6 +193,7 @@ export function colorDepth(): ColorDepth {
 }
 export function resetColorDepth(): void {
   cachedDepth = undefined;
+  resetTerminalBackdrop();
 }
 
 export function paint(role: PaletteRole, s: string): string {
@@ -103,10 +202,44 @@ export function paint(role: PaletteRole, s: string): string {
   return `${fgCode(role, d)}${s}\x1b[39m`;
 }
 
-export function onBg(role: PaletteRole, s: string): string {
+/** Foreground paint with an explicit hex, for the per-line gradients. */
+export function paintHex(hex: string, s: string): string {
   const d = colorDepth();
   if (d === "none") return s;
+  return `${fgCode(hex, d)}${s}\x1b[39m`;
+}
+
+export function onBg(role: PaletteRole, s: string): string {
+  const d = colorDepth();
+  if (!bgEnabled(d)) return s;
   return `${bgCode(role, d)}${s}\x1b[49m`;
+}
+
+/**
+ * Paint a whole line with `role`'s background, out to the right edge.
+ *
+ * The caller keeps `line` at least one cell short of the terminal width: the
+ * last cell is filled by EL (erase in line), which terminals paint with the
+ * current background. Writing a colored space into the final column instead
+ * leaves the cursor in the pending-wrap state and makes some terminals eat or
+ * double the following line.
+ *
+ * A nested background (the accent, a footer pill) or a bare SGR reset (pi-tui
+ * draws the editor cursor as reverse video followed by `\x1b[0m`) leaves the
+ * background back at the terminal default on its way out, which would leave the
+ * rest of the line unpainted, EL included. The surface is therefore re-armed
+ * after every one of those, which is what makes the band a single color rather
+ * than a strip of pills with gaps between them.
+ */
+export function fillLine(role: PaletteRole, line: string): string {
+  const d = colorDepth();
+  if (!bgEnabled(d)) return line;
+  const bg = bgCode(role, d);
+  const rearmed = line
+    .replaceAll("\x1b[49m", `\x1b[49m${bg}`)
+    .replaceAll("\x1b[0m", `\x1b[0m${bg}`)
+    .replaceAll("\x1b[m", `\x1b[m${bg}`);
+  return `${bg}${rearmed}${bg}\x1b[K\x1b[49m`;
 }
 
 /** Per-character gradient between two hex colors (truecolor only; plain elsewhere). */

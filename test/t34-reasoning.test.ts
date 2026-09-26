@@ -381,6 +381,49 @@ describe("kumo-effort runtime (T34)", () => {
     expect(asked?.map((i) => i.label)).toEqual(["off", "low", "medium (current)", "high"]);
     expect(reply).toBe("Effort: medium (next message)");
   });
+
+  // T37: `/model` changed the route; the levels belonged to the old model.
+  test("adoptRoute re-resolves the levels of the new model", async () => {
+    const h = harness(["off", "low", "medium", "high"]);
+    await attach(h);
+    await h.effort.runCommand("/effort high");
+    // The new model offers fewer levels: the stale one is dropped, not sent.
+    h.llm.resolveModelInfo = (async () => ({
+      reasoning: { efforts: [{ id: "off", name: "off" }, { id: "low", name: "low" }] },
+    })) as never;
+    h.holder.current = { provider: "local", model: "m2", reasoningEffort: "low" };
+    await h.effort.adoptRoute("local", "m2");
+    expect(h.effort.levels).toEqual(["off", "low"]);
+    expect(h.holder.current?.reasoningEffort).toBe("low");
+    expect(h.footerState.effort).toBe("on"); // off+low is a binary switch
+  });
+
+  test("adoptRoute keeps a live effort the new model still offers", async () => {
+    const h = harness(["off", "low", "medium", "high"]);
+    await attach(h);
+    await h.effort.runCommand("/effort high");
+    h.holder.current = { provider: "local", model: "m2", reasoningEffort: "high" };
+    await h.effort.adoptRoute("local", "m2");
+    expect(h.holder.current?.reasoningEffort).toBe("high");
+  });
+
+  test("adoptRoute on a model with no thinking drops the effort entirely", async () => {
+    const h = harness(["off", "low", "medium", "high"]);
+    await attach(h);
+    await h.effort.runCommand("/effort high");
+    h.llm.resolveModelInfo = (async () => ({})) as never;
+    h.holder.current = { provider: "local", model: "m2", reasoningEffort: "high" };
+    await h.effort.adoptRoute("local", "m2");
+    expect(h.effort.levels).toEqual([]);
+    expect(h.holder.current?.reasoningEffort).toBeUndefined();
+    expect(h.footerState.effort).toBe("auto");
+  });
+
+  test("adoptRoute before attach is a no-op, not a crash", async () => {
+    const { Effort: Fresh } = await import("../src/plugins/effort.js");
+    const fresh = new Fresh();
+    await expect(fresh.adoptRoute("local", "m2")).resolves.toBeUndefined();
+  });
 });
 
 describe("judge + suggestion send thinking OFF through T34 (T28b)", () => {

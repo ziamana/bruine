@@ -3,6 +3,8 @@
  * Kept local on purpose: kumo must not type-couple to a specific copy of
  * @deepseek-ai/cordis (the runtime context comes from dsh's own tree).
  */
+import type { ClipboardImage } from "../image/clipboard.js";
+import type { VisionAnswer } from "../image/vision.js";
 export interface DshContext {
   get(service: string): any;
   /** Mount another Cordis plugin (T34: kumo-effort from kumo-repl). */
@@ -35,7 +37,12 @@ export interface KumoRepl {
   ask?: (question: string) => Promise<string>;
   /** TTY mode: the pi-tui shell (askChoice, addChat, footer). */
   ui?: {
-    askChoice(title: string, items: Array<{ value: string; label: string }>): Promise<number>;
+    /** `opts.initial` starts the cursor on a row (T37: the current route). */
+    askChoice(
+      title: string,
+      items: Array<{ value: string; label: string }>,
+      opts?: { initial?: number },
+    ): Promise<number>;
     askQuestions?(
       questions: Array<{
         id: string;
@@ -47,10 +54,19 @@ export interface KumoRepl {
     ): Promise<Array<{ id: string; selected: string[]; custom?: string }> | undefined>;
     setGhost?(text: string): void;
     clearGhost?(): void;
+    /** T29: the images behind the `[Image N]` chips, and the vision answer. */
+    pendingImages: {
+      resolve(text: string): ClipboardImage[];
+      release(images: readonly ClipboardImage[]): void;
+      clear(): void;
+    };
+    routeSeesImages?(): Promise<VisionAnswer>;
     addChat(component: any): void;
     removeChat?(component: any): void;
     showNotice?(text: string, opts?: { red?: boolean }): void;
     confirmFullAccess?(): Promise<boolean>;
+    /** T37: drops the memoized header host after a route switch. */
+    resetRouteCache?(): void;
     footer: { set(next: Record<string, unknown>): void; tpsReset?(): void };
     requestRender(): void;
     icons: { think: string; prompt: string; ok: string; fail: string; bullet: string; spark: string };

@@ -1,12 +1,16 @@
 import type { EditorTheme, MarkdownTheme, SelectListTheme } from "@earendil-works/pi-tui";
 
-import { onBg, paint } from "./palette.js";
+import { bgEnabled, onBg, paint } from "./palette.js";
 
 /**
  * Color helpers for the kumo pi-tui theme, backed by the Nuage palette
  * (palette.ts): 24-bit when the terminal supports it, the classic 16 ANSI
  * codes otherwise (same codes as before, so basic terminals and tests see no
  * change). No chalk dependency.
+ *
+ * The three background helpers fall back to plain foreground text when the
+ * terminal cannot paint a background (16 colors, NO_COLOR, KUMO_BG=0), so no
+ * caller has to gate them.
  */
 export const ansi = {
   dim: (s: string): string => `\x1b[2m${s}\x1b[22m`,
@@ -22,9 +26,11 @@ export const ansi = {
   text: (s: string): string => paint("text", s),
   bold: (s: string): string => `\x1b[1m${s}\x1b[22m`,
   italic: (s: string): string => `\x1b[3m${s}\x1b[23m`,
-  chip: (s: string): string => onBg("sky", paint("onSky", s)),
+  chip: (s: string): string => (bgEnabled() ? onBg("sky", paint("onSky", s)) : paint("sky", s)),
   surface: (s: string): string => onBg("surface", s),
   chipBg: (s: string): string => onBg("chip", s),
+  /** The 1-column accent that opens every painted surface. */
+  edge: (s: string): string => onBg("edge", s),
 };
 
 

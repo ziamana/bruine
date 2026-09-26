@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 const { Terminal } = require("@xterm/headless") as { Terminal: typeof TerminalType };
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const screens = join(root, "test", "e2e", "__screens__", "run");
-const keys = { enter: "\r", escape: "\x1b", tab: "\t", shiftTab: "\x1b[Z", down: "\x1b[B", right: "\x1b[C", ctrlC: "\x03", ctrlD: "\x04", ctrlO: "\x0f", ctrlE: "\x05" };
+const keys = { enter: "\r", escape: "\x1b", tab: "\t", shiftTab: "\x1b[Z", down: "\x1b[B", right: "\x1b[C", ctrlC: "\x03", ctrlD: "\x04", ctrlO: "\x0f", ctrlE: "\x05", f2: "\x1bOQ" };
 
 export function build() {
   execFileSync(process.platform === "win32" ? "pnpm.cmd" : "pnpm", ["build"], {
@@ -36,7 +36,7 @@ export class Harness {
     scripts: Script[],
     permissionMode = "ask",
     ascii = false,
-    opts: { template?: TemplateCaps; legacy?: boolean; baseUrlOverride?: string; server?: ServerOptions } = {},
+    opts: { template?: TemplateCaps; legacy?: boolean; baseUrlOverride?: string; server?: ServerOptions; extraModel?: string } = {},
   ) {
     const home = await mkdtemp(join(tmpdir(), "kumo-e2e-home-"));
     const project = await mkdtemp(join(tmpdir(), "kumo-e2e-project-"));
@@ -47,13 +47,17 @@ export class Harness {
       // setup code (compat block when a template is given), plus a pretty name and
       // a window like a real install. T33b: legacy writes a pre-T34 hand style;
       // baseUrlOverride points the route at a dead port (refused errors).
+      // T37: extraModel adds a second DECLARED model, because a pi-ai route can
+      // only dispatch a model its profile configures.
       const settingsBaseUrl = opts.baseUrlOverride ?? server.url;
+      const extraModel = opts.extraModel;
       if (opts.legacy === true) {
         await writeFile(
           join(home, "settings.yaml"),
           "llm-pi-ai:\n  providers:\n    local:\n      displayName: Local Server\n      api: openai-completions\n" +
             `      baseURL: ${settingsBaseUrl}\n      apiKeyEnv: KUMO_LOCAL_API_KEY\n` +
             "      models:\n        - id: e2e-model\n          name: e2e-model Pretty\n          contextWindow: 100000\n" +
+            (extraModel === undefined ? "" : `        - id: ${extraModel}\n          contextWindow: 50000\n`) +
             "agent-default-model:\n  provider: local\n  model: e2e-model\n",
         );
       } else {
@@ -64,6 +68,7 @@ export class Harness {
         const provider: any = Object.values(doc["llm-pi-ai"].providers)[0];
         provider.models[0].name = "e2e-model Pretty";
         provider.models[0].contextWindow = 100000;
+        if (extraModel !== undefined) provider.models.push({ id: extraModel, contextWindow: 50000 });
         await writeFile(join(home, "settings.yaml"), renderSettingsYaml(doc));
       }
       await writeFile(join(home, ".env"), "KUMO_LOCAL_API_KEY=e2e\n");

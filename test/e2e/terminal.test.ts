@@ -871,3 +871,100 @@ test("legacy route: one setup hint from the /props probe, gone after the first p
     },
   );
 }, 90_000);
+
+test("/model switches the wire model and keeps the prompt prefix byte-identical (T37)", async () => {
+  await serverScenario(
+    "model-switch",
+    [textScript("TURN_ONE"), textScript("TURN_TWO"), textScript("TURN_THREE")],
+    async (h) => {
+      await h.prompt("one");
+      await h.waitFor("TURN_ONE");
+      const b1 = h.server.mainRequests()[0]!.body;
+      expect(b1.model).toBe("e2e-model");
+
+      // The picker: one provider, then the models this route declares.
+      await h.prompt("/model");
+      await h.waitFor("Model · provider");
+      await h.waitFor("Local Server [local] (current route)");
+      h.press("enter");
+      await h.waitFor("Model · Local Server");
+      await h.waitFor("e2e-model Pretty");
+      await h.waitFor("e2e-model-2");
+      await h.dump("t37-model-picker");
+      h.press("down"); await delay(50); h.press("enter");
+      await h.waitFor("Model: e2e-model-2 (local) · next message");
+      await h.until(() => /e2e-model-2/.test(footer(h)), 3000, "footer follows the route");
+      expect(footer(h)).toContain("of 50k"); // the new model's own window
+
+      await h.prompt("two");
+      await h.waitFor("TURN_TWO");
+      const mains = h.server.mainRequests();
+      const b2 = mains[mains.length - 1]!.body;
+      expect(b2.model).toBe("e2e-model-2");
+      // dsh's own durable notice, appended at the end: the cache-safe mechanism.
+      expect(JSON.stringify(b2.messages)).toContain("model changed");
+
+      // Cache rule: kumo rewrote NOTHING. The persona is composed at boot (T36),
+      // so it still names the first model — a route switch does not touch the
+      // prompt, and dsh appends its own notice at the end of the history.
+      const sysText = (b: typeof b1): string =>
+        JSON.stringify(
+          b.messages.filter((m) => ["system", "developer"].includes(m.role)).map((m) => m.content),
+        );
+      const tools = (b: typeof b1): string => JSON.stringify(b.tools ?? null);
+      expect(sysText(b2)).toBe(sysText(b1));
+      expect(tools(b2)).toBe(tools(b1));
+      expect(sysText(b1)).toContain("powered by e2e-model Pretty");
+      // What DOES change is the wire role label: pi-ai sends `developer` for one
+      // model and `system` for another. That is the provider's per-model
+      // convention, not kumo editing the prompt — and it is why a route switch
+      // costs one cache rebuild, exactly like /new would.
+      const role = (b: typeof b1): string | undefined =>
+        b.messages.find((m) => ["system", "developer"].includes(m.role))?.role;
+      expect(role(b1)).toBe("developer");
+      expect(role(b2)).toBe("system");
+
+      // f2 walks back to the route remembered before the switch.
+      h.press("f2");
+      await h.waitFor("Model: e2e-model Pretty (local) · next message");
+      await h.prompt("three");
+      await h.waitFor("TURN_THREE");
+      expect(h.server.mainRequests().at(-1)!.body.model).toBe("e2e-model");
+    },
+    { server: { models: ["e2e-model", "e2e-model-2"] }, extraModel: "e2e-model-2" },
+  );
+}, 120_000);
+
+test("/model <route> sets directly and /provider lists them all (T37, T39)", async () => {
+  await serverScenario(
+    "model-direct",
+    [textScript("TURN_DONE")],
+    async (h) => {
+      // The 100-column terminal wraps a long provider line, so the assertions
+      // use fragments that cannot straddle a wrap.
+      await h.prompt("/provider");
+      await h.waitFor("Providers (2):");
+      await h.waitFor("Local Server [local] (current route)");
+      await h.waitFor("KUMO_LOCAL_API_KEY");
+      await h.waitFor("+ 39 more kumo can add");
+      await h.waitFor("In use: local/e2e-model");
+      await h.dump("t37-provider-list");
+
+      await h.prompt("/model local/e2e-model-2");
+      await h.waitFor("Model: e2e-model-2 (local) · next message");
+      await h.prompt("hi");
+      await h.waitFor("TURN_DONE");
+      expect(h.server.mainRequests().at(-1)!.body.model).toBe("e2e-model-2");
+
+      // An unknown provider is refused, naming what is configured.
+      await h.prompt("/model grok/x");
+      await h.waitFor('Unknown provider "grok"');
+      // A model this route never declared is refused too, HERE and not on the
+      // next turn: dsh-llm-pi-ai throws UNKNOWN_MODEL for an unconfigured pair.
+      await h.prompt("/model local/never-loaded");
+      await h.waitFor('is not configured on local');
+      expect(h.server.mainRequests().at(-1)!.body.model).toBe("e2e-model-2");
+    },
+    { server: { models: ["e2e-model", "e2e-model-2"] }, extraModel: "e2e-model-2" },
+  );
+}, 120_000);

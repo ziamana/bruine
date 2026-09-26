@@ -163,39 +163,70 @@ export class Effort {
   /** The dsh ModelSelectionRef holder: dsh reads .current per request. */
   private holder: { current?: EffortSelection } | undefined;
   private ui: EffortUi | undefined;
+  /** Kept for T37's adoptRoute: a route switch re-resolves the levels. */
+  private llm: { resolveModelInfo?(p: string, m: string): Promise<any> } | undefined;
 
   /** Wire it to the live session; applies the saved/default level once. */
   async attach(
     repl: KumoRepl | undefined,
     llm: { resolveModelInfo?(p: string, m: string): Promise<any> } | undefined,
   ): Promise<void> {
-    const doc = readKumoJson();
     const selection = repl?.selection?.current;
     if (selection === undefined || llm?.resolveModelInfo === undefined) return;
     this.holder = repl?.selection;
-    this.current = selection.reasoningEffort;
     this.ui = repl?.ui;
-    let levels: string[] = [];
-    try {
-      const info = await llm.resolveModelInfo(selection.provider, selection.model);
-      levels = (info?.reasoning?.efforts ?? []).map((e: { id: string }) => e.id);
-    } catch {
-      levels = [];
-    }
-    this.levels = levels;
+    this.llm = llm;
     this.ready = true;
-    const saved = savedLevelFor(doc.reasoningEffort, selection.model);
-    const wanted = saved !== undefined && levels.includes(saved)
-      ? saved
-      : defaultLevelFor(selection.provider, levels, hasTemplateForRoute(doc, selection.provider, selection.model));
-    if (wanted !== undefined) this.apply(wanted, { notice: false, remember: false });
-    else this.refreshFooter();
+    await this.resolveLevels(selection.provider, selection.model, llm);
     // ctrl+e cycles the levels (before the editor sees the key).
     this.ui?.tui?.addInputListener?.((data) => {
       if (!this.ready || !matchesKey(data, "ctrl+e")) return {};
       void this.cycle();
       return { consume: true };
     });
+  }
+
+  /**
+   * The levels of one exact route, then the level that route should use: the
+   * one saved for that model, else the T34 default. Applied silently — a boot
+   * and a route switch are not a user choosing a level.
+   */
+  private async resolveLevels(
+    provider: string,
+    model: string,
+    llm: { resolveModelInfo?(p: string, m: string): Promise<any> } | undefined,
+  ): Promise<void> {
+    const doc = readKumoJson();
+    // T37: an effort the live selection still carries wins, so an explicit
+    // choice survives a route switch to a model that offers the same levels.
+    const carried = this.holder?.current?.reasoningEffort;
+    this.current = carried;
+    let levels: string[] = [];
+    try {
+      const info = await llm?.resolveModelInfo?.(provider, model);
+      levels = (info?.reasoning?.efforts ?? []).map((e: { id: string }) => e.id);
+    } catch {
+      levels = [];
+    }
+    this.levels = levels;
+    const saved = savedLevelFor(doc.reasoningEffort, model);
+    const wanted =
+      carried !== undefined && levels.includes(carried)
+        ? carried
+        : saved !== undefined && levels.includes(saved)
+          ? saved
+          : defaultLevelFor(provider, levels, hasTemplateForRoute(doc, provider, model));
+    this.apply(wanted ?? "auto", { notice: false, remember: false });
+  }
+
+  /**
+   * T37: `/model` changed the route under us. The levels belonged to the old
+   * model, so they are re-resolved for the new one — and a level the new model
+   * does not offer is dropped, never carried onto the wire.
+   */
+  async adoptRoute(provider: string, model: string): Promise<void> {
+    if (!this.ready || this.holder === undefined) return;
+    await this.resolveLevels(provider, model, this.llm);
   }
 
   noticeShown = "";

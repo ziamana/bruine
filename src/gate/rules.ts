@@ -6,6 +6,7 @@
  */
 import path from "node:path";
 import { existsSync, lstatSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
 
 export type PermissionMode = "ask" | "auto" | "full";
 
@@ -226,6 +227,39 @@ export function isReadonlyBash(command: string): boolean {
   return READONLY_COMMANDS.has(first);
 }
 
+/** An environment variable whose value is probably a secret. */
+const SECRET_VAR = /\$\{?[A-Za-z_]*(KEY|TOKEN|SECRET|PASS|PASSWORD|PASSWD|AUTH|CREDENTIAL|COOKIE|SESSION)[A-Za-z0-9_]*\}?/i;
+/** Whole-environment dumps. */
+const ENV_DUMP = /\/proc\/[^\s/]+\/environ\b|\benviron\b/;
+
+function expandHome(word: string): string {
+  if (word === "~") return homedir();
+  if (word.startsWith("~/")) return path.join(homedir(), word.slice(2));
+  return word;
+}
+
+/**
+ * Does a bash command leak something it should not, even when every word looks
+ * read-only? Secret-looking variables ($OPENAI_API_KEY), environment dumps
+ * (/proc/self/environ), a path argument that resolves to a sensitive file (a
+ * symlink named notes.txt pointing at .env), or a path outside the project
+ * (T16: reads outside the project always ask). Exported for tests.
+ */
+export function bashLeaks(command: string, projectDir: string): boolean {
+  if (SECRET_VAR.test(command) || ENV_DUMP.test(command)) return true;
+  const words = command.trim().split(/\s+/).slice(1);
+  for (const raw of words) {
+    const w = raw.replace(/^['"]|['"]$/g, "");
+    if (w === "" || w.startsWith("-")) continue;
+    const looksLikePath = w.startsWith("/") || w.startsWith("~") || w.startsWith("..") || w.includes("/");
+    if (!looksLikePath && !existsSync(path.resolve(projectDir, w))) continue;
+    const target = expandHome(w);
+    if (isSensitiveTarget(target, projectDir)) return true;
+    if (looksLikePath && !isPathInside(target, projectDir)) return true;
+  }
+  return false;
+}
+
 /** Sensitive location in a path or command (T18.4). Exported for tests. */
 export function isSensitive(text: string): boolean {
   return SENSITIVE_PATTERNS.some((re) => re.test(text));
@@ -309,7 +343,8 @@ export function decide(
 
   // 1. Plan mode refuses mutations in EVERY permission mode; simple
   // read-only commands keep working without interruption.
-  if (ctx.plan && isBash && isReadonlyBash(command)) return "allow";
+  // Read-only in Plan, but a read-only command can still leak a secret: ask then.
+  if (ctx.plan && isBash && isReadonlyBash(command)) return bashLeaks(command, ctx.projectDir) ? "ask" : "allow";
   if (ctx.plan && (WRITE_TOOLS.has(name) || isBash)) {
     return "deny";
   }
@@ -336,6 +371,9 @@ export function decide(
     const target = String(execArgs.path ?? execArgs.file_path ?? "");
     if (isSensitiveTarget(target, ctx.projectDir)) return "ask";
   }
+  // BOS review 2026-09-26: secrets and outside reads that a "read-only" command
+  // still leaks into the model's context (and so to a cloud provider).
+  if (isBash && bashLeaks(command, ctx.projectDir)) return "ask";
 
   // 4. "Always for this session" rules.
   if (ctx.sessionAllowed.has(ruleKey(name, execArgs))) return "allow";

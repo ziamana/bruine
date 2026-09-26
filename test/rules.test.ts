@@ -37,7 +37,7 @@ describe("bash command table (auto mode) — ≥20 commands", () => {
     ["git diff HEAD", "allow"],
     ["git show abc123", "allow"],
     ["find . -name '*.ts'", "allow"],
-    ["find /tmp -delete", "judge"], // mutation via -delete
+    ["find /tmp -delete", "ask"], // mutation via -delete, outside the project: ask (BOS 2026-09-26)
     ["tree -L 2", "judge"], // T18.2: tree has -o
     ["echo hello", "allow"],
     ["node --version", "judge"],

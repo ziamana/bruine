@@ -493,6 +493,53 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     expect(ui.tui.render(100).map(strip).join("\n")).toContain("+2 files");
     await ui.shutdown();
   });
+
+  test("askQuestions Down+Enter resolves second option without touching chat (T28A)", async () => {
+    const terminal = new FakeTerminal();
+    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
+    ui.start();
+    const p = ui.askQuestions([
+      { id: "db", header: "Choose mode", question: "Which database?", options: [{ label: "SQLite" }, { label: "Redis" }] },
+    ]);
+    await new Promise((r) => setTimeout(r, 50));
+    terminal.onInput?.("\x1b[B");
+    await new Promise((r) => setTimeout(r, 50));
+    terminal.onInput?.("\r");
+    const answers = await p;
+    expect(answers).toEqual([{ id: "db", selected: ["Redis"] }]);
+    await ui.shutdown();
+  });
+
+  test("askQuestions Space toggles multi and Esc skips without onEscape (T28A)", async () => {
+    const terminal = new FakeTerminal();
+    let escaped = 0;
+    const ui = new KumoUi(
+      "test",
+      { onSubmit() {}, onEscape() { escaped += 1; }, onQuit() {} },
+      terminal,
+      UNICODE_ICONS,
+    );
+    ui.start();
+    const p = ui.askQuestions([
+      { id: "m", question: "Pick?", multiSelect: true, options: [{ label: "A" }, { label: "B" }] },
+    ]);
+    await new Promise((r) => setTimeout(r, 50));
+    terminal.onInput?.(" ");
+    await new Promise((r) => setTimeout(r, 50));
+    terminal.onInput?.("\x1b[B");
+    await new Promise((r) => setTimeout(r, 50));
+    terminal.onInput?.(" ");
+    await new Promise((r) => setTimeout(r, 50));
+    terminal.onInput?.("\r");
+    expect(await p).toEqual([{ id: "m", selected: ["A", "B"] }]);
+    expect(escaped).toBe(0);
+    const p2 = ui.askQuestions([{ id: "q", question: "Which?", options: [{ label: "SQLite" }] }]);
+    await new Promise((r) => setTimeout(r, 50));
+    terminal.onInput?.("\x1b");
+    expect(await p2).toEqual([{ id: "q", selected: [], custom: "skipped by the user" }]);
+    expect(escaped).toBe(0);
+    await ui.shutdown();
+  });
 });
 
 describe("attachTui wiring", () => {
@@ -614,6 +661,113 @@ describe("attachTui wiring", () => {
     expect(chats).toHaveLength(0);
     event("user/message", { source: { kind: "user" }, content: [{ type: "text", text: "hello" }] });
     expect(chats).toHaveLength(1);
+  });
+});
+
+describe("suggest ghost (T28B)", () => {
+  async function setupSuggest(llm: unknown) {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const home = await mkdtemp(join(tmpdir(), "kumo-suggest-"));
+    await writeFile(
+      join(home, "kumo.json"),
+      JSON.stringify({ models: { fast: { provider: "p", model: "m" } }, suggestions: true }),
+    );
+    const prev = process.env.DSH_HOME;
+    process.env.DSH_HOME = home;
+    const { fakeCtx } = await import("./fakes.js");
+    const { attachTui } = await import("../src/plugins/render.js");
+    const { UNICODE_ICONS: icons } = await import("../src/render/chars.js");
+    const fake = fakeCtx({ llm });
+    const ghosts: string[] = [];
+    const ui = {
+      addChat: () => {},
+      removeChat: () => {},
+      footer: { set: () => {} },
+      requestRender: () => {},
+      icons,
+      setGhost: (t: string) => ghosts.push(t),
+      clearGhost: () => {},
+    };
+    const session = {};
+    const agent = { session };
+    const service: Record<string, unknown> = {};
+    attachTui(fake.ctx as never, agent as never, ui as never, service);
+    const stream = (chunk: unknown) =>
+      fake.emit("agent/assistant-stream", { agent, frame: { type: "chunk", time: 1, chunk } });
+    const event = (type: string, data: unknown) =>
+      fake.emit("session/event", session, { type, data });
+    return {
+      ghosts,
+      stream,
+      event,
+      service,
+      cleanup: () => {
+        if (prev === undefined) delete process.env.DSH_HOME;
+        else process.env.DSH_HOME = prev;
+      },
+    };
+  }
+
+  test("separate request without system/tools, ghost set (T28B)", async () => {
+    let seen: Record<string, unknown> = {};
+    const llm = {
+      resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: "off" }] } }),
+      stream: (o: Record<string, unknown>) => {
+        seen = o;
+        return (async function* () {
+          yield { type: "text-delta", text: "run the tests" };
+        })();
+      },
+    };
+    const s = await setupSuggest(llm);
+    try {
+      s.event("turn/start", { turn: 1 });
+      s.event("user/message", { source: { kind: "user" }, content: [{ type: "text", text: "did it pass" }] });
+      s.stream({ type: "text-delta", text: "Yes it passed fine today ok" });
+      s.event("turn/end", { turn: 1, reason: { kind: "completed" } });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(seen).not.toHaveProperty("system");
+      expect(seen).not.toHaveProperty("tools");
+      expect(seen.maxTokens).toBe(24);
+      expect(JSON.stringify(seen.messages)).toContain("did it pass");
+      expect(JSON.stringify(seen.messages)).toContain("Suggest");
+      expect(s.ghosts).toEqual(["run the tests"]);
+    } finally {
+      s.cleanup();
+    }
+  });
+
+  test("cancelSuggest aborts the fast request (T28B)", async () => {
+    let aborted = false;
+    const llm = {
+      resolveModelInfo: async () => ({}),
+      stream: (o: { signal?: AbortSignal }) =>
+        (async function* () {
+          await new Promise<void>((_, reject) => {
+            o.signal?.addEventListener("abort", () => {
+              aborted = true;
+              reject(new Error("aborted"));
+            });
+          });
+          yield { type: "text-delta", text: "late" };
+        })(),
+    };
+    const s = await setupSuggest(llm);
+    try {
+      s.event("turn/start", { turn: 1 });
+      s.event("user/message", { source: { kind: "user" }, content: [{ type: "text", text: "hi" }] });
+      s.stream({ type: "text-delta", text: "hello world answer here" });
+      s.event("turn/end", { turn: 1, reason: { kind: "completed" } });
+      await new Promise((r) => setTimeout(r, 20));
+      (s.service.cancelSuggest as (() => void) | undefined)?.();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(aborted).toBe(true);
+      expect(s.ghosts).toEqual([]);
+    } finally {
+      s.cleanup();
+    }
   });
 });
 

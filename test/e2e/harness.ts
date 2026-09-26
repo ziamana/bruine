@@ -15,7 +15,7 @@ const require = createRequire(import.meta.url);
 const { Terminal } = require("@xterm/headless") as { Terminal: typeof TerminalType };
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const screens = join(root, "test", "e2e", "__screens__", "run");
-const keys = { enter: "\r", escape: "\x1b", tab: "\t", shiftTab: "\x1b[Z", down: "\x1b[B", ctrlC: "\x03", ctrlD: "\x04", ctrlO: "\x0f" };
+const keys = { enter: "\r", escape: "\x1b", tab: "\t", shiftTab: "\x1b[Z", down: "\x1b[B", right: "\x1b[C", ctrlC: "\x03", ctrlD: "\x04", ctrlO: "\x0f" };
 
 export function build() {
   execFileSync(process.platform === "win32" ? "pnpm.cmd" : "pnpm", ["build"], {
@@ -51,6 +51,11 @@ export class Harness {
               name: "e2e-model Pretty",
               baseUrl: server.url,
               contextWindow: 100000,
+            },
+            fast: {
+              provider: "local",
+              model: "e2e-model",
+              baseUrl: server.url,
             },
           },
         }),

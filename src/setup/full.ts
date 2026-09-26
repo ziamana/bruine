@@ -16,6 +16,7 @@ import {
   type TUI,
 } from "@earendil-works/pi-tui";
 import { existsSync, readFileSync } from "node:fs";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -57,6 +58,17 @@ const BACK = Symbol("back");
 const CANCEL = Symbol("cancel");
 type Outcome<T> = T | typeof BACK | typeof CANCEL;
 type StepResult = Outcome<Partial<SetupAnswers>> | "saved";
+
+/** Merge `suggestions` into kumo.json (0600, atomic); keeps every other key. */
+export async function setSuggestionsChoice(dshHome: string, value: boolean): Promise<void> {
+  const doc = (await readKumoJsonDoc(dshHome)) as Record<string, unknown>;
+  doc.suggestions = value;
+  const file = join(dshHome, "kumo.json");
+  await mkdir(dshHome, { recursive: true });
+  const tmp = `${file}.tmp`;
+  await writeFile(tmp, `${JSON.stringify(doc, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  await rename(tmp, file);
+}
 
 export interface WizardOptions {
   fetchImpl?: ScanOptions["fetchImpl"];
@@ -340,6 +352,9 @@ export async function runFullSetup(
   // into kumo.json from the Summary's Save (flow.ts owns the other fields).
   let updateCheckChoice = true;
   let updateCheckLoaded = false;
+  // T28B: same ride for the ghost-suggestion toggle (default true).
+  let suggestionsChoice = true;
+  let suggestionsLoaded = false;
   tui.addInputListener((data: string) => {
     if (matchesKey(data, "ctrl+c")) {
       activeResolve?.(CANCEL);
@@ -835,6 +850,26 @@ export async function runFullSetup(
     );
     if (u === BACK || u === CANCEL) return u;
     updateCheckChoice = u === 0;
+    if (!suggestionsLoaded) {
+      suggestionsLoaded = true;
+      try {
+        const doc = (await readKumoJsonDoc(dshHome)) as { suggestions?: boolean };
+        suggestionsChoice = doc.suggestions ?? true;
+      } catch {
+        suggestionsChoice = true;
+      }
+    }
+    const sg = await selectStep(
+      "Suggest the likely next prompt as dim ghost text in the empty editor?",
+      [
+        { value: "yes", label: "Yes (default)" },
+        { value: "no", label: "No" },
+      ],
+      (i) => i,
+      { initial: suggestionsChoice ? 0 : 1 },
+    );
+    if (sg === BACK || sg === CANCEL) return sg;
+    suggestionsChoice = sg === 0;
     return { telemetry: sel === 1 };
   }
 
@@ -853,6 +888,7 @@ export async function runFullSetup(
       `  Theme    ${a.theme}`,
       `  Telemetry ${a.telemetry ? "yes" : "no"}`,
       `  Updates   ${updateCheckChoice ? "daily check on" : "check off"}`,
+      `  Suggestions ${suggestionsChoice ? "on" : "off"}`,
       "",
       `  writes: ${dshHome}/settings.yaml · kumo.json · .env · skills/`,
     ].join("\n");
@@ -873,6 +909,8 @@ export async function runFullSetup(
       // T30: `updateCheck` lives in kumo.json next to the fields the flow
       // owns; flow.buildPlan stays untouched, so merge it after the save.
       await setUpdateCheck(dshHome, updateCheckChoice);
+      // T28B: same merge for the suggestions toggle.
+      await setSuggestionsChoice(dshHome, suggestionsChoice);
       return "saved";
     }
     if (choice === 1) return BACK;

@@ -8,6 +8,7 @@ import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { kumoIcons } from "../render/chars.js";
 import { KumoUi } from "../ui/kumo-ui.js";
 import { KUMO_MODES_SERVICE } from "./modes.js";
+import { KUMO_RENDER_SERVICE } from "./render.js";
 import type { DshContext, KumoRepl, KumoStartup } from "./ctx.js";
 
 const require = createRequire(import.meta.url);
@@ -278,11 +279,17 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       pkg.version,
       {
         onSubmit: (text) => {
+          ctx.get(KUMO_RENDER_SERVICE)?.cancelSuggest?.();
+          ui?.clearGhost();
           if (text.trim() !== "" && ui !== undefined) ui.rememberHistory(text);
           router(text, (t) => emitter.emitLine(t), (s) => {
             ui?.addChat(new Text(s, 1, 0));
             ui?.requestRender();
           });
+        },
+        onUserActivity: () => {
+          ctx.get(KUMO_RENDER_SERVICE)?.cancelSuggest?.();
+          ui?.clearGhost();
         },
         onEscape: () => emitter.emitSigint(),
         onQuit: () => emitter.emitClose(),

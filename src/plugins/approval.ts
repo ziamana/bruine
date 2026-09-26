@@ -1,3 +1,6 @@
+import { Text } from "@earendil-works/pi-tui";
+import { dim } from "../render/reasoning.js";
+import { echoLine } from "../ui/questions.js";
 import type { DshContext, KumoRepl } from "./ctx.js";
 import type { RenderService } from "./render.js";
 
@@ -57,6 +60,70 @@ export function apply(ctx: DshContext): void {
   ctx.inject(["kumoModes"], (c: any) => {
     modes = c.kumoModes;
   });
+
+  ctx.on(
+    "user-questions/request",
+    (request: {
+      agent?: unknown;
+      questions: Array<{
+        id: string;
+        question: string;
+        header?: string;
+        options?: Array<{ label: string; description?: string }>;
+        multiSelect?: boolean;
+      }>;
+      signal?: { aborted: boolean };
+    }, next: () => Promise<{ answers: Array<{ id: string; selected: string[]; custom?: string }> }>) => {
+      if (repl === undefined || request.agent !== repl.agent) return next();
+      if (request.signal?.aborted) {
+        return { answers: request.questions.map((q) => ({ id: q.id, selected: [], custom: "skipped by the user" })) };
+      }
+      const ui = repl.ui;
+      if (ui !== undefined && typeof ui.askQuestions === "function") {
+        return ui.askQuestions(request.questions).then((answers) => {
+          const resolved =
+            answers ??
+            request.questions.map((q) => ({ id: q.id, selected: [], custom: "skipped by the user" }));
+          for (const a of resolved) {
+            const q = request.questions.find((qq) => qq.id === a.id);
+            if (q === undefined) continue;
+            const label = a.selected[0] ?? a.custom ?? "skipped";
+            ui.addChat(new Text(dim(echoLine(q.question, label)), 1, 0));
+            ui.requestRender();
+          }
+          return { answers: resolved };
+        });
+      }
+      const ask = repl.ask;
+      if (ask === undefined) return next();
+      return (async () => {
+        const answers: Array<{ id: string; selected: string[]; custom?: string }> = [];
+        for (const q of request.questions) {
+          const opts = [...(q.options ?? []), { label: "Other…" }];
+          const lines = [
+            q.header !== undefined ? `${q.header}: ${q.question}` : q.question,
+            ...opts.map((o, i) => `${String(i + 1)}) ${o.label}${o.description !== undefined ? ` (${o.description})` : ""}`),
+          ].join("\n");
+          const raw = (await ask(`${lines}\n  [1]`)).trim();
+          const n = Number.parseInt(raw, 10);
+          if (Number.isInteger(n) && n >= 1 && n <= opts.length) {
+            const chosen = opts[n - 1]!;
+            if (chosen.label === "Other…") {
+              const custom = (await ask("Other answer: ")).trim();
+              answers.push({ id: q.id, selected: [], ...(custom !== "" ? { custom } : {}) });
+            } else {
+              answers.push({ id: q.id, selected: [chosen.label] });
+            }
+          } else if (raw !== "") {
+            answers.push({ id: q.id, selected: [], custom: raw });
+          } else {
+            answers.push({ id: q.id, selected: opts[0] !== undefined && opts[0].label !== "Other…" ? [opts[0].label] : [], custom: undefined });
+          }
+        }
+        return { answers };
+      })();
+    },
+  );
 
   ctx.on(
     "approval/request",

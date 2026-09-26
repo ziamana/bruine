@@ -428,3 +428,111 @@ test("grouping: 4 grep collapse to +2, failed grep stays, ctrl+o expands (T27.2+
     await h.waitFor("+2 files");
   });
 });
+
+const askTool = (questions: unknown, id = "q1"): Script =>
+  toolScript("ask_user_question", { questions }, id);
+
+test("questions: Down Enter picks second option (T28A)", async () => {
+  await scenario("q-single", [
+    askTool([{ id: "db", header: "Choose mode", question: "Which database should I use?", options: [
+      { label: "SQLite", description: "Zero setup" },
+      { label: "Redis", description: "Faster" },
+      { label: "Other", description: "Custom" },
+    ] }]),
+    textScript("Q_DONE"),
+  ], async (h) => {
+    await h.prompt("Pick a database");
+    await h.waitFor("Space toggle");
+    h.press("down");
+    await delay(100);
+    h.press("enter");
+    await h.waitFor("Q_DONE");
+    const toolMsg = h.server.mainRequests()[1]!.body.messages.find((m) => m.role === "tool");
+    expect(JSON.stringify(toolMsg)).toContain("Redis");
+    expect(h.screen().join("\n")).toMatch(/\?.*→.*Redis/);
+  });
+});
+
+test("questions: multi-select Space Space Enter (T28A)", async () => {
+  await scenario("q-multi", [
+    askTool([{ id: "m", question: "Pick two?", multi_select: true, options: [{ label: "A" }, { label: "B" }] }]),
+    textScript("Q_DONE"),
+  ], async (h) => {
+    await h.prompt("Pick");
+    await h.waitFor("Space toggle");
+    h.type(" ");
+    await delay(100);
+    h.press("down");
+    await delay(100);
+    h.type(" ");
+    await delay(100);
+    h.press("enter");
+    await h.waitFor("Q_DONE");
+    const toolMsg = h.server.mainRequests()[1]!.body.messages.find((m) => m.role === "tool");
+    const s = JSON.stringify(toolMsg);
+    expect(s).toContain('\\"A\\"');
+    expect(s).toContain('\\"B\\"');
+  });
+});
+
+test("questions: Other free text (T28A)", async () => {
+  await scenario("q-other", [
+    askTool([{ id: "db", question: "Which?", options: [{ label: "SQLite" }] }]),
+    textScript("Q_DONE"),
+  ], async (h) => {
+    await h.prompt("Pick");
+    await h.waitFor("Space toggle");
+    h.press("down");
+    await delay(100);
+    h.press("enter");
+    await delay(200);
+    h.type("Custom db");
+    h.press("enter");
+    await h.waitFor("Q_DONE");
+    const toolMsg = h.server.mainRequests()[1]!.body.messages.find((m) => m.role === "tool");
+    expect(JSON.stringify(toolMsg)).toContain("Custom db");
+  });
+});
+
+test("questions: Esc skips, turn goes on (T28A)", async () => {
+  await scenario("q-esc", [
+    askTool([{ id: "db", question: "Which?", options: [{ label: "SQLite" }] }]),
+    textScript("Q_DONE"),
+  ], async (h) => {
+    await h.prompt("Pick");
+    await h.waitFor("Space toggle");
+    h.press("escape");
+    await h.waitFor("Q_DONE");
+    const toolMsg = h.server.mainRequests()[1]!.body.messages.find((m) => m.role === "tool");
+    expect(JSON.stringify(toolMsg)).toContain("skipped");
+  });
+});
+
+test("suggest: ghost appears, Right fills editor and sends (T28B)", async () => {
+  await scenario("suggest-accept", [textScript("TURN_DONE"), textScript("SECOND_DONE")], async (h) => {
+    await h.prompt("Say hi");
+    await h.waitFor("TURN_DONE");
+    await h.waitFor("E2E session", 15000);
+    h.press("right");
+    await delay(150);
+    h.press("enter");
+    await h.waitFor("SECOND_DONE");
+    const reqs = h.server.mainRequests();
+    expect(reqs.length).toBeGreaterThanOrEqual(2);
+    expect(JSON.stringify(reqs[1]!.body.messages)).toContain("E2E session");
+  });
+});
+
+test("suggest: typing first cancels, server sees closed (T28B)", async () => {
+  await scenario("suggest-cancel", [textScript("TURN_DONE")], async (h) => {
+    await h.prompt("Say hi");
+    await h.waitFor("TURN_DONE");
+    await delay(150);
+    h.type("x");
+    await delay(2200);
+    const all = (h.server as unknown as { requests: Array<{ body: { messages?: unknown }; disconnected: boolean }> }).requests;
+    const sg = all.filter((r) => JSON.stringify(r.body.messages ?? "").includes("Suggest"));
+    expect(sg.length).toBeGreaterThanOrEqual(1);
+    expect(sg.some((r) => r.disconnected)).toBe(true);
+  });
+});

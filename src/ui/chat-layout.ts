@@ -47,7 +47,21 @@ export class ChatTranscript extends Container {
 
 /** Keep user content intact internally while applying the same display policy. */
 export class PlainGlyphEditor extends Editor {
+  #ghost = "";
+  setGhost(text: string): void {
+    this.#ghost = text;
+  }
+  clearGhost(): void {
+    this.#ghost = "";
+  }
+  get ghost(): string {
+    return this.#ghost;
+  }
   render(width: number): string[] {
-    return super.render(width).map((line) => chipMarkers(withoutEmoji(line)));
+    const lines = super.render(width).map((line) => chipMarkers(withoutEmoji(line)));
+    if (this.getText().trim() === "" && this.#ghost !== "") {
+      return [ansi.dim(`  › ${this.#ghost}`)];
+    }
+    return lines;
   }
 }

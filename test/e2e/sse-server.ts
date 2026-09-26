@@ -67,7 +67,7 @@ export async function startServer(scripts: Script[]) {
         record.disconnected = !record.completed;
         abort.abort();
       });
-      const script = main ? scripts[turn++] : textScript("E2E session");
+      const script = main ? scripts[turn++] : { chunks: [{ delta: { content: "E2E session" }, delayMs: 1500 }] };
       if (!script) {
         errors.push(`Unexpected main request ${turn}`);
         res.writeHead(500).end("No scripted response remains");

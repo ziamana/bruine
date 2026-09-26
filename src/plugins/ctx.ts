@@ -28,6 +28,17 @@ export interface KumoRepl {
   /** TTY mode: the pi-tui shell (askChoice, addChat, footer). */
   ui?: {
     askChoice(title: string, items: Array<{ value: string; label: string }>): Promise<number>;
+    askQuestions?(
+      questions: Array<{
+        id: string;
+        question: string;
+        header?: string;
+        options?: Array<{ label: string; description?: string }>;
+        multiSelect?: boolean;
+      }>,
+    ): Promise<Array<{ id: string; selected: string[]; custom?: string }> | undefined>;
+    setGhost?(text: string): void;
+    clearGhost?(): void;
     addChat(component: any): void;
     removeChat?(component: any): void;
     showNotice?(text: string, opts?: { red?: boolean }): void;

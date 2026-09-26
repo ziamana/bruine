@@ -1,4 +1,7 @@
 import { Text } from "@earendil-works/pi-tui";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { ReasoningLine, dim, type Screen } from "../render/reasoning.js";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { TextStream } from "../render/text.js";
@@ -31,6 +34,7 @@ export interface ScreenUi {
 export interface RenderService {
   screen?: ScreenUi;
   describe?: (callId: string) => { tool: string; summary: string } | undefined;
+  cancelSuggest?: () => void;
 }
 
 /** Live view of the controlling terminal. */
@@ -69,7 +73,7 @@ interface SessionEvent {
  * components (T13a-d). Exported so tests can drive it with fake events.
  */
 export function attachTui(
-  ctx: Pick<DshContext, "on">,
+  ctx: DshContext,
   agent: { session: any },
   ui: NonNullable<KumoRepl["ui"]>,
   service: RenderService,
@@ -87,11 +91,18 @@ export function attachTui(
   let turnToolIds: string[] = [];
   let turnBreaks = new Set<string>();
   let needBreak = false;
+  let lastUser = "";
+  let currentAnswer = "";
+  let suggestController: AbortController | undefined;
 
   service.describe = (callId: string) => {
     const comp = tools.get(callId);
     if (comp === undefined) return undefined;
     return { tool: comp.tool, summary: comp.summary(80) };
+  };
+  service.cancelSuggest = () => {
+    suggestController?.abort();
+    suggestController = undefined;
   };
 
   const hideWorking = (): void => {
@@ -202,6 +213,7 @@ export function attachTui(
       case "text-delta":
         trackDelta();
         needBreak = true;
+        currentAnswer += String(chunk.text ?? "");
         ensureText().push(chunk.text);
         ui.requestRender();
         return;
@@ -270,6 +282,7 @@ export function attachTui(
         const trimmed = content.trim();
         if (trimmed === "") return;
         if (MODE_ANNOUNCEMENTS.has(trimmed)) return;
+        lastUser = trimmed;
         ui.addChat(userMessageComponent(trimmed));
         return;
       }
@@ -281,6 +294,9 @@ export function attachTui(
         turnToolIds = [];
         turnBreaks = new Set<string>();
         needBreak = false;
+        currentAnswer = "";
+        suggestController?.abort();
+        suggestController = undefined;
         showWorking();
         return;
       case "tool/call": {
@@ -353,6 +369,7 @@ export function attachTui(
             cancelled: false,
             error: false,
           });
+          void triggerSuggest();
         }
         turnToolIds = [];
         turnBreaks = new Set<string>();
@@ -365,6 +382,107 @@ export function attachTui(
         return;
     }
   });
+
+  function suggestionsEnabled(): boolean {
+    try {
+      const home = process.env.DSH_HOME;
+      if (home === undefined || home === "") return true;
+      const raw = readFileSync(join(home, "kumo.json"), "utf8");
+      const doc = JSON.parse(raw) as { suggestions?: boolean };
+      return doc.suggestions ?? true;
+    } catch {
+      return true;
+    }
+  }
+
+  function fastRoute(): { provider: string; model: string } | undefined {
+    try {
+      const home = process.env.DSH_HOME;
+      if (home !== undefined && home !== "") {
+        const raw = readFileSync(join(home, "kumo.json"), "utf8");
+        const doc = JSON.parse(raw) as {
+          models?: {
+            fast?: { provider?: string; model?: string };
+            main?: { provider?: string; model?: string };
+          };
+        };
+        const fast = doc.models?.fast ?? doc.models?.main;
+        if (fast?.provider !== undefined && fast?.model !== undefined) {
+          return { provider: fast.provider, model: fast.model };
+        }
+      }
+    } catch {
+      // fall through
+    }
+    return undefined;
+  }
+
+  async function triggerSuggest(): Promise<void> {
+    if (!suggestionsEnabled()) return;
+    const route = fastRoute();
+    if (route === undefined) return;
+    const llm = ctx.get("llm") as
+      | {
+          stream(o: {
+            provider: string;
+            model: string;
+            messages: unknown[];
+            maxTokens?: number;
+            reasoningEffort?: string;
+            signal?: AbortSignal;
+          }): AsyncIterable<{ type: string; text?: string }>;
+          resolveModelInfo?(p: string, m: string): Promise<{ reasoning?: { efforts?: Array<{ id: string }> } }>;
+        }
+      | undefined;
+    if (llm === undefined) return;
+    if (lastUser.trim() === "" || currentAnswer.trim() === "") return;
+    suggestController?.abort();
+    const controller = new AbortController();
+    suggestController = controller;
+    const timer = setTimeout(() => controller.abort(), 4000);
+    try {
+      let off = false;
+      try {
+        const info = await llm.resolveModelInfo?.(route.provider, route.model);
+        off = (info?.reasoning?.efforts ?? []).some((e) => e.id === "off");
+      } catch {
+        off = false;
+      }
+      let text = "";
+      const excerpt = currentAnswer.slice(-800);
+      const prompt = createUserMessage({
+        content: [
+          {
+            type: "text",
+            text: `Suggest the user's most likely next message, max 8 words, same language as the user. Reply with the message only.\n\nLast user prompt: ${lastUser}\nLast answer (excerpt): ${excerpt}`,
+          },
+        ],
+        source: { kind: "plugin", plugin: "kumo-suggest" },
+      });
+      for await (const chunk of llm.stream({
+        provider: route.provider,
+        model: route.model,
+        messages: [prompt],
+        maxTokens: 24,
+        ...(off ? { reasoningEffort: "off" } : {}),
+        signal: controller.signal,
+      })) {
+        if (controller.signal.aborted) return;
+        if (chunk.type === "text-delta" && chunk.text !== undefined) text += chunk.text;
+      }
+      if (controller.signal.aborted) return;
+      const words = text.trim().split(/\s+/).filter((w) => w !== "").slice(0, 8);
+      if (words.length === 0) return;
+      if (controller.signal.aborted) return;
+      (ui as unknown as { setGhost?: (t: string) => void }).setGhost?.(words.join(" "));
+      ui.requestRender();
+    } catch {
+      // suggestion is best effort; never break the session
+    } finally {
+      clearTimeout(timer);
+      if (suggestController === controller) suggestController = undefined;
+    }
+  }
 
   return () => {
     hideWorking();

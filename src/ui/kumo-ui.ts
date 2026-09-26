@@ -17,6 +17,7 @@ import { ansi, editorTheme, selectListTheme } from "./theme.js";
 import { ChatTranscript, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
 import { displayModel } from "./footer.js";
+import { QuestionForm } from "./questions.js";
 import { WorkingComponent } from "./working.js";
 import { CollapsedToolsComponent, groupRuns, turnSummary, type GroupedTool } from "./tool-group.js";
 import { existsSync, readFileSync } from "node:fs";
@@ -33,6 +34,8 @@ import {
 export interface KumoUiHandlers {
   /** Enter on the editor (or the equivalent submit). */
   onSubmit(text: string): void;
+  /** User typed or sent (for aborting background suggestion). */
+  onUserActivity?: () => void;
   /** Escape: interrupt the running turn, never the app. */
   onEscape(): void;
   /** Quit request: ctrl+d, or ctrl+c twice within 500 ms. */
@@ -142,7 +145,7 @@ export class KumoUi {
   readonly tui: TUI;
   readonly terminal: Terminal;
   readonly chat: Container;
-  readonly editor: Editor;
+  readonly editor: PlainGlyphEditor;
   readonly footer: FooterComponent;
   readonly icons: KumoIcons;
   readonly noticeBox: NoticeBox;
@@ -214,7 +217,12 @@ export class KumoUi {
     void this.#maybeUpdateNotice(version);
 
     this.tui.addInputListener((data: string) => {
-      if (matchesKey(data, "ctrl+o")) {
+      if (
+        data.includes("\x1b[200~") ||
+        (!data.startsWith("\x1b") && [...data].some((ch) => (ch.codePointAt(0) ?? 0) >= 32))
+      ) {
+        handlers.onUserActivity?.();
+      }      if (matchesKey(data, "ctrl+o")) {
         if (this.#confirming) return { consume: true };
         this.#toolsCollapsed = !this.#toolsCollapsed;
         this.applyToolsCollapsed();
@@ -262,6 +270,24 @@ export class KumoUi {
         if (this.editor.getText() === "") {
           handlers.onQuit();
           return { consume: true };
+        }
+      }
+      const ghost = this.editor.ghost;
+      const empty = this.editor.getText() === "";
+      if (ghost !== "" && empty) {
+        if (data === "\x1b[C" || data === "\x06") {
+          this.editor.setText(ghost);
+          this.editor.clearGhost();
+          this.requestRender();
+          return { consume: true };
+        }
+        if (data === "\r" || data === "\n") {
+          return { consume: true };
+        }
+        if (!data.startsWith("\x1b") && [...data].some((ch) => (ch.codePointAt(0) ?? 0) >= 32)) {
+          this.editor.clearGhost();
+          this.requestRender();
+          return {};
         }
       }
       return {};
@@ -323,6 +349,20 @@ export class KumoUi {
 
   rememberHistory(text: string): void {
     this.editor.addToHistory(text);
+  }
+
+  /** Ghost next-prompt suggestion in the empty editor (T28B). */
+  setGhost(text: string): void {
+    if (this.#closed) return;
+    if (this.editor.getText() !== "") return;
+    this.editor.setGhost(text);
+    this.requestRender();
+  }
+
+  clearGhost(): void {
+    if (this.editor.ghost === "") return;
+    this.editor.clearGhost();
+    this.requestRender();
   }
 
   /** Show Working immediately on submit (T27b.5), removed on first chunk. */
@@ -573,6 +613,39 @@ export class KumoUi {
       list.onSelect = (item) => finish(items.indexOf(item));
       list.onCancel = () => finish(-1);
       this.tui.setFocus(list);
+      this.requestRender();
+    });
+  }
+
+  /**
+   * Multi-question form above the editor (T28A, never over chat).
+   * Resolves with answers, or undefined when skipped (Esc).
+   */
+  askQuestions(
+    questions: Array<{
+      id: string;
+      question: string;
+      header?: string;
+      options?: Array<{ label: string; description?: string }>;
+      multiSelect?: boolean;
+    }>,
+  ): Promise<Array<{ id: string; selected: string[]; custom?: string }> | undefined> {
+    if (this.#closed) return Promise.resolve(undefined);
+    this.clearNoticeBox();
+    this.#confirming = true;
+    const form = new QuestionForm(questions);
+    this.noticeBox.addChild(form);
+    this.requestRender();
+    return new Promise((resolve) => {
+      const finish = (answers: Array<{ id: string; selected: string[]; custom?: string }> | undefined) => {
+        this.#confirming = false;
+        this.clearNoticeBox();
+        this.tui.setFocus(this.editor);
+        this.requestRender();
+        resolve(answers);
+      };
+      form.onDone = (a) => finish(a === undefined ? undefined : a);
+      this.tui.setFocus(form);
       this.requestRender();
     });
   }

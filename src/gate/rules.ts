@@ -23,6 +23,9 @@ export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
   "job_output",
   "subagent",
   "subagent_fork",
+  // Agent-internal state, no effect on the machine (seen asking for approval on the real server, 2026-09-26).
+  "todo_write",
+  "skill",
 ]);
 
 /** File-mutating tools. */

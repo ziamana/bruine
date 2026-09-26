@@ -253,3 +253,13 @@ describe("parseArgs", () => {
     expect(parseArgs('{"command":"ls"}')).toEqual({ command: "ls" });
   });
 });
+
+describe("agent-internal tools never ask (real-server regression 2026-09-26)", () => {
+  for (const name of ["todo_write", "skill"]) {
+    for (const mode of ["ask", "auto"] as const) {
+      test(`${name} in ${mode} → allow`, () => {
+        expect(decide(name, {}, { mode, plan: false, sessionAllowed: new Set(), projectDir: "/p" })).toBe("allow");
+      });
+    }
+  }
+});

@@ -80,7 +80,10 @@ export class ChatTranscript extends Container {
       const block = child.render(rail === undefined ? inner : Math.max(1, width - 6));
       if (!block.length) continue;
       lines.push("");
-      if (rail !== undefined) lines.push(card(""));
+      // The rail runs the full height of the card, padding lines included (Aron: "la
+      // barre bleue ne va pas jusqu'au bout"); its gradient spans all of them.
+      const railSpan = block.length + 1;
+      if (rail !== undefined) lines.push(card(railPaint(rail, railChar, 0)));
       if ((child as { surface?: boolean }).surface === true) {
         // User prompt: a full-width tinted band (Nuage), one line of padding each
         // side, opening on the same 1-column accent as the console band.
@@ -115,12 +118,12 @@ export class ChatTranscript extends Container {
         if (rail === undefined) {
           lines.push(truncateToWidth(`  ${clean}`, width - 2));
         } else {
-          const colored = railPaint(rail, railChar, last === 0 ? 0 : i / last);
+          const colored = railPaint(rail, railChar, (i + 1) / railSpan);
           const body = `${colored} ${clean}`;
           lines.push(card(visibleWidth(body) > cardCells ? truncateToWidth(body, cardCells) : body));
         }
       }
-      if (rail !== undefined) lines.push(card(""));
+      if (rail !== undefined) lines.push(card(railPaint(rail, railChar, 1)));
     }
     return lines;
   }

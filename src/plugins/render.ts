@@ -174,7 +174,9 @@ export function attachTui(
         needBreak = false;
       }
       turnToolIds.push(id);
-      ui.addChat(comp);
+      // T28b.3: the question UI + echo line tell the story; never draw the
+      // ask_user_question tool header or its answers preview in the chat.
+      if (toolName !== "ask_user_question") ui.addChat(comp);
     }
     return comp;
   };
@@ -359,6 +361,7 @@ export function attachTui(
                 seconds: comp.seconds ?? 0,
                 comp: comp as unknown,
                 breakBefore: turnBreaks.has(id),
+                hidden: comp.tool === "ask_user_question",
               };
             })
             .filter((t) => t !== undefined);

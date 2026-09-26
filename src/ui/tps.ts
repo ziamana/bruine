@@ -82,12 +82,14 @@ export class TpsMeter {
       const cached = Number(usage.cacheReadTokens ?? 0);
       // pi-ai inputTokens EXCLUDES cached (BOS real capture): fresh = inp.
       // If a server includes cached (cached <= input), fresh = input - cached.
+      // T28b.6: prefill rate only interests when there was real prefill work:
+      // hide it below 512 NEW prompt tokens (a cache hit would read 36 tok/s).
       const fresh = Number.isFinite(cached)
         ? cached > inp
           ? Math.max(0, inp)
           : Math.max(0, inp - cached)
         : Math.max(0, inp);
-      this.#pp = preDt > 0 && fresh > 0 ? fresh / preDt : undefined;
+      this.#pp = preDt > 0 && fresh >= 512 ? fresh / preDt : undefined;
     }
     const cachedRaw = Number(usage.cacheReadTokens ?? NaN);
     if (Number.isFinite(cachedRaw) && Number.isFinite(inp)) {

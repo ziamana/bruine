@@ -100,7 +100,7 @@ export function shouldAnimateStartup(opts: {
   return true;
 }
 
-/** Host for header (T27.4): base URL hostname, or provider for cloud. */
+/** Host for header: base URL hostname, or provider for cloud (pure; tested). */
 export function headerHost(
   kumoJson?: { models?: { main?: { baseUrl?: string; provider?: string } } },
   fallbackProvider?: string,
@@ -134,6 +134,120 @@ export function readKumoJsonForHeader(dshHome?: string): {
   } catch {
     return undefined;
   }
+}
+
+export interface SettingsRoute {
+  provider: string;
+  model: string;
+  baseUrl?: string;
+  name?: string;
+  contextWindow?: number;
+}
+
+/** Minimal settings.yaml reader (T28b.1): default route + baseURL/name/window. No YAML dep. */
+export function readSettingsRoute(dshHome?: string): SettingsRoute | undefined {
+  try {
+    const home = dshHome ?? process.env.DSH_HOME ?? join(homedir(), ".kumo");
+    const p = join(home, "settings.yaml");
+    if (!existsSync(p)) return undefined;
+    const doc = parseKumoSettingsYaml(readFileSync(p, "utf8"));
+    if (doc === undefined) return undefined;
+    return doc;
+  } catch {
+    return undefined;
+  }
+}
+
+function unquoteYaml(s: string): string | number {
+  const t = s.trim();
+  if (t.length >= 2 && t.startsWith("'") && t.endsWith("'")) return t.slice(1, -1).replace(/''/g, "'");
+  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) {
+    try {
+      return JSON.parse(t) as string;
+    } catch {
+      return t.slice(1, -1);
+    }
+  }
+  if (/^-?\d+$/.test(t)) return Number(t);
+  return t;
+}
+
+function parseKumoSettingsYaml(text: string): SettingsRoute | undefined {
+  const lines = text.split(/\r?\n/);
+  // Indentation stack of {indent, kind, obj} for maps and model list items.
+  interface Frame {
+    indent: number;
+    obj: Record<string, unknown>;
+  }
+  const root: Record<string, unknown> = {};
+  const stack: Frame[] = [{ indent: -1, obj: root }];
+  let providers: Record<string, unknown> | undefined;
+  let currentModelItem: Record<string, unknown> | undefined;
+  const top = (): Frame => stack[stack.length - 1]!;
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/#.*$/, "");
+    if (line.trim() === "") continue;
+    const indent = line.search(/\S/);
+    const content = line.trim();
+    while (stack.length > 1 && indent <= top().indent) {
+      const popped = stack.pop()!;
+      if (popped.obj === currentModelItem) currentModelItem = undefined;
+    }
+    if (content.startsWith("- ")) {
+      const item: Record<string, unknown> = {};
+      const rest = content.slice(2).trim();
+      if (rest !== "") {
+        const m = /^([^:]+):\s*(.*)$/.exec(rest);
+        if (m !== null) item[m[1]!.trim()] = unquoteYaml(m[2] ?? "");
+      }
+      const parent = top().obj;
+      // The `models:` line itself created a placeholder map; a list takes over.
+      let arr = parent.models;
+      if (!Array.isArray(arr)) {
+        arr = [];
+        parent.models = arr;
+      }
+      (arr as Array<Record<string, unknown>>).push(item);
+      stack.push({ indent, obj: item });
+      currentModelItem = item;
+      continue;
+    }
+    const m = /^([^:]+):\s*(.*)$/.exec(content);
+    if (m === null) continue;
+    const key = m[1]!.trim();
+    const value = m[2] ?? "";
+    if (value !== "") {
+      top().obj[key] = unquoteYaml(value);
+      currentModelItem = undefined;
+    } else {
+      const child: Record<string, unknown> = {};
+      top().obj[key] = child;
+      stack.push({ indent, obj: child });
+      if (key === "providers") providers = child;
+      currentModelItem = undefined;
+    }
+  }
+  const agent = root["agent-default-model"] as Record<string, unknown> | undefined;
+  const provider = typeof agent?.provider === "string" ? (agent.provider as string) : undefined;
+  const model = typeof agent?.model === "string" ? (agent.model as string) : undefined;
+  if (provider === undefined || model === undefined) return undefined;
+  const pi = root["llm-pi-ai"] as Record<string, unknown> | undefined;
+  const provs = pi?.providers as Record<string, Record<string, unknown>> | undefined;
+  const route = provs?.[provider] as Record<string, unknown> | undefined;
+  const baseUrl = typeof route?.baseURL === "string" ? (route.baseURL as string) : undefined;
+  const models = Array.isArray(route?.models) ? (route.models as Array<Record<string, unknown>>) : [];
+  const entry =
+    models.find((e) => typeof e.id === "string" && (e.id as string) === model) ?? models[0];
+  const name = entry !== undefined && typeof entry.name === "string" ? (entry.name as string) : undefined;
+  const contextWindow =
+    entry !== undefined && typeof entry.contextWindow === "number" ? (entry.contextWindow as number) : undefined;
+  return {
+    provider,
+    model,
+    ...(baseUrl !== undefined ? { baseUrl } : {}),
+    ...(name !== undefined ? { name } : {}),
+    ...(contextWindow !== undefined ? { contextWindow } : {}),
+  };
 }
 
 /**
@@ -187,18 +301,30 @@ export class KumoUi {
     this.footer = new FooterComponent(icons);
     this.noticeBox = new NoticeBox();
     try {
-      const doc = readKumoJsonForHeader();
-      const main = doc?.models?.main;
-      if (main !== undefined) {
-        const init: Record<string, unknown> = {};
-        if (typeof main.model === "string" && main.model !== "") init.model = main.model;
-        if (typeof main.name === "string" && main.name !== "") init.modelName = main.name;
-        if (typeof main.provider === "string" && main.provider !== "") init.provider = main.provider;
-        if (typeof main.contextWindow === "number" && main.contextWindow > 0) {
-          init.contextWindow = main.contextWindow;
+      // T28b.1: settings.yaml is the source of truth; kumo.json only a fallback.
+      const route = readSettingsRoute();
+      if (route !== undefined) {
+        const init: Record<string, unknown> = { model: route.model, provider: route.provider };
+        if (route.name !== undefined) init.modelName = route.name;
+        if (route.contextWindow !== undefined && route.contextWindow > 0) {
+          init.contextWindow = route.contextWindow;
           init.contextUsed = 0;
         }
-        if (Object.keys(init).length > 0) this.footer.set(init as never);
+        this.footer.set(init as never);
+      } else {
+        const doc = readKumoJsonForHeader();
+        const main = doc?.models?.main;
+        if (main !== undefined) {
+          const init: Record<string, unknown> = {};
+          if (typeof main.model === "string" && main.model !== "") init.model = main.model;
+          if (typeof main.name === "string" && main.name !== "") init.modelName = main.name;
+          if (typeof main.provider === "string" && main.provider !== "") init.provider = main.provider;
+          if (typeof main.contextWindow === "number" && main.contextWindow > 0) {
+            init.contextWindow = main.contextWindow;
+            init.contextUsed = 0;
+          }
+          if (Object.keys(init).length > 0) this.footer.set(init as never);
+        }
       }
     } catch {
       // startup footer is best effort; repl sets model/provider shortly after
@@ -376,13 +502,23 @@ export class KumoUi {
     this.requestRender();
   }
 
-  /** Header first line (T27.4): `kumo  ·  <model>  ·  <host>` + dim version. */
+  /** Header first line (T27.4, T28b.1): settings route first, kumo.json fallback. */
   headerFirstLine(): string {
     const st = this.footer.state;
     const model = displayModel(st.model, st.modelName);
     if (this.#cachedHost === undefined) {
-      const doc = readKumoJsonForHeader();
-      this.#cachedHost = headerHost(doc, st.provider);
+      let host: string | undefined;
+      try {
+        const route = readSettingsRoute();
+        if (route?.baseUrl !== undefined && route.baseUrl !== "") {
+          host = new URL(route.baseUrl).hostname;
+        } else if (route?.provider !== undefined && route.provider !== "" && route.provider !== "local") {
+          host = route.provider;
+        }
+      } catch {
+        host = undefined;
+      }
+      this.#cachedHost = host ?? headerHost(readKumoJsonForHeader(), st.provider);
     }
     const host = this.#cachedHost ?? "?";
     const sep = this.icons.think === "*" ? "-" : "·";
@@ -430,7 +566,7 @@ export class KumoUi {
 
   /** Turn end from render (T27.2+3): collapse groups + summary line. */
   onTurnEnd(info: {
-    tools: Array<{ tool: string; ok: boolean; seconds: number; comp: unknown; breakBefore?: boolean }>;
+    tools: Array<{ tool: string; ok: boolean; seconds: number; comp: unknown; breakBefore?: boolean; hidden?: boolean }>;
     wallSec: number;
     outputTokens: number;
     cancelled: boolean;
@@ -477,6 +613,15 @@ export class KumoUi {
       }
     };
     for (const t of info.tools) {
+      if (t.hidden === true) {
+        if (segment.length > 0) {
+          flushSegment();
+          segment = [];
+        }
+        offset += 1;
+        segStart = offset;
+        continue;
+      }
       if (t.breakBefore === true && segment.length > 0) {
         flushSegment();
         segment = [];

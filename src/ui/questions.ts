@@ -23,10 +23,9 @@ export interface QuestionAnswer {
 
 const OTHER_LABEL = "Other…";
 
-/** Truncate question for chat echo: `? Which database… → SQLite`. */
+/** Chat echo line: `? Which database should I use? → SQLite` (chat clips to width). */
 export function echoLine(question: string, answer: string): string {
-  const q = question.length > 18 ? `${question.slice(0, 17)}…` : question;
-  return `? ${q} → ${answer}`;
+  return `? ${question} → ${answer}`;
 }
 
 function padCells(text: string, width: number): string {
@@ -91,7 +90,8 @@ export class QuestionForm implements Component {
       }
     });
     lines.push("", ansi.dim("↑↓ move · Enter choose · Space toggle (multi) · Esc skip"));
-    return lines.map((l) => l.slice(0, Math.max(1, width)));
+    // Same 2-column left padding as the chat transcript (T28b.5).
+    return lines.map((l) => `  ${l}`.slice(0, Math.max(3, width)));
   }
 
   invalidate(): void {}

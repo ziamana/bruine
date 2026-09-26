@@ -64,8 +64,10 @@ describe("QuestionForm (T28A)", () => {
     expect(f.index).toBe(0);
   });
 
-  test("echoLine truncates with arrow", () => {
-    expect(echoLine("Which database should I use for the cache?", "SQLite")).toBe("? Which database sh… → SQLite");
+  test("echoLine uses the full width with arrow", () => {
+    expect(echoLine("Which database should I use for the cache?", "SQLite")).toBe(
+      "? Which database should I use for the cache? → SQLite",
+    );
   });
 
   test("suggestions toggle merges into kumo.json, default true", async () => {

@@ -253,6 +253,16 @@ describe("TpsMeter (T25.1, honest per-call numbers)", () => {
     n.usage(1100, { outputTokens: 5, inputTokens: 100 });
     expect(n.cachePct).toBeUndefined();
   });
+
+  test("pp hidden below 512 new tokens (T28b.6)", () => {
+    const m = new TpsMeter();
+    m.startCall(0);
+    m.delta(1000);
+    m.delta(1100);
+    m.usage(1200, { outputTokens: 10, inputTokens: 100, cacheReadTokens: 0 });
+    expect(m.pp).toBeUndefined();
+    expect(m.tps).toBeGreaterThan(0);
+  });
 });
 
 describe("FooterComponent (T25.2)", () => {
@@ -429,6 +439,32 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     expect(shouldAnimateStartup({ stdoutTTY: true, env: {}, ascii: false })).toBe(true);
     expect(headerHost({ models: { main: { baseUrl: "http://192.168.1.64:8081/v1" } } }, "local")).toBe("192.168.1.64");
     expect(headerHost({ models: { main: { provider: "openrouter" } } }, undefined)).toBe("openrouter");
+  });
+
+  test("settings.yaml-only home resolves host, pretty name and window (T28b.1)", async () => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { readSettingsRoute } = await import("../src/ui/kumo-ui.js");
+    const home = await mkdtemp(join(tmpdir(), "kumo-set-"));
+    await writeFile(
+      join(home, "settings.yaml"),
+      `llm-pi-ai:\n  providers:\n    local:\n      baseURL: 'http://192.168.1.64:8081/v1'\n      models:\n      - id: 'Ornith-1.5-9B-Q4_K_M.gguf'\n        name: 'Ornith 1.5 9B'\n        contextWindow: 100000\nagent-default-model:\n  provider: 'local'\n  model: 'Ornith-1.5-9B-Q4_K_M.gguf'\n`,
+    );
+    const prev = process.env.DSH_HOME;
+    process.env.DSH_HOME = home;
+    try {
+      expect(readSettingsRoute()).toEqual({
+        provider: "local",
+        model: "Ornith-1.5-9B-Q4_K_M.gguf",
+        baseUrl: "http://192.168.1.64:8081/v1",
+        name: "Ornith 1.5 9B",
+        contextWindow: 100000,
+      });
+    } finally {
+      if (prev === undefined) delete process.env.DSH_HOME;
+      else process.env.DSH_HOME = prev;
+    }
   });
 
   test("ctrl+o toggles tools collapsed flag (T27.2)", async () => {

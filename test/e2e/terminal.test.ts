@@ -251,8 +251,8 @@ test("cache-context: cached 9000/input 100 counts cached in ctx (T27b.2)", async
     await h.prompt("Check context");
     await h.waitFor("CTX_DONE");
     await h.waitStable(400, 2000);
-    // 100 + 9000 + 50 = 9150 / 262k ≈ 3.5% (old input+output only would show 0.1%)
-    expect(footer(h)).toContain("3.5%");
+    // 100 + 9000 + 50 = 9150 / 100k ≈ 9.1-9.2% (old input+output only would show 0.1%)
+    expect(footer(h)).toContain("ctx 9.");
     expect(footer(h)).toContain("cache");
   });
 });

@@ -1,0 +1,2 @@
+docs/guides/deploy.md
+docs/guides/getting-started.md

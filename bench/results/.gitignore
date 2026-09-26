@@ -1,0 +1,4 @@
+# T36 — bench results are measurements, not source: the numbers are kept out of
+# git (a 20-task x 3-repeat run is ~60 rows) and the directory is kept.
+*.jsonl
+!.gitignore

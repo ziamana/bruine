@@ -4,14 +4,14 @@
 # and the tools array are byte-identical all session long — modes are a
 # kumo-side gate + appended messages, never a prompt/tool swap.
 
+# T36: only the harness identity is switched off here. The persona itself is
+# composed at boot by src/profile.ts into the profile's own patch layer, where
+# it carries the model's display name (a local route's model id is a .gguf
+# path) — and where the kumo-bench system-prompt variants are applied, without
+# ever editing this file or dsh.
 - id: system-prompt
   config:
     includeHarnessIdentity: false
-    personaPrefix: >-
-      You are kumo, a terminal coding agent powered by {{model}}. Be short and
-      direct: answer first, detail only when asked. Reply in the user's
-      language. Never use emojis. Only mention tools you actually have.
-    personaSuffix: Your working directory is {{cwd}}.
 
 # kumo's own search provider (SearXNG / Brave / Tavily, configured in
 # kumo.json; "none" by default). Never dsh-free-search. The provider registers

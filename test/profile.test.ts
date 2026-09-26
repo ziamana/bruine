@@ -39,7 +39,10 @@ describe("ensureProfile", () => {
 
     const patch = await readFile(join(result.dir, "cordis.patch.yml"), "utf8");
     expect(patch).toContain("# kumo user overrides. Edit this file, not cordis.yml.");
-    expect(patch.trimEnd().endsWith("[]")).toBe(true);
+    // T36: the persona row is kumo's, not the bare `[]` placeholder.
+    expect(patch).toContain("- id: system-prompt");
+    expect(patch).toContain("includeHarnessIdentity: false");
+    expect(patch).toContain("Your working directory is {{cwd}}.");
 
     const managed = await readFile(join(result.dir, "cordis.yml"), "utf8");
     expect(managed).toContain("# managed by dsh, do not edit");

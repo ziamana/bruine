@@ -1,0 +1,5 @@
+# T36 — "match the surrounding code": one line appended to the persona.
+name: style
+note: match existing style, change only what the task needs
+add:
+  - "Match the existing code style and structure; change only what the task needs."

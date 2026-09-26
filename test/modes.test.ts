@@ -31,7 +31,7 @@ const llmReturning = (text: string): any => ({
 describe("kumo gate (T16.C)", () => {
   test("ask mode: bash asks, read-only allows", async () => {
     const { modes, preExecute } = harness();
-    expect(modes.permission).toBe("ask");
+    modes.permission = "ask";
     expect((await preExecute("bash", { command: "ls" })).kind).toBe("ask");
     expect((await preExecute("read", { path: "a" })).kind).toBe("allow");
     expect(modes.log.length).toBe(2);
@@ -42,6 +42,33 @@ describe("kumo gate (T16.C)", () => {
     const d = await preExecute("bash", { command: "ls" }, "c9", otherAgent);
     expect(d.kind).toBe("delegate");
   });
+});
+  test("default permission is auto for fresh installs, existing ask is kept (T31.4)", async () => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const prev = process.env.DSH_HOME;
+    const fresh = await mkdtemp(join(tmpdir(), "kumo-fresh-"));
+    process.env.DSH_HOME = fresh;
+    try {
+      const { Modes } = await import("../src/plugins/modes.js");
+      const { apply } = await import("../src/plugins/modes.js");
+      const { fakeCtx } = await import("./fakes.js");
+      const mkModes = async (): Promise<string> => {
+        const fake = fakeCtx();
+        apply(fake.ctx as never);
+        const modes = fake.provided.get("kumoModes") as { permission: string };
+        return modes.permission;
+      };
+      expect(await mkModes()).toBe("auto");
+      expect(Modes).toBeDefined();
+      await writeFile(join(fresh, "kumo.json"), JSON.stringify({ access: "ask" }));
+      expect(await mkModes()).toBe("ask");
+    } finally {
+      if (prev === undefined) delete process.env.DSH_HOME;
+      else process.env.DSH_HOME = prev;
+    }
+  });
 
   test("full access: nothing asks", async () => {
     const { modes, preExecute } = harness();
@@ -51,6 +78,7 @@ describe("kumo gate (T16.C)", () => {
 
   test("plan mode denies mutations and announces as appended messages", async () => {
     const { modes, preExecute, injected } = harness();
+    modes.permission = "ask";
     modes.togglePlan();
     expect(injected.length).toBe(1);
     const msg: any = injected[0];
@@ -83,6 +111,7 @@ describe("kumo gate (T16.C)", () => {
 
   test("Always for this session bypasses later asks for the SAME full command", async () => {
     const { modes, preExecute } = harness();
+    modes.permission = "ask";
     const first = await preExecute("bash", { command: "npm test" }, "call-7");
     expect(first.kind).toBe("ask");
     modes.rememberFor("call-7");
@@ -103,7 +132,6 @@ describe("kumo gate (T16.C)", () => {
     expect(modes.runCommand("/nope")).toBeUndefined();
     expect(modes.runCommand("/permissions")).toContain("No permission decisions yet");
   });
-});
 
 describe("Modes class", () => {
   test("cyclePermission: ask → auto → full (with confirm) → ask", async () => {

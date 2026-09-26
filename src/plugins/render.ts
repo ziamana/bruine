@@ -77,6 +77,7 @@ export function attachTui(
   agent: { session: any },
   ui: NonNullable<KumoRepl["ui"]>,
   service: RenderService,
+  getAgent?: () => { session: any },
 ): () => void {
   const tps = new TpsMeter();
   const tools = new Map<string, ToolCallComponent>();
@@ -181,8 +182,16 @@ export function attachTui(
     return comp;
   };
 
+  const liveAgent = (): { session: any } => {
+    try {
+      return getAgent?.() ?? agent;
+    } catch {
+      return agent;
+    }
+  };
+
   const offStream = ctx.on("agent/assistant-stream", ({ agent: subject, frame }: any) => {
-    if (subject !== agent) return;
+    if (subject !== liveAgent()) return;
     const f = frame as StreamFrame;
     const now = typeof f.time === "number" ? f.time : Date.now();
     if (f.type === "start") {
@@ -272,7 +281,7 @@ export function attachTui(
   });
 
   const offSession = ctx.on("session/event", (session: unknown, event: SessionEvent) => {
-    if (session !== agent.session) return;
+    if (session !== liveAgent().session) return;
     switch (event.type) {
       case "user/message": {
         // Only echo real user input; dsh injects reminders as plugin/system
@@ -604,7 +613,9 @@ export function apply(ctx: DshContext): void {
     ctx.inject(["kumoRepl"], (c: any) => {
       const repl: KumoRepl | undefined = c.kumoRepl;
       if (repl?.agent !== undefined && repl.ui !== undefined) {
-        attachTui(ctx, repl.agent, repl.ui, service);
+        // Follow service.agent live so /new (same service object, new agent)
+        // keeps rendering without re-provisioning (Cordis forbids re-provide).
+        attachTui(ctx, repl.agent, repl.ui, service, () => repl.agent);
       }
     });
     return;

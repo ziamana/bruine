@@ -7,8 +7,11 @@ import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { kumoIcons } from "../render/chars.js";
 import { KumoUi } from "../ui/kumo-ui.js";
-import { KUMO_MODES_SERVICE } from "./modes.js";
+import { KUMO_MODES_SERVICE, NOTICE_ASK, NOTICE_AUTO, NOTICE_FULL } from "./modes.js";
 import { KUMO_RENDER_SERVICE } from "./render.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type { DshContext, KumoRepl, KumoStartup } from "./ctx.js";
 
 const require = createRequire(import.meta.url);
@@ -24,6 +27,39 @@ export const inject = ["agentDefaultModel", "agents", "sessions"];
 export const KUMO_REPL_SERVICE = "kumoRepl";
 
 const EXIT_COMMANDS = new Set(["/exit", "/quit"]);
+
+/** kumo's own slash commands (T31.1): source of truth for the palette. */
+export const KUMO_COMMANDS: Array<{ name: string; description?: string }> = [
+  { name: "/new", description: "Start a new conversation" },
+  { name: "/compact", description: "Summarize the conversation to free context" },
+  { name: "/plan", description: "Toggle Plan / Build (also Shift+Tab)" },
+  { name: "/permissions", description: "Choose Ask / Auto / Full access" },
+  { name: "/auto", description: "Switch permissions directly" },
+  { name: "/ask", description: "Switch permissions directly" },
+  { name: "/full", description: "Switch permissions directly" },
+  { name: "/skills", description: "List the enabled skills" },
+  { name: "/help", description: "Show commands and keys" },
+  { name: "/exit", description: "Quit kumo (also ctrl+d)" },
+];
+
+/** Palette merge helper: kumo's commands plus dsh's, no duplicates (kumo wins). */
+export function mergeCommands(
+  dsh: Array<{ name?: unknown; description?: unknown }>,
+): Array<{ name: string; description?: string }> {
+  const seen = new Set(KUMO_COMMANDS.map((c) => c.name));
+  const out = [...KUMO_COMMANDS];
+  for (const d of dsh) {
+    if (typeof d?.name !== "string") continue;
+    const name = d.name.startsWith("/") ? d.name : `/${d.name}`;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    out.push({
+      name,
+      ...(typeof d.description === "string" && d.description !== "" ? { description: d.description } : {}),
+    });
+  }
+  return out;
+}
 
 /** The terminal line source the loop drives; readline in production, fakes in tests. */
 export interface LineSource {
@@ -123,6 +159,22 @@ export class Repl {
     // No extra flush here: every turn already flushed, and a second
     // sessions.flush on the same session hangs in dsh rc.3.
     this.#deps.appExit(0);
+  }
+
+  /** True while a turn is running (T31.2: /new waits or asks first). */
+  isInTurn(): boolean {
+    return this.#inTurn;
+  }
+
+  /** Settle when the running turn (if any) finishes. */
+  async idle(): Promise<void> {
+    const p = this.#turnPromise;
+    if (p !== undefined) await p.catch(() => {});
+  }
+
+  /** Retire this loop without exiting (T31.2: replaced on /new). */
+  stop(): void {
+    this.#done = true;
   }
 
   async #flushQuietly(): Promise<void> {
@@ -236,7 +288,8 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   if (sessions === undefined) return;
   const created = await createAgent(ctx);
   if (created === undefined) return;
-  const { agent, selection } = created;
+  let { agent } = created;
+  const { selection } = created;
 
   const followup = (text: string): void => {
     agent.followup(
@@ -248,25 +301,128 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   };
   const flush = (session: unknown): Promise<unknown> => sessions.flush(session);
 
-  // Slash-command router: /exit is handled by Repl itself; /plan and
-  // /permissions go to kumoModes (T16).
+  /** Palette items: kumo's commands plus dsh's, no duplicates (kumo wins). */
+  const completeCommandList = (): Array<{ name: string; description?: string }> => {
+    try {
+      const svc = ctx.get("commands") as
+        | { list?: (agent: unknown) => Array<{ name?: unknown; description?: unknown }> }
+        | undefined;
+      return mergeCommands(svc?.list?.(agent) ?? []);
+    } catch {
+      // palette works with kumo's own commands alone
+      return [...KUMO_COMMANDS];
+    }
+  };
+
+  // Slash-command router: /exit is handled by Repl itself; the rest is
+  // answered here and never sent to the model (except unknown → notice).
   const modes = (): any => ctx.get(KUMO_MODES_SERVICE);
-  const router = (
+  let repl: Repl | undefined;
+  let ui: KumoUi | undefined;
+  let startNewConversation: () => Promise<void> = async () => {};
+  const setPermission = (next: "ask" | "auto" | "full"): void => {
+    const m = modes();
+    if (m === undefined || m === null) return;
+    m.permission = next;
+    m.notifyChange?.();
+    if (next === "ask") m.showNotice?.(NOTICE_ASK);
+    else if (next === "auto") m.showNotice?.(NOTICE_AUTO);
+    else m.showNotice?.(NOTICE_FULL, { red: true });
+  };
+  const router = async (
     text: string,
     emitLine: (t: string) => void,
     reply: (s: string) => void,
-  ): void => {
+  ): Promise<void> => {
     const trimmed = text.trim();
-    if (trimmed.startsWith("/") && !EXIT_COMMANDS.has(trimmed)) {
-      const r: string | undefined = modes()?.runCommand?.(trimmed);
+    if (!trimmed.startsWith("/")) {
+      emitLine(text);
+      return;
+    }
+    // Tolerate doubled slashes from completion quirks (//auto → /auto).
+    const clean = `/${trimmed.replace(/^\/+/, "")}`;
+    const [cmd] = clean.split(/\s+/);
+    if (EXIT_COMMANDS.has(clean)) {
+      emitLine(clean);
+      return;
+    }
+    if (cmd === "/plan") {
+      const r: string | undefined = modes()?.runCommand?.(clean);
       if (r !== undefined) {
         reply(r);
         return;
       }
-      reply(`Unknown command "${trimmed}". Available: /plan, /permissions, /exit`);
+    }
+    if (cmd === "/permissions") {
+      if (ui === undefined) {
+        const r: string | undefined = modes()?.runCommand?.(clean);
+        if (r !== undefined) reply(r);
+        return;
+      }
+      const m = modes();
+      const current: string = m?.permission ?? "ask";
+      const choice = await ui.askChoice("Permissions", [
+        { value: "ask", label: `Ask: confirm every command and write${current === "ask" ? " (current)" : ""}` },
+        { value: "auto", label: `Auto: kumo decides, risky actions still ask${current === "auto" ? " (current)" : ""}` },
+        { value: "full", label: `Full access: never asks${current === "full" ? " (current)" : ""}` },
+      ]);
+      if (choice === 0) setPermission("ask");
+      else if (choice === 1) setPermission("auto");
+      else if (choice === 2) {
+        const ok = await ui.confirmFullAccess();
+        if (ok) setPermission("full");
+      }
       return;
     }
-    emitLine(text);
+    if (cmd === "/ask" || cmd === "/auto" || cmd === "/full") {
+      if (cmd === "/full") {
+        if (ui !== undefined) {
+          if (!(await ui.confirmFullAccess())) return;
+        }
+        setPermission("full");
+      } else {
+        setPermission(cmd === "/ask" ? "ask" : "auto");
+      }
+      return;
+    }
+    if (cmd === "/help") {
+      reply(
+        [
+          "/new  Start a new conversation",
+          "/compact  Summarize the conversation to free context",
+          "/plan  Toggle Plan / Build (also Shift+Tab)",
+          "/permissions  Choose Ask / Auto / Full access",
+          "/auto /ask /full  Switch permissions directly",
+          "/skills  List the enabled skills",
+          "/help  Show commands and keys",
+          "/exit  Quit kumo (also ctrl+d)",
+          "Esc interrupt, ctrl+c clear, ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools",
+        ].join("\n"),
+      );
+      return;
+    }
+    if (cmd === "/skills") {
+      let names: string[] = [];
+      try {
+        const home = process.env.DSH_HOME ?? join(homedir(), ".kumo");
+        const doc = JSON.parse(readFileSync(join(home, "kumo.json"), "utf8")) as { skills?: unknown };
+        if (Array.isArray(doc.skills)) names = doc.skills.filter((s): s is string => typeof s === "string");
+      } catch {
+        names = [];
+      }
+      reply(names.length > 0 ? `Enabled skills: ${names.join(", ")}` : "No skills enabled.");
+      return;
+    }
+    if (cmd === "/compact") {
+      reply("Compact summaries are handled automatically by dsh; manual /compact is not wired in this build.");
+      return;
+    }
+    if (cmd === "/new") {
+      await startNewConversation();
+      return;
+    }
+    ui?.showNotice(`Unknown command ${clean}. Type / to see the list.`);
+    if (ui === undefined) reply(`Unknown command "${clean}". Available: /plan, /permissions, /exit`);
   };
 
   const isTTY = process.stdin.isTTY === true && process.stdout.isTTY === true;
@@ -274,7 +430,6 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   if (isTTY) {
     // pi-tui shell (T13a): header / chat / editor / footer.
     const emitter = new LineEmitter();
-    let ui: KumoUi | undefined;
     ui = new KumoUi(
       pkg.version,
       {
@@ -282,7 +437,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           ctx.get(KUMO_RENDER_SERVICE)?.cancelSuggest?.();
           ui?.clearGhost();
           if (text.trim() !== "" && ui !== undefined) ui.rememberHistory(text);
-          router(text, (t) => emitter.emitLine(t), (s) => {
+          void router(text, (t) => emitter.emitLine(t), (s) => {
             ui?.addChat(new Text(s, 1, 0));
             ui?.requestRender();
           });
@@ -293,17 +448,18 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         },
         onEscape: () => emitter.emitSigint(),
         onQuit: () => emitter.emitClose(),
-        // T16: Tab toggles Plan/Build, Shift+Tab cycles Ask/Auto/Full.
-        onTab: () => modes()?.togglePlan?.(),
+        // T31.4: Shift+Tab toggles Plan/Build. Tab is completion only.
         onShiftTab: () => {
-          void modes()?.cyclePermission?.();
+          modes()?.togglePlan?.();
+          ui?.requestRender();
         },
       },
       undefined,
       kumoIcons(),
     );
     ui.footer.set({ model: selection.model, provider: selection.provider });
-    const repl = new Repl({
+    ui.setAutocompleteCommands(completeCommandList());
+    repl = new Repl({
       agent,
       followup,
       flush,
@@ -314,6 +470,53 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     });
     const service: KumoRepl = { agent, ui };
     ctx.provide(KUMO_REPL_SERVICE, service);
+
+    startNewConversation = async (): Promise<void> => {
+      if (ui === undefined || repl === undefined) return;
+      if (repl.isInTurn()) {
+        const choice = await ui.askChoice("A reply is running. Stop it and start a new conversation? (y/N)", [
+          { value: "no", label: "No, keep going" },
+          { value: "yes", label: "Yes, stop it" },
+        ]);
+        if (choice !== 1) return;
+        agent.cancel({ kind: "user" });
+        await repl.idle();
+      }
+      await flush(agent.session);
+      const created2 = await createAgent(ctx);
+      if (created2 === undefined || ui === undefined) {
+        ui?.showNotice("Could not start a new conversation.");
+        return;
+      }
+      repl.stop();
+      agent = created2.agent;
+      service.agent = created2.agent;
+      const m = modes();
+      if (m !== undefined && m !== null) {
+        m.plan = false;
+        m.notifyChange?.();
+      }
+      ui.clearChat();
+      ui.footer.set({ contextUsed: 0, contextWindow: 0, tps: 0, pp: undefined, cachePct: undefined });
+      ui.updateHeader();
+      ui.showNotice("New conversation.");
+      const fresh = new Repl({
+        agent: created2.agent,
+        followup: (t: string) => {
+          created2.agent.followup(
+            createUserMessage({ content: [{ type: "text", text: t }], source: { kind: "user" } }),
+          );
+        },
+        flush,
+        appExit: (code: number) => {
+          void ui?.shutdown().finally(() => gracefulExit(exit)(code));
+        },
+        lines: emitter.source(),
+      });
+      repl = fresh;
+      await fresh.run();
+    };
+
     ui.start();
     await repl.run(startup?.initialPrompt);
     return;
@@ -332,13 +535,13 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   ctx.provide(KUMO_REPL_SERVICE, service);
   const base = readlineSource(rl);
   const wrapped: LineSource = {
-    onLine: (cb) => base.onLine((line) => router(line, cb, (s) => console.log(s))),
+    onLine: (cb) => base.onLine((line) => void router(line, cb, (s) => console.log(s))),
     onClose: base.onClose,
     onSigint: base.onSigint,
     pause: base.pause,
     resume: base.resume,
   };
-  const repl = new Repl({
+  repl = new Repl({
     agent,
     followup,
     flush,

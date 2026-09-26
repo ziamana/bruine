@@ -167,14 +167,14 @@ it("Ask footer label: always shows dim ask (fixed by T23)", async () => {
   });
 });
 
-test("modes: keys change actual tool permissions as well as colored labels", async () => {
+test("modes: Shift+Tab Plan/Build and /auto /ask /full change real permissions", async () => {
   await scenario("modes", [
     toolScript("write", { file_path: "plan.txt", content: "denied" }, "plan_call"), textScript("PLAN_DONE"),
     toolScript("write", { file_path: "auto.txt", content: "AUTO_WORKS" }, "auto_call"), textScript("AUTO_DONE"),
     toolScript("write", { file_path: "full.txt", content: "FULL_WORKS" }, "full_call"), textScript("FULL_DONE"),
   ], async (h) => {
     const chatModeLines = () => h.screen().filter((line) => /^  ›/.test(line) && /mode|access/i.test(line));
-    h.press("tab");
+    h.press("shiftTab");
     await h.until(() => /^ask  plan\b/.test(footer(h)), 2000, "Plan label");
     await h.waitFor("Plan mode: kumo reads and plans");
     expect(chatModeLines()).toEqual([]);
@@ -187,11 +187,11 @@ test("modes: keys change actual tool permissions as well as colored labels", asy
     await h.dump("t23-after-plan-denies-write");
     expect(h.exit).toBeUndefined(); // Long denial must not crash the renderer.
     expect(chatModeLines()).toEqual([]);
-    h.press("tab");
+    h.press("shiftTab");
     await h.until(() => /^ask\b/.test(footer(h)), 2000, "Build");
     await h.waitFor("Build mode: kumo can change files again.");
     expect(chatModeLines()).toEqual([]);
-    h.press("shiftTab");
+    await h.prompt("/auto");
     await h.until(() => /^auto\b/.test(footer(h)), 2000, "Auto");
     await h.waitFor("Auto: kumo decides, risky actions still ask.");
     expect(chatModeLines()).toEqual([]);
@@ -200,7 +200,12 @@ test("modes: keys change actual tool permissions as well as colored labels", asy
     await h.prompt("Write auto.txt");
     await h.waitFor("AUTO_DONE");
     expect(readFileSync(join(h.project, "auto.txt"), "utf8")).toBe("AUTO_WORKS");
-    h.press("shiftTab");
+    await h.prompt("/permissions");
+    await h.waitFor("Ask: confirm every command");
+    expect(footer(h)).toMatch(/^auto\b/);
+    h.press("escape");
+    await delay(200);
+    await h.prompt("/full");
     await h.waitFor("Enable full access?");
     await h.waitFor("Cancel");
     await h.waitFor("Enable");
@@ -216,6 +221,8 @@ test("modes: keys change actual tool permissions as well as colored labels", asy
     await h.prompt("Write full.txt");
     await h.waitFor("FULL_DONE");
     expect(readFileSync(join(h.project, "full.txt"), "utf8")).toBe("FULL_WORKS");
+    await h.prompt("/ask");
+    await h.until(() => /^ask\b/.test(footer(h)) && !/^ask  plan/.test(footer(h)), 2000, "Ask again");
     await h.dump("t23-after-full-allows-write");
   });
 });
@@ -534,5 +541,73 @@ test("suggest: typing first cancels, server sees closed (T28B)", async () => {
     const sg = all.filter((r) => JSON.stringify(r.body.messages ?? "").includes("Suggest"));
     expect(sg.length).toBeGreaterThanOrEqual(1);
     expect(sg.some((r) => r.disconnected)).toBe(true);
+  });
+});
+
+test("palette: / lists 7+ items, co filters to /compact, Tab completes (T31.1)", async () => {
+  await scenario("palette", [textScript("COMPACT_NOTICE_CHECK")], async (h) => {
+    h.type("/");
+    await h.waitFor("/new");
+    const listed = h.screen().filter((line) => /^\s*(→\s*)?\//.test(line)).length;
+    expect(listed).toBeGreaterThanOrEqual(7);
+    h.type("co");
+    await h.waitStable(300, 2000);
+    const items = h.screen().filter((line) => /^\s*(→\s*)?\//.test(line));
+    expect(items.length).toBeGreaterThanOrEqual(1);
+    expect(items.some((line) => line.includes("/compact"))).toBe(true);
+    expect(h.screen().find((line) => line.includes("→"))).toContain("/compact");
+    h.press("tab");
+    await delay(200);
+    h.press("enter");
+    await h.waitFor("not wired");
+    expect(h.server.mainRequests()).toHaveLength(0);
+  });
+});
+
+test("keys: Tab on empty editor changes nothing (T31.4)", async () => {
+  await scenario("tab-empty", [], async (h) => {
+    expect(h.server.mainRequests()).toHaveLength(0);
+    h.press("tab");
+    await delay(400);
+    await h.flush();
+    expect(h.server.mainRequests()).toHaveLength(0);
+    expect(footer(h)).not.toContain("plan");
+  });
+});
+
+test("/new: two turns, new conversation, next request has only new history (T31.2)", async () => {
+  await scenario("slash-new", [textScript("T1_DONE"), textScript("T2_DONE"), textScript("T3_DONE")], async (h) => {
+    await h.prompt("First hello");
+    await h.waitFor("T1_DONE");
+    await h.prompt("Second hello");
+    await h.waitFor("T2_DONE");
+    await h.prompt("/new");
+    await h.waitFor("New conversation.");
+    await h.prompt("Third hello");
+    await h.waitFor("T3_DONE");
+    const reqs = h.server.mainRequests();
+    expect(reqs.length).toBe(3);
+    const lastBody = JSON.stringify(reqs[2]!.body.messages);
+    expect(lastBody).toContain("Third hello");
+    expect(lastBody).not.toContain("First hello");
+    expect(lastBody).not.toContain("Second hello");
+    expect(h.screen().join("\n")).not.toContain("First hello");
+  });
+});
+
+test("unknown command shows notice and sends nothing (T31.1)", async () => {
+  await scenario("unknown-cmd", [], async (h) => {
+    await h.prompt("/xyz");
+    await h.waitFor("Unknown command /xyz");
+    expect(h.server.mainRequests()).toHaveLength(0);
+  });
+});
+
+test("/help prints commands and keys without model traffic (T31.3)", async () => {
+  await scenario("help", [], async (h) => {
+    await h.prompt("/help");
+    await h.waitFor("/compact");
+    expect(h.screen().join("\n")).toContain("ctrl+d");
+    expect(h.server.mainRequests()).toHaveLength(0);
   });
 });

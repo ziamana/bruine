@@ -305,6 +305,24 @@ describe("FooterComponent (T25.2)", () => {
     expect(f.render(100).map(strip)[0]).toContain("ctx 9.1% of 100k");
   });
 
+  test("footer colors: tok/s 10/20/45 and ctx 40/70/78 (T31.5)", async () => {
+    const { ASCII_ICONS } = await import("../src/render/chars.js");
+    const raw = (tps?: number, used?: number): string => {
+      const f = new FooterComponent(UNICODE_ICONS);
+      f.set({ model: "m", ...(tps !== undefined ? { tps } : {}), ...(used !== undefined ? { contextUsed: used, contextWindow: 100 } : {}) });
+      return f.render(120)[0]!;
+    };
+    expect(raw(10)).toContain("\x1b[31m10 tok/s");
+    expect(raw(20)).toContain("\x1b[33m20 tok/s");
+    expect(raw(45)).toContain("\x1b[32m45 tok/s");
+    expect(raw(undefined, 40)).toContain("\x1b[32mctx 40% of 100");
+    expect(raw(undefined, 70)).toContain("\x1b[33mctx 70% of 100");
+    expect(raw(undefined, 78)).toContain("\x1b[31mctx 78% of 100");
+    const a = new FooterComponent(ASCII_ICONS);
+    a.set({ model: "m", tps: 45, contextUsed: 78, contextWindow: 100 });
+    expect(a.render(120)[0]).not.toMatch(/\x1b\[/);
+  });
+
   test("renders placeholder state", () => {
     const f = new FooterComponent(UNICODE_ICONS);
     const line = f.render(80).map(strip)[0]!;
@@ -847,19 +865,34 @@ describe("T23 regressions", () => {
   });
   test("consumed key handlers request redraw and bypass editor input", async () => {
     const terminal = new FakeTerminal();
-    const tab = vi.fn(); const shiftTab = vi.fn();
-    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {}, onTab: tab, onShiftTab: shiftTab }, terminal, UNICODE_ICONS);
+    const shiftTab = vi.fn();
+    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {}, onShiftTab: shiftTab }, terminal, UNICODE_ICONS);
     const render = vi.spyOn(ui, "requestRender");
     ui.start();
     terminal.onInput?.("abc");
     terminal.onInput?.("\t");
     terminal.onInput?.("\x1b[Z");
-    expect(tab).toHaveBeenCalledOnce();
     expect(shiftTab).toHaveBeenCalledOnce();
     expect(ui.editor.getText()).toBe("abc");
     terminal.onInput?.("\x03");
     expect(ui.editor.getText()).toBe("");
-    expect(render).toHaveBeenCalledTimes(3);
+    expect(render).toHaveBeenCalledTimes(2);
     await ui.shutdown();
+  });
+});
+
+describe("slash autocomplete provider (T31.1)", () => {
+  test("empty prefix → null; / → 7+ items; /co → /compact first", async () => {
+    const { CombinedAutocompleteProvider } = await import("@earendil-works/pi-tui");
+    const { KUMO_COMMANDS } = await import("../src/plugins/repl.js");
+    const provider = new CombinedAutocompleteProvider(KUMO_COMMANDS, process.cwd());
+    const signal = new AbortController().signal;
+    expect(await provider.getSuggestions([""], 0, 0, { signal })).toBeNull();
+    const all = await provider.getSuggestions(["/"], 0, 1, { signal });
+    expect(all).not.toBeNull();
+    expect(all!.items.length).toBeGreaterThanOrEqual(7);
+    const co = await provider.getSuggestions(["/co"], 0, 3, { signal });
+    expect(co).not.toBeNull();
+    expect(co!.items[0]!.value).toBe("/compact");
   });
 });

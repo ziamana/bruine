@@ -178,7 +178,7 @@ describe("simpleSetup", () => {
     expect(asked).toHaveLength(1); // web search offer, default answer ""
     expect(asked[0]).toContain("Web search");
     const kumoJson = JSON.parse(await readFile(join(home, "kumo.json"), "utf8"));
-    expect(kumoJson).toEqual({ mode: "simple", search: { provider: "none" } });
+    expect(kumoJson).toEqual({ mode: "simple", permissionMode: "auto", search: { provider: "none" } });
     const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
     expect(parsed["agent-default-model"]).toEqual({ provider: "local", model: "llama3" });
     expect(parsed["llm-pi-ai"].providers.local.models).toEqual([{ id: "llama3", name: "llama3", reasoningEfforts: { off: null, low: "low" } }]);

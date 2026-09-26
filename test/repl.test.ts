@@ -203,3 +203,21 @@ describe("Repl", () => {
     expect(h.exits).toEqual([0]);
   });
 });
+
+describe("slash palette source of truth (T31.1)", () => {
+  test("kumo commands: 10 items incl. new/compact/help/exit", async () => {
+    const { KUMO_COMMANDS, mergeCommands } = await import("../src/plugins/repl.js");
+    expect(KUMO_COMMANDS).toHaveLength(10);
+    const names = KUMO_COMMANDS.map((c) => c.name);
+    for (const n of ["/new", "/compact", "/plan", "/permissions", "/auto", "/ask", "/full", "/skills", "/help", "/exit"]) {
+      expect(names).toContain(n);
+    }
+    const merged = mergeCommands([
+      { name: "plan", description: "dsh plan (shadowed)" },
+      { name: "commit", description: "dsh commit helper" },
+    ]);
+    expect(merged.filter((c) => c.name === "/plan")).toHaveLength(1);
+    expect(merged.find((c) => c.name === "/plan")?.description).toContain("Shift+Tab");
+    expect(merged.map((c) => c.name)).toContain("/commit");
+  });
+});

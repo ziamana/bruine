@@ -56,15 +56,19 @@ export class FooterComponent implements Component {
 
   render(width: number): string[] {
     const s = this.state;
+    const sep = this.#icons.think === "*" ? "-" : "·";
+    const plain = this.#icons.think === "*";
     const badges = s.badges ?? ["ask"];
     const modeName = badges.find((b) => b !== "plan") ?? "ask";
     const planOn = badges.includes("plan");
-    const colorize = (b: string): string =>
-      b === "FULL ACCESS"
+    const colorize = (b: string): string => {
+      if (plain) return b;
+      return b === "FULL ACCESS"
         ? ansi.bold(ansi.red(b))
         : b === "ask"
           ? ansi.dim(b)
           : ansi.yellow(b);
+    };
     const mode = colorize(modeName);
     const plan = planOn ? colorize("plan") : undefined;
 
@@ -74,35 +78,58 @@ export class FooterComponent implements Component {
     } else {
       ctxPart = "ctx 0% of ?";
     }
-    const sep = this.#icons.think === "*" ? "-" : "·";
     const modelName = displayModel(s.model, s.modelName);
     const model = `${s.provider === "local" ? "(local) " : ""}${modelName}`;
     const effort = `effort ${s.effort ?? "off"}`;
-    const parts: string[] = [ctxPart];
+    // T31.5: ctx <60 green, 60-74 yellow, >=75 red; tok/s >=30 green, 15-29
+    // yellow, <15 red. ASCII / no-color terminals: same text, no color.
+    const ctxColor = (text: string): string => {
+      if (plain) return text;
+      const pct =
+        s.contextUsed !== undefined && s.contextWindow !== undefined && s.contextWindow > 0
+          ? (s.contextUsed / s.contextWindow) * 100
+          : 0;
+      if (pct >= 75) return ansi.red(text);
+      if (pct >= 60) return ansi.yellow(text);
+      return ansi.green(text);
+    };
+    const tpsColor = (text: string): string => {
+      if (plain) return text;
+      const v = Math.round(s.tps ?? 0);
+      if (v >= 30) return ansi.green(text);
+      if (v >= 15) return ansi.yellow(text);
+      return ansi.red(text);
+    };
+    const parts: string[] = [ctxColor(ctxPart)];
     if (s.tps !== undefined && s.tps > 0) {
-      parts.push(`${String(Math.round(s.tps))} tok/s`);
+      parts.push(tpsColor(`${String(Math.round(s.tps))} tok/s`));
     }
     if (s.pp !== undefined && s.pp > 0) {
-      parts.push(ansi.dim(`pp ${formatK(Math.round(s.pp * 10) / 10)} tok/s`));
+      const ppText = `pp ${formatK(Math.round(s.pp * 10) / 10)} tok/s`;
+      parts.push(plain ? ppText : ansi.dim(ppText));
     }
     if (s.cachePct !== undefined) {
       const pct = Math.round(s.cachePct);
       const label = `cache ${String(pct)}%`;
-      const colored =
-        s.cacheFirst === true
-          ? ansi.gray(label)
-          : pct >= 80
-            ? ansi.green(label)
-            : pct >= 30
-              ? ansi.yellow(label)
-              : ansi.red(label);
-      parts.push(colored);
+      if (plain) {
+        parts.push(label);
+      } else {
+        const colored =
+          s.cacheFirst === true
+            ? ansi.gray(label)
+            : pct >= 80
+              ? ansi.green(label)
+              : pct >= 30
+                ? ansi.yellow(label)
+                : ansi.red(label);
+        parts.push(colored);
+      }
     }
     parts.push(model, effort);
     // Modes come first so a narrow window or long model name cannot hide them.
     const head = plan === undefined ? mode : `${mode}  ${plan}`;
     const detail = parts.join(`  ${sep}  `);
-    return [truncateToWidth(`${head}  ${ansi.gray(detail)}`, width)];
+    return [truncateToWidth(`${head}  ${plain ? detail : ansi.gray(detail)}`, width)];
   }
 
   invalidate(): void {

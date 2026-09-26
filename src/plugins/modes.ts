@@ -20,7 +20,7 @@ export const PLAN_OFF_TEXT = "Plan mode is off.";
 /** Announcement texts injected to the model; never shown as user chat. */
 export const MODE_ANNOUNCEMENTS: ReadonlySet<string> = new Set([PLAN_ON_TEXT, PLAN_OFF_TEXT]);
 
-export const NOTICE_PLAN_ON = "Plan mode: kumo reads and plans, no file changes. Tab to leave.";
+export const NOTICE_PLAN_ON = "Plan mode: kumo reads and plans, no file changes. Shift+Tab to leave.";
 export const NOTICE_PLAN_OFF = "Build mode: kumo can change files again.";
 export const NOTICE_ASK = "Ask: kumo asks before every command and file change.";
 export const NOTICE_AUTO = "Auto: kumo decides, risky actions still ask.";
@@ -61,8 +61,9 @@ function readKumoJson(env: NodeJS.ProcessEnv = process.env): Record<string, unkn
 }
 
 function readDefaultMode(env: NodeJS.ProcessEnv = process.env): PermissionMode {
-  const v = readKumoJson(env).permissionMode;
-  return v === "auto" || v === "full" || v === "ask" ? v : "ask";
+  const doc = readKumoJson(env) as { permissionMode?: unknown; access?: unknown };
+  const v = doc.permissionMode ?? doc.access;
+  return v === "auto" || v === "full" || v === "ask" ? v : "auto";
 }
 
 export class Modes implements KumoModesService {

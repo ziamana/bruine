@@ -6,9 +6,11 @@ import {
   SelectList,
   Text,
   TuiMainScreen,
+  CombinedAutocompleteProvider,
   type Component,
   type OverlayHandle,
   type SelectItem,
+  type SlashCommand,
   type TUI,
   type Terminal,
 } from "@earendil-works/pi-tui";
@@ -40,9 +42,7 @@ export interface KumoUiHandlers {
   onEscape(): void;
   /** Quit request: ctrl+d, or ctrl+c twice within 500 ms. */
   onQuit(): void;
-  /** Tab: toggle Plan/Build (T16.A). */
-  onTab?: () => void;
-  /** Shift+Tab: cycle Ask/Auto/Full (T16.B). */
+  /** Shift+Tab: toggle Plan/Build (T31.4). */
   onShiftTab?: () => void;
 }
 
@@ -367,16 +367,12 @@ export class KumoUi {
         }
         return {};
       }
-      if (handlers.onTab !== undefined && matchesKey(data, "tab")) {
-        handlers.onTab();
-        this.requestRender();
-        return { consume: true };
-      }
       if (handlers.onShiftTab !== undefined && matchesKey(data, "shift+tab")) {
         handlers.onShiftTab();
         this.requestRender();
         return { consume: true };
       }
+      // T31.4: Tab is completion only (the Editor owns it). Never a mode action.
       if (matchesKey(data, "escape")) {
         handlers.onEscape();
         return { consume: true };
@@ -475,6 +471,23 @@ export class KumoUi {
 
   rememberHistory(text: string): void {
     this.editor.addToHistory(text);
+  }
+
+  /** Slash-command + file completion on the editor (T31.1). */
+  setAutocompleteCommands(commands: SlashCommand[]): void {
+    this.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, process.cwd()));
+    this.editor.setAutocompleteMaxVisible(10);
+  }
+
+  /** Fresh conversation view (T31.2): empty chat, no groups, no ghost/notice. */
+  clearChat(): void {
+    if (this.#closed) return;
+    this.chat.clear();
+    this.#collapsedGroups = [];
+    this.#toolsCollapsed = true;
+    this.editor.clearGhost();
+    this.clearNoticeBox();
+    this.requestRender();
   }
 
   /** Ghost next-prompt suggestion in the empty editor (T28B). */

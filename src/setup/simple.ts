@@ -298,6 +298,9 @@ async function writeKumoJson(dshHome: string, search: SearchChoice): Promise<voi
   }
   doc.mode = "simple";
   doc.search = search;
+  if (doc.permissionMode === undefined && doc.access === undefined) {
+    doc.permissionMode = "auto";
+  }
   await writeAtomic(kumoJsonPath, `${JSON.stringify(doc, null, 2)}\n`);
 }
 

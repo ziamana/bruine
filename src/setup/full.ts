@@ -718,11 +718,12 @@ export async function runFullSetup(
     const m = await selectStep(
       "Default access mode",
       [
-        { value: "ask", label: "Ask (default): confirm every command and write" },
-        { value: "auto", label: "Auto: kumo decides, risky actions still ask" },
+        { value: "ask", label: "Ask: confirm every command and write" },
+        { value: "auto", label: "Auto (recommended): kumo decides, risky actions still ask" },
         { value: "full", label: "Full access: never asks" },
       ],
       (i) => i,
+      { initial: 1 },
     );
     if (m === BACK || m === CANCEL) return m;
     const mode = ["ask", "auto", "full"][m] as PermissionModeValue;

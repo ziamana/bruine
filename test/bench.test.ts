@@ -145,8 +145,11 @@ describe("bench tasks", () => {
   });
 
   test("every task ships a prompt and a check", async () => {
-    for (const dir of await readdir(tasksDir)) {
-      const task = { id: dir, dir: join(tasksDir, dir) } satisfies Task;
+    // Same discovery as the runner: task directories only (bench/tasks/.gitignore is not a task).
+    const tasks = await listTasks(tasksDir);
+    expect(tasks.length).toBe(20);
+    for (const task of tasks) {
+      const dir = task.id;
       const prompt = await readTaskPrompt(task);
       expect(prompt.length, dir).toBeGreaterThan(20);
       expect(existsSync(join(task.dir, "check.sh")), dir).toBe(true);

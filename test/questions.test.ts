@@ -44,9 +44,128 @@ describe("QuestionForm (T28A)", () => {
     expect(out).toEqual([{ id: "q1", selected: [], custom: "utilise postgres" }]);
   });
 
+  test("the option Enter will pick is visibly the selected one (T55)", async () => {
+    const { bgCode, resetColorDepth } = await import("../src/ui/palette.js");
+    const saved = process.env.KUMO_COLOR;
+    process.env.KUMO_COLOR = "truecolor";
+    resetColorDepth();
+    try {
+      const f = new QuestionForm([
+        { id: "q1", question: "Which?", options: [{ label: "A" }, { label: "B" }] },
+      ]);
+      // The defect: a `›` and nothing else. The option you are about to confirm
+      // looked exactly like the ones you are not.
+      const first = f.render(60);
+      const a = first.find((l) => l.includes("A"));
+      const b = first.find((l) => l.includes("B"));
+      expect(a).toContain(bgCode("surface", "truecolor"));
+      expect(b).not.toContain(bgCode("surface", "truecolor"));
+      // Moving the cursor moves the selection, not just a character.
+      f.handleInput("\x1b[B");
+      const moved = f.render(60);
+      expect(moved.find((l) => l.includes("B"))).toContain(bgCode("surface", "truecolor"));
+      expect(moved.find((l) => l.includes("A"))).not.toContain(bgCode("surface", "truecolor"));
+    } finally {
+      if (saved === undefined) delete process.env.KUMO_COLOR;
+      else process.env.KUMO_COLOR = saved;
+      resetColorDepth();
+    }
+  });
+
+  test("the selection is never signalled by colour alone (T55)", async () => {
+    const { resetColorDepth } = await import("../src/ui/palette.js");
+    const saved = process.env.KUMO_COLOR;
+    process.env.KUMO_COLOR = "basic";
+    resetColorDepth();
+    try {
+      const f = new QuestionForm([
+        { id: "q1", question: "Which?", options: [{ label: "AAA" }, { label: "BBB" }] },
+      ]);
+      const rows = f.render(60).map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""));
+      // A 16-color terminal paints no background, so the marker has to carry it.
+      const selected = rows.find((l) => l.includes("AAA"))!;
+      const other = rows.find((l) => l.includes("BBB"))!;
+      expect(selected.trimStart().startsWith("›")).toBe(true);
+      expect(other.trimStart().startsWith("›")).toBe(false);
+    } finally {
+      if (saved === undefined) delete process.env.KUMO_COLOR;
+      else process.env.KUMO_COLOR = saved;
+      resetColorDepth();
+    }
+  });
+
+  test("the hint only offers the keys that do something right now (T55)", () => {
+    const single = new QuestionForm([
+      { id: "q1", question: "Which?", options: [{ label: "A" }] },
+    ]).render(100).join("\n");
+    // Space does nothing in a single-select question, so advertising it was a lie.
+    expect(single).not.toContain("Space toggle");
+    expect(single).toContain("type to answer");
+    const multi = new QuestionForm([
+      { id: "q1", question: "Which?", multiSelect: true, options: [{ label: "A" }] },
+    ]).render(100).join("\n");
+    expect(multi).toContain("Space toggle");
+  });
+
+  test("a long question is wrapped, so its end is not the part that disappears (T55)", () => {
+    const ask = "Which database should I use for the cache, and do I have to migrate the rows that are already there?";
+    const f = new QuestionForm([{ id: "q1", question: ask, options: [{ label: "SQLite" }] }]);
+    const text = f.render(60).map((l) => l.replace(/\x1b\[[0-9;]*m/g, "")).join(" ");
+    // The truncation used to eat exactly the part that carries the ask.
+    expect(text).toContain("already there?");
+    // And every line still fits the width it was given.
+    for (const line of f.render(60)) expect(stringWidth(line)).toBeLessThanOrEqual(60);
+  });
+
+  test("the question reads brighter than the chrome around it (T55)", async () => {
+    const { NUAGE, contrastRatio, fgCode, resetColorDepth } = await import("../src/ui/palette.js");
+    const saved = process.env.KUMO_COLOR;
+    process.env.KUMO_COLOR = "truecolor";
+    resetColorDepth();
+    try {
+      const f = new QuestionForm([
+        { id: "q1", header: "Cache", question: "Which one?", options: [{ label: "A" }] },
+      ]);
+      const rows = f.render(60);
+      const header = rows.find((l) => l.includes("Cache"))!;
+      const question = rows.find((l) => l.includes("Which one?"))!;
+      // The header was cyan and the question plain: the decoration was louder
+      // than the thing being asked.
+      expect(header).toContain(fgCode("faint", "truecolor"));
+      expect(question).toContain(fgCode("text", "truecolor"));
+      expect(contrastRatio(NUAGE.text.hex, NUAGE.surface.hex)).toBeGreaterThan(
+        contrastRatio(NUAGE.faint.hex, NUAGE.surface.hex),
+      );
+    } finally {
+      if (saved === undefined) delete process.env.KUMO_COLOR;
+      else process.env.KUMO_COLOR = saved;
+      resetColorDepth();
+    }
+  });
+
+  test("multi-select uses kumo's own checkbox, and the icon set decides it (T55)", async () => {
+    const { ASCII_ICONS, UNICODE_ICONS } = await import("../src/render/chars.js");
+    const form = (icons: typeof UNICODE_ICONS): QuestionForm =>
+      new QuestionForm(
+        [{ id: "q1", question: "Pick", multiSelect: true, options: [{ label: "A" }, { label: "B" }] }],
+        icons,
+      );
+    // The defect: hardcoded `[x]` / `[ ]` in a UI that speaks ✓ ✗ ▍ █ elsewhere.
+    const uni = form(UNICODE_ICONS);
+    expect(uni.render(60).join("\n")).toContain("○");
+    uni.handleInput(" ");
+    expect(uni.render(60).join("\n")).toContain("◉");
+    // And an ASCII terminal gets its own marks, not the Unicode ones.
+    const ascii = form(ASCII_ICONS);
+    const row = ascii.render(60).join("\n");
+    expect(row).not.toContain("○");
+    expect(row).not.toContain("◉");
+    expect(row).toMatch(/\[[ x]\]/);
+  });
+
   test("the hint says typing is allowed, because it now is", () => {
     const f = new QuestionForm([{ id: "q1", question: "Which?", options: [{ label: "A" }] }]);
-    expect(f.render(80).join("\n")).toContain("type to answer freely");
+    expect(f.render(80).join("\n")).toContain("type to answer");
   });
 
   test("Other… free text becomes custom", () => {

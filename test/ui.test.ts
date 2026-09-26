@@ -7,12 +7,12 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { KumoUi } from "../src/ui/kumo-ui.js";
 import { ReasoningComponent } from "../src/ui/reasoning-component.js";
 import { ToolCallComponent } from "../src/ui/tool-call-component.js";
-import { AssistantTextComponent } from "../src/ui/assistant-text.js";
+import { AssistantTextComponent, userMessageComponent } from "../src/ui/assistant-text.js";
 import { FooterComponent } from "../src/ui/footer.js";
 import { TpsMeter } from "../src/ui/tps.js";
 import { attachTui } from "../src/plugins/render.js";
 import { LineEmitter, Repl } from "../src/plugins/repl.js";
-import { UNICODE_ICONS } from "../src/render/chars.js";
+import { ASCII_ICONS, UNICODE_ICONS } from "../src/render/chars.js";
 
 // Never read the developer's real ~/.kumo (this test used to pass only because the
 // old hand-written YAML reader failed on the real settings.yaml).
@@ -119,19 +119,66 @@ describe("ReasoningComponent (T25.3 word by word)", () => {
 
 describe("ToolCallComponent (T27.2 aligned + rail)", () => {
   test("streams one header line, then result + preview", () => {
-    const t = new ToolCallComponent("bash", () => 0, UNICODE_ICONS);
-    expect(t.rail).toBe("blue");
+    // A moving clock, so this still pins where the duration sits. The instant
+    // case (no duration at all) is the T55 P1a test below.
+    let clock = 0;
+    const t = new ToolCallComponent("bash", () => clock, UNICODE_ICONS);
+    // T55 P1c: a tool in flight owns the rail; it only settles once it has a result.
+    expect(t.rail).toBe("active");
     expect(strip(t.render(60)[0])).toBe("· bash   ");
     t.args('{"command":"ls -la"}');
     expect(strip(t.render(60)[0])).toBe("· bash     ls -la");
+    clock = 1500;
     t.result(true, "a\nb");
     expect(t.rail).toBe("blue");
     const lines = t.render(60).map(strip);
     expect(lines[0].startsWith("✓ bash   ")).toBe(true);
     expect(lines[0]).toContain("ls -la");
-    expect(lines[0].endsWith("0.0s")).toBe(true);
+    expect(lines[0].endsWith("1.5s")).toBe(true);
     expect(lines[1].trim()).toBe("⎿ a");
     expect(lines[2].trim()).toBe("b");
+  });
+
+  test("a settled tool links its path, and the link never costs a cell (T55 P2)", async () => {
+    const { fileLink, linkToolSummary } = await import("../src/ui/links.js");
+    const savedColor = process.env.KUMO_COLOR;
+    process.env.KUMO_COLOR = "truecolor";
+    const { resetColorDepth } = await import("../src/ui/palette.js");
+    resetColorDepth();
+    try {
+      const t = new ToolCallComponent("read", () => 0, UNICODE_ICONS);
+      t.setArgs(JSON.stringify({ path: `${process.cwd()}/src/ui/links.ts` }));
+      t.result(true, "x");
+      const raw = t.render(100)[0]!;
+      // The link is there, and the text is still the plain path underneath it.
+      expect(raw).toContain("\x1b]8;;file://");
+      expect(raw).toContain("links.ts");
+      // And the escape is zero-width: the line is not one cell longer.
+      expect(stringWidth(raw)).toBeLessThanOrEqual(100);
+      // The link is closed, so it cannot bleed into the next line.
+      expect(raw.lastIndexOf("\x1b]8;;\x1b\\")).toBeGreaterThan(raw.indexOf("\x1b]8;;file://"));
+    } finally {
+      if (savedColor === undefined) delete process.env.KUMO_COLOR;
+      else process.env.KUMO_COLOR = savedColor;
+      resetColorDepth();
+    }
+    // A relative path has no target, so it is never linked.
+    expect(fileLink("src/a.ts", "src/a.ts")).toBe("src/a.ts");
+    // A summary that is not a path is never linked.
+    expect(linkToolSummary("ls -la", '{"command":"ls -la"}')).toBe("ls -la");
+    // A clipped path is a prefix: linking it would make the label lie.
+    expect(linkToolSummary("a-very-long-file…", JSON.stringify({ path: "/x/a-very-long-file-name-indeed.ts" }))).toBe(
+      "a-very-long-file…",
+    );
+    // A command with a path inside it is still just a command.
+    expect(linkToolSummary("cat /etc/hosts", '{"command":"cat /etc/hosts"}')).toBe("cat /etc/hosts");
+  });
+
+  test("a tool in flight is not linked: the line is about to be replaced (T55 P2)", () => {
+    const t = new ToolCallComponent("read", () => 0, UNICODE_ICONS);
+    t.setArgs(JSON.stringify({ path: `${process.cwd()}/src/ui/links.ts` }));
+    // No result yet: streaming. A link here would be replaced a frame later.
+    expect(t.render(100)[0]).not.toContain("\x1b]8;;");
   });
 
   test("failed tool has red rail", () => {
@@ -153,13 +200,78 @@ describe("ToolCallComponent (T27.2 aligned + rail)", () => {
     expect(runs[0]).toMatchObject({ tool: "read", start: 0, count: 4 });
     const c = new CollapsedToolsComponent("read", 2, 0.2, UNICODE_ICONS);
     expect(c.rail).toBe("blue");
-    expect(strip(c.render(60)[0])).toContain("+2 files");
+    // T55 P1a: the collapsed group is the same TOOL, not the same file. It used to
+    // say "+2 files", which is a lie for a run of `grep` or `web_fetch`.
+    expect(strip(c.render(60)[0])).toContain("+2 more");
+    // And a group that took 0.2s keeps its duration.
+    expect(strip(c.render(60)[0])).toContain("0.2s");
     const mixed = [
       { tool: "read", ok: true, seconds: 0.1 },
       { tool: "read", ok: false, seconds: 0.1 },
       { tool: "read", ok: true, seconds: 0.1 },
     ];
     expect(groupRuns(mixed)).toHaveLength(3);
+  });
+
+  test("the receipt carries the turn and the cache, and stays silent when it cannot (T55 P1b)", async () => {
+    const { turnSummary } = await import("../src/ui/tool-group.js");
+    const base = { tools: 5, wallSec: 41, outputTokens: 1200, cancelled: false };
+    // Unchanged when there is nothing new to say, so T27.3's shape still holds.
+    expect(turnSummary(base)).toBe("✓ 5 tools · 41s · 1.2k tokens");
+    expect(turnSummary({ ...base, turn: 3 })).toBe("turn 3 · ✓ 5 tools · 41s · 1.2k tokens");
+    expect(turnSummary({ ...base, cachePct: 82 })).toBe("✓ 5 tools · 41s · 1.2k tokens · cache 82%");
+    expect(turnSummary({ ...base, turn: 3, cachePct: 82 })).toBe(
+      "turn 3 · ✓ 5 tools · 41s · 1.2k tokens · cache 82%",
+    );
+    // A cache the model never reported is not invented as 0%.
+    expect(turnSummary({ ...base, cachePct: 0 })).not.toContain("cache");
+    // A cancelled turn is not a receipt with a turn number on it.
+    expect(turnSummary({ ...base, cancelled: true, turn: 3, cachePct: 82 })).toBe("· cancelled after 41s");
+  });
+
+  test("a turn too fast to measure prints no stopwatch at all (T55 P1b)", async () => {
+    const { turnSummary } = await import("../src/ui/tool-group.js");
+    const fast = { tools: 0, wallSec: 0.03, outputTokens: 12, cancelled: false };
+    // The defect shape: `✓ 0s · 12 tokens` is a stopwatch on nothing.
+    expect(turnSummary(fast)).not.toContain("0s");
+    expect(turnSummary(fast)).toContain("12 tokens");
+  });
+
+  test("the receipt is structured, so the numbers are readable and the labels recede (T55)", async () => {
+    const { turnReceipt, turnSummary } = await import("../src/ui/tool-group.js");
+    const base = { tools: 5, wallSec: 41, outputTokens: 1200, cancelled: false, turn: 3, cachePct: 82 };
+    // Plain text is unchanged: the string contract other code and tests rely on.
+    expect(turnSummary(base)).toBe("turn 3 · ✓ 5 tools · 41s · 1.2k tokens · cache 82%");
+
+    const seg = turnReceipt(base);
+    const roleOf = (needle: string): string | undefined =>
+      seg.find((s) => s.text.includes(needle))?.role;
+    // The numbers are the point of the line, so they get the readable ink.
+    expect(roleOf("41")).toBe("value");
+    expect(roleOf("1.2k")).toBe("value");
+    expect(roleOf("82")).toBe("value");
+    // The labels and the separators are chrome and recede.
+    expect(roleOf("turn 3")).toBe("label");
+    expect(roleOf(" tokens")).toBe("label");
+    expect(roleOf(" cache ")).toBe("label");
+    // Exactly one accent, and it is the mark.
+    expect(seg.filter((s) => s.role === "ok" || s.role === "fail").map((s) => s.text)).toEqual(["✓"]);
+    // Every character of the line is accounted for, so painting cannot drop any.
+    expect(seg.map((s) => s.text).join("")).toBe(turnSummary(base));
+  });
+
+  test("a failed turn gets its receipt, in rose, and is never a silent omission (T55)", async () => {
+    const { turnReceipt, turnSummary } = await import("../src/ui/tool-group.js");
+    const failed = turnReceipt({ tools: 0, wallSec: 12, outputTokens: 340, cancelled: false, turn: 4, error: true });
+    expect(failed.some((s) => s.role === "fail")).toBe(true);
+    expect(failed.some((s) => s.role === "ok")).toBe(false);
+    // A long minute reads as value + unit, so the "s" can recede on its own.
+    const minute = turnReceipt({ tools: 0, wallSec: 65, outputTokens: 0, cancelled: false, turn: 1 });
+    expect(minute.filter((s) => s.role === "value").map((s) => s.text).join("")).toContain("1m05");
+    expect(minute.some((s) => s.text === "s" && s.role === "label")).toBe(true);
+    expect(turnSummary({ tools: 0, wallSec: 12, outputTokens: 340, cancelled: false, turn: 4, error: true })).toBe(
+      "turn 4 · ✗ 12s · 340 tokens",
+    );
   });
 
   test("turn summary lines (T27.3)", async () => {
@@ -316,7 +428,7 @@ describe("FooterComponent (T25.2)", () => {
     const lines = f.render(100).map(strip);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("ask");
-    expect(lines[0]).toContain("ctx 12% of 131k");
+    expect(lines[0]).toMatch(/ctx [█░]+ 16\.1K \(12%\)/);
     expect(lines[0]).toContain("52 tok/s");
     expect(lines[0]).toContain("pp 1.2k tok/s");
     expect(lines[0]).toContain("(local) Ornith 1.5 9B");
@@ -325,24 +437,93 @@ describe("FooterComponent (T25.2)", () => {
     expect(lines[0]).not.toContain("TPS:");
   });
 
+  test("the context meter is always on screen, at any depth (T55)", () => {
+    // The defect: the only meter lived in the cockpit, behind ctrl+b AND at 116+
+    // columns, so a default session had no bar at all — only a number that
+    // changed once per turn.
+    const f = new FooterComponent(UNICODE_ICONS);
+    f.set({ model: "m", contextUsed: 25_000, contextWindow: 100_000 });
+    const line = f.render(120).map(strip)[0]!;
+    expect(line).toContain("░"); // a bar, at the very least
+    // It fills with the number, so the two can never disagree.
+    expect(line).toMatch(/█+░+/);
+    expect(line).toMatch(/ctx █+░* 25\.0K \(25%\)/);
+    // ASCII terminals get a bar too, never a colour-only cue.
+    const ascii = new FooterComponent(ASCII_ICONS);
+    ascii.set({ model: "m", contextUsed: 25_000, contextWindow: 100_000 });
+    const plain = ascii.render(120)[0]!;
+    expect(plain).toMatch(/█+░+/);
+  });
+
+  test("the bar spends the room that is left, and the route is never what gets cut (T55)", () => {
+    const f = new FooterComponent(UNICODE_ICONS);
+    f.set({
+      model: "Ornith-1.5-9B-Q4_K_M", provider: "local", contextUsed: 16_100, contextWindow: 131_000,
+      tps: 52, pp: 1.2, effort: "low",
+    });
+    // Room to spare: the long bar, and every metric kept.
+    const wide = f.render(120).map(strip)[0]!;
+    expect(wide).toMatch(/ctx [█░]{10} 16\.1K/);
+    expect(wide).toContain("pp ");
+    // Tighter: the bar shortens and the prefill rate, which is a diagnostic rather
+    // than a reading, gives up its room. The route and the effort are not
+    // negotiable, so they are what the bar is measured against.
+    const tight = f.render(100).map(strip)[0]!;
+    expect(tight).toMatch(/ctx [█░]+ /);
+    expect(tight).toContain("Ornith-1.5-9B-Q4_K_M");
+    expect(tight).toContain("effort low");
+    expect(tight.length).toBeLessThanOrEqual(100);
+    // Tightest there is: no bar rather than a cut route.
+    const tiny = f.render(46).map(strip)[0]!;
+    expect(tiny).toContain("FULL ACCESS".slice(0, 0) + "ask");
+    expect(tiny.length).toBeLessThanOrEqual(46);
+  });
+
+  test("the context is marked with what it actually costs, not only a percentage (T55)", async () => {
+    const { formatVolume } = await import("../src/ui/footer.js");
+    // A percentage alone is abstract: `ctx 25% of 1M` does not say whether that is
+    // 4k or 259k tokens, and the absolute number is what a cache and a bill care
+    // about. Marked as `259.0K (25%)` instead.
+    expect(formatVolume(259_000)).toBe("259.0K");
+    expect(formatVolume(9_500)).toBe("9.5K");
+    expect(formatVolume(1_036_000)).toBe("1.0M");
+    expect(formatVolume(999)).toBe("999");
+    expect(formatVolume(0)).toBe("0");
+
+    const f = new FooterComponent(UNICODE_ICONS);
+    f.set({ model: "m", contextUsed: 259_000, contextWindow: 1_036_000 });
+    expect(f.render(120).map(strip)[0]).toMatch(/ctx █+░* 259\.0K \(25%\)/);
+    // The window is not smuggled back in: the percentage already carries it.
+    expect(f.render(120).map(strip)[0]).not.toContain("of 1M");
+  });
+
+  test("an unknown window is admitted, never invented (T55)", () => {
+    const f = new FooterComponent(UNICODE_ICONS);
+    f.set({ model: "m" });
+    const line = f.render(120).map(strip)[0]!;
+    // No window means no honest percentage, so none is printed.
+    expect(line).toContain("ctx 0");
+    expect(line).not.toContain("NaN");
+    expect(line).not.toContain("Infinity");
+  });
+
   test("percent below 10 shows one decimal, else integer; gguf basename", () => {
     const f = new FooterComponent(UNICODE_ICONS);
     f.set({ contextUsed: 9500, contextWindow: 100_000, model: "/etc/models/ornith-9b.Q4_K_M.gguf", provider: "local" });
-    expect(f.render(100).map(strip)[0]).toContain("ctx 9.5% of 100k");
+    expect(f.render(100).map(strip)[0]).toMatch(/ctx █+░* 9\.5K \(9\.5%\)/);
     expect(f.render(100).map(strip)[0]).toContain("ornith-9b.Q4_K_M");
     expect(f.render(100).map(strip)[0]).not.toContain("/etc");
     f.set({ contextUsed: 12_300, contextWindow: 100_000 });
-    expect(f.render(100).map(strip)[0]).toContain("ctx 12% of 100k");
+    expect(f.render(100).map(strip)[0]).toMatch(/ctx █+░* 12\.3K \(12%\)/);
   });
 
   test("ctx includes cached: 9000 + 100 + 0 over 100k → 9.1% (T27b.2)", () => {
     const f = new FooterComponent(UNICODE_ICONS);
     f.set({ contextUsed: 9100, contextWindow: 100000, model: "m" });
-    expect(f.render(100).map(strip)[0]).toContain("ctx 9.1% of 100k");
+    expect(f.render(100).map(strip)[0]).toMatch(/ctx █+░* 9\.1K \(9\.1%\)/);
   });
 
   test("footer colors: tok/s 10/20/45 and ctx 40/70/78 (T31.5)", async () => {
-    const { ASCII_ICONS } = await import("../src/render/chars.js");
     const raw = (tps?: number, used?: number): string => {
       const f = new FooterComponent(UNICODE_ICONS);
       f.set({ model: "m", ...(tps !== undefined ? { tps } : {}), ...(used !== undefined ? { contextUsed: used, contextWindow: 100 } : {}) });
@@ -351,9 +532,9 @@ describe("FooterComponent (T25.2)", () => {
     expect(raw(10)).toContain("\x1b[31m10 tok/s");
     expect(raw(20)).toContain("\x1b[33m20 tok/s");
     expect(raw(45)).toContain("\x1b[32m45 tok/s");
-    expect(raw(undefined, 40)).toContain("\x1b[32mctx 40% of 100");
-    expect(raw(undefined, 70)).toContain("\x1b[33mctx 70% of 100");
-    expect(raw(undefined, 78)).toContain("\x1b[31mctx 78% of 100");
+    expect(raw(undefined, 40)).toContain("\x1b[32mctx ████░░░░░░ 40 (40%)");
+    expect(raw(undefined, 70)).toContain("\x1b[33mctx ███████░░░ 70 (70%)");
+    expect(raw(undefined, 78)).toContain("\x1b[31mctx ████████░░ 78 (78%)");
     const a = new FooterComponent(ASCII_ICONS);
     a.set({ model: "m", tps: 45, contextUsed: 78, contextWindow: 100 });
     expect(a.render(120)[0]).not.toMatch(/\x1b\[/);
@@ -362,7 +543,7 @@ describe("FooterComponent (T25.2)", () => {
   test("renders placeholder state", () => {
     const f = new FooterComponent(UNICODE_ICONS);
     const line = f.render(80).map(strip)[0]!;
-    expect(line).toContain("ctx 0% of ?");
+    expect(line).toContain("ctx 0");
     expect(line).not.toContain("(auto)");
   });
 
@@ -443,7 +624,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     expect(text).toContain("kumo");
     expect(text).toContain("v0.2.0");
     expect(text).toContain("escape interrupt");
-    expect(text).toContain("ctx 0% of ?");
+    expect(text).toContain("ctx 0");
   });
 
   test("editor submit routes to the handler", () => {
@@ -459,6 +640,49 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       .map(strip)
       .join("\n");
     expect(text).toContain("hello from chat");
+  });
+
+  test("a duration is only printed when it means something (T55 P1a)", async () => {
+    const { formatDuration } = await import("../src/ui/tool-group.js");
+    // The defect: every tool printed a stopwatch, so forty instant reads were
+    // forty `0.0s`, and a twelve-second one was `12.0s`. Zero information.
+    expect(formatDuration(0.04)).toBeUndefined();
+    expect(formatDuration(0)).toBeUndefined();
+    expect(formatDuration(Number.NaN)).toBeUndefined();
+    expect(formatDuration(0.4)).toBe("0.4s");
+    expect(formatDuration(9.94)).toBe("9.9s");
+    // Past ten seconds the decimal is noise too.
+    expect(formatDuration(12)).toBe("12s");
+    expect(formatDuration(65)).toBe("1m05s");
+    expect(formatDuration(600)).toBe("10m00s");
+  });
+
+  test("an instant tool and a cancelled tool print no duration at all (T55 P1a)", () => {
+    const instant = new ToolCallComponent("read", () => 0, UNICODE_ICONS);
+    instant.setArgs('{"path":"note.txt"}');
+    instant.result(true, "hello");
+    const line = strip(instant.render(80)[0]!).trimEnd();
+    expect(line).toContain("read");
+    expect(line).toContain("note.txt");
+    expect(line).not.toContain("s ");  // no "0.0s" tail
+
+    // A cancelled call used to print `0.0s` next to the red mark.
+    const cancelled = new ToolCallComponent("bash", () => 0, UNICODE_ICONS);
+    cancelled.setArgs('{"command":"ls"}');
+    cancelled.cancel();
+    const stopped = cancelled.render(80).map(strip).join("\n");
+    expect(stopped).toContain("Cancelled");
+    expect(stopped).not.toContain("0.0s");
+  });
+
+  test("a slow tool keeps its duration, so the number still has somewhere to go (T55 P1a)", () => {
+    let t = 0;
+    const slow = new ToolCallComponent("bash", () => t, UNICODE_ICONS);
+    slow.setArgs('{"command":"npm test"}');
+    t = 4200;
+    slow.result(true, "ok");
+    const line = strip(slow.render(80)[0]!);
+    expect(line).toContain("4.2s");
   });
 
   test("tool rail in chat padding, blue then red (T27.2)", () => {
@@ -496,6 +720,82 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     const last = lines.findIndex((l) => l.includes("last chat block"));
     expect(lines[last + 1]!.trim()).toBe("");
     expect(lines.join("\n")).not.toContain("Tasks");
+  });
+
+  test("the help line is readable, not decorative: 4.5:1 on a color terminal (T55 P0)", async () => {
+    const { NUAGE, contrastRatio, fgCode, resetColorDepth } = await import("../src/ui/palette.js");
+    const savedColor = process.env.KUMO_COLOR;
+    process.env.KUMO_COLOR = "truecolor";
+    resetColorDepth();
+    try {
+      const { ui } = makeUi();
+      const line = ui.tui.render(80).find((l) => l.includes("escape interrupt"));
+      expect(line).toBeDefined();
+      // Resolve the role the line is actually painted in, not the one we hope:
+      // it used to be `faint` here (2.64:1) while the plain terminal got `muted`.
+      const role = (Object.keys(NUAGE) as Array<keyof typeof NUAGE>).find((r) =>
+        line!.includes(fgCode(r, "truecolor")),
+      );
+      expect(role).toBe("muted");
+      expect(contrastRatio(NUAGE[role!].hex, NUAGE.surface.hex)).toBeGreaterThanOrEqual(4.5);
+    } finally {
+      if (savedColor === undefined) delete process.env.KUMO_COLOR;
+      else process.env.KUMO_COLOR = savedColor;
+      resetColorDepth();
+    }
+  });
+
+  test("every turn is numbered on its own band, and the number moves on (T55 P1b)", async () => {
+    const { userMessageComponent } = await import("../src/ui/assistant-text.js");
+    const savedColor = process.env.KUMO_COLOR;
+    process.env.KUMO_COLOR = "truecolor";
+    const { resetColorDepth } = await import("../src/ui/palette.js");
+    resetColorDepth();
+    try {
+      const { ui } = makeUi();
+      expect(ui.turn).toBe(0);
+      ui.addUserPrompt("first question");
+      expect(ui.turn).toBe(1);
+      ui.addUserPrompt("second question");
+      expect(ui.turn).toBe(2);
+      // The fake terminal is 60 columns, and the screen clips to it, so the
+      // render has to ask for that width: a 100-column render is not a wider
+      // band, it is a 100-column band clipped to 60.
+      const text = ui.tui.render(60).map(strip);
+      const first = text.findIndex((l) => l.includes("first question"));
+      const second = text.findIndex((l) => l.includes("second question"));
+      expect(first).toBeGreaterThan(0);
+      expect(second).toBeGreaterThan(first);
+      // The label sits on the band's own top line, one line above the prompt, so
+      // it costs no extra row and is exactly where the eye already goes.
+      expect(text[first - 1]).toContain("turn 1");
+      expect(text[second - 1]).toContain("turn 2");
+      // And it is right-aligned, hugging the right edge of the band.
+      expect(text[first - 1]!.trimEnd().endsWith("turn 1")).toBe(true);
+    } finally {
+      if (savedColor === undefined) delete process.env.KUMO_COLOR;
+      else process.env.KUMO_COLOR = savedColor;
+      resetColorDepth();
+    }
+  });
+
+  test("a prompt band with no number is still a plain band, never a fake turn 0 (T55 P1b)", async () => {
+    const { ChatTranscript } = await import("../src/ui/chat-layout.js");
+    const { userMessageComponent } = await import("../src/ui/assistant-text.js");
+    const savedColor = process.env.KUMO_COLOR;
+    process.env.KUMO_COLOR = "truecolor";
+    const { resetColorDepth } = await import("../src/ui/palette.js");
+    resetColorDepth();
+    try {
+      const t = new ChatTranscript();
+      t.addChild(userMessageComponent("unstamped"));
+      const text = t.render(60).map(strip);
+      expect(text.join("\n")).not.toContain("turn");
+    } finally {
+      if (savedColor === undefined) delete process.env.KUMO_COLOR;
+      else process.env.KUMO_COLOR = savedColor;
+      resetColorDepth();
+    }
   });
 
   test("/reload re-reads settings.yaml and never adopts a route it did not switch to (T40)", async () => {
@@ -647,25 +947,74 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     }
   });
 
-  test("header shows model and host, animation frames are block/braille without emoji (T27.4)", async () => {
+  test("header shows model and host; condensation frames hold a fixed wordmark grid", async () => {
     const { ui } = makeUi();
     ui.footer.set({ model: "Ornith 1.5 9B", provider: "local", modelName: "Ornith 1.5 9B" });
     ui.updateHeader();
     const text = ui.tui.render(80).map(strip).join("\n");
     expect(text).toContain("kumo");
     expect(text).toContain("Ornith 1.5 9B");
-    const { STARTUP_FRAMES, shouldAnimateStartup, headerHost } = await import("../src/ui/kumo-ui.js");
-    expect(STARTUP_FRAMES).toHaveLength(6);
-    expect(STARTUP_FRAMES.join("")).not.toMatch(/\p{Extended_Pictographic}/u);
-    expect(shouldAnimateStartup({ stdoutTTY: false })).toBe(false);
-    expect(shouldAnimateStartup({ stdoutTTY: true, env: { CI: "1" } })).toBe(false);
-    expect(shouldAnimateStartup({ stdoutTTY: true, env: { KUMO_NO_ANIMATION: "1" } })).toBe(false);
-    expect(shouldAnimateStartup({ stdoutTTY: true, env: {}, ascii: false })).toBe(true);
+    expect(strip(ui.headerFirstLine(false))).not.toContain("kumo");
+    const { headerHost } = await import("../src/ui/kumo-ui.js");
+    const { LOGO, ASSEMBLY_STEPS, condensationFrame, terminalMotionAllowed } = await import("../src/ui/logo-motion.js");
+    const frames = Array.from({ length: ASSEMBLY_STEPS }, (_, step) => condensationFrame(step));
+    expect(frames.at(-1)).toEqual(LOGO);
+    expect(frames[0]).not.toEqual(LOGO);
+    expect(frames.every((frame) => frame.every((line) => line.length === LOGO[0].length))).toBe(true);
+    expect(frames.flat().join("")).not.toMatch(/\p{Extended_Pictographic}/u);
+    expect(terminalMotionAllowed({ stdoutTTY: false })).toBe(false);
+    expect(terminalMotionAllowed({ stdoutTTY: true, env: { CI: "1" } })).toBe(false);
+    expect(terminalMotionAllowed({ stdoutTTY: true, env: { KUMO_NO_ANIMATION: "1" } })).toBe(false);
+    expect(terminalMotionAllowed({ stdoutTTY: true, env: {}, ascii: false })).toBe(true);
     expect(headerHost({ models: { main: { baseUrl: "http://192.168.1.64:8081/v1" } } }, "local")).toBe("192.168.1.64");
     expect(headerHost({ models: { main: { provider: "openrouter" } } }, undefined)).toBe("openrouter");
   });
 
-  test("the wordmark never freezes: the sweep loops instead of stopping after one pass", async () => {
+  test("color header uses the finished wordmark and sweeps only on the first working turn", async () => {
+    vi.useFakeTimers();
+    const saved = { tty: process.stdout.isTTY, color: process.env.KUMO_COLOR, ci: process.env.CI, anim: process.env.KUMO_NO_ANIMATION, term: process.env.TERM };
+    process.stdout.isTTY = true;
+    process.env.KUMO_COLOR = "truecolor";
+    delete process.env.CI;
+    delete process.env.KUMO_NO_ANIMATION;
+    process.env.TERM = "xterm-256color";
+    const { resetColorDepth } = await import("../src/ui/palette.js");
+    const { wordmarkFrame } = await import("../src/ui/logo-motion.js");
+    const { WorkingComponent } = await import("../src/ui/working.js");
+    resetColorDepth();
+    const ui = new KumoUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), UNICODE_ICONS);
+    try {
+      const final = wordmarkFrame(1);
+      expect(strip(ui.headerText())).toContain(final[0]);
+      expect(strip(ui.headerText())).toContain(final[1]);
+      const initial = ui.headerText();
+      ui.addChat(new WorkingComponent(() => Date.now(), ui.icons));
+      vi.advanceTimersByTime(200);
+      const midway = ui.headerText();
+      expect(midway).not.toBe(initial);
+      vi.advanceTimersByTime(500);
+      const settled = ui.headerText();
+      expect(settled).toBe(initial);
+      ui.addChat(new WorkingComponent(() => Date.now(), ui.icons));
+      vi.advanceTimersByTime(500);
+      expect(ui.headerText()).toBe(settled);
+    } finally {
+      await ui.shutdown();
+      process.stdout.isTTY = saved.tty;
+      if (saved.color === undefined) delete process.env.KUMO_COLOR;
+      else process.env.KUMO_COLOR = saved.color;
+      if (saved.ci === undefined) delete process.env.CI;
+      else process.env.CI = saved.ci;
+      if (saved.anim === undefined) delete process.env.KUMO_NO_ANIMATION;
+      else process.env.KUMO_NO_ANIMATION = saved.anim;
+      if (saved.term === undefined) delete process.env.TERM;
+      else process.env.TERM = saved.term;
+      resetColorDepth();
+      vi.useRealTimers();
+    }
+  });
+
+  test("the interactive screen opens on the finished header without replaying boot motion", async () => {
     const saved = { tty: process.stdout.isTTY, anim: process.env.KUMO_NO_ANIMATION };
     process.stdout.isTTY = true;
     delete process.env.KUMO_NO_ANIMATION;
@@ -677,18 +1026,12 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       phases.push(t);
     };
     try {
-      // A plain (non-fancy) header is the deterministic path: the cloud frames.
       expect(ui.fancyHeader).toBe(false);
       ui.start();
-      // 6 frames at 70 ms: two full passes prove the wrap, not just the start.
-      await new Promise((r) => setTimeout(r, 1000));
-      expect(phases.length).toBeGreaterThanOrEqual(12);
-      // And it cycles rather than repeating one still frame.
-      expect(new Set(phases).size).toBe(6);
-      // stopHeaderAnimation leaves a frozen header and no live timer.
-      ui.stopHeaderAnimation();
+      await new Promise((r) => setTimeout(r, 100));
+      expect(phases.every((frame) => !frame.includes("░"))).toBe(true);
       const after = phases.length;
-      await new Promise((r) => setTimeout(r, 250));
+      await new Promise((r) => setTimeout(r, 200));
       expect(phases.length).toBe(after);
     } finally {
       await ui.shutdown();
@@ -698,7 +1041,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     }
   });
 
-  test("no animation, no looping timer: CI and KUMO_NO_ANIMATION never spin", async () => {
+  test("CI leaves the finished header still", async () => {
     const saved = { tty: process.stdout.isTTY, ci: process.env.CI };
     process.stdout.isTTY = true;
     process.env.CI = "1";
@@ -776,7 +1119,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       error: false,
     });
     const text = ui.tui.render(100).map(strip).join("\n");
-    expect(text).toContain("+2 files");
+    expect(text).toContain("+2 more");
     expect(text).toMatch(/✓ 4 tools/);
     expect(text).toContain("2s");
     expect(text).toContain("100 tokens");
@@ -800,13 +1143,13 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       cancelled: false,
       error: false,
     });
-    expect(ui.tui.render(100).map(strip).join("\n")).toContain("+2 files");
+    expect(ui.tui.render(100).map(strip).join("\n")).toContain("+2 more");
     terminal.onInput?.("\x0f");
     const expanded = ui.tui.render(100).map(strip).join("\n");
-    expect(expanded).not.toContain("+2 files");
+    expect(expanded).not.toContain("+2 more");
     expect(expanded.match(/read/g)?.length).toBeGreaterThanOrEqual(4);
     terminal.onInput?.("\x0f");
-    expect(ui.tui.render(100).map(strip).join("\n")).toContain("+2 files");
+    expect(ui.tui.render(100).map(strip).join("\n")).toContain("+2 more");
     await ui.shutdown();
   });
 
@@ -861,6 +1204,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
 describe("attachTui wiring", () => {
   interface FakeUi {
     addChat(c: any): void;
+    addUserPrompt(text: string): void;
     removeChat?(c: any): void;
     footer: { set(next: any): void };
     requestRender(): void;
@@ -877,6 +1221,7 @@ describe("attachTui wiring", () => {
       chats,
       footerState,
       addChat: (c) => chats.push(c),
+      addUserPrompt: (text) => ui.addChat(userMessageComponent(text)),
       removeChat: (c) => {
         const i = chats.indexOf(c);
         if (i !== -1) chats.splice(i, 1);
@@ -898,6 +1243,24 @@ describe("attachTui wiring", () => {
 
   const rendered = (component: any, width = 60): string =>
     component.render(width).map(strip).join("\n");
+
+  test("contextUsed climbs during a turn, not only when it ends (T55)", () => {
+    const { chats, ui, stream, event } = setup();
+    const session = { id: "s", requestContext: () => ({ contextWindow: 100_000 }) };
+    void session;
+    event("turn/start", { turn: 1 });
+    // A server that streams usage tells us the running total as it goes. That is
+    // the only honest way to watch the context climb: never from a guess.
+    stream({ type: "usage", usage: { inputTokens: 40_000, outputTokens: 0 } });
+    expect(ui.footerState.contextUsed).toBe(40_000);
+    stream({ type: "usage", usage: { inputTokens: 40_000, outputTokens: 1_200 } });
+    expect(ui.footerState.contextUsed).toBe(41_200);
+    stream({ type: "usage", usage: { inputTokens: 40_000, outputTokens: 5_500 } });
+    expect(ui.footerState.contextUsed).toBe(45_500);
+    // Still no turn/end: the number moved because the server said so.
+    expect(ui.footerState.contextWindow).toBe(100_000);
+    void chats;
+  });
 
   test("reasoning: one live line collapsing on block-end", () => {
     const { chats, stream } = setup();
@@ -989,7 +1352,7 @@ describe("attachTui wiring", () => {
     const { chats, stream, event } = setup();
     event("turn/start", { turn: 1 });
     expect(chats).toHaveLength(1);
-    expect(rendered(chats[0])).toMatch(/Working/);
+    expect(rendered(chats[0])).toMatch(/Waiting for model/);
     stream({ type: "reasoning-delta", text: "one" });
     expect(chats).toHaveLength(1);
     expect(rendered(chats[0])).toContain("Thinking");
@@ -1137,6 +1500,7 @@ describe("suggest ghost (T28B)", () => {
     const ghosts: string[] = [];
     const ui = {
       addChat: () => {},
+      addUserPrompt: () => {},
       removeChat: () => {},
       footer: { set: () => {} },
       requestRender: () => {},
@@ -1235,7 +1599,7 @@ describe("T23 regressions", () => {
       { type: "todo/write", data: { todos: [{ content: "Latest", status: "in_progress" }] } },
     ] };
     const agent = { session };
-    const ui = { icons: UNICODE_ICONS, addChat: (c: any) => chats.push(c), setTasks: (items: unknown) => lists.push(items), requestRender: () => {}, footer: { set: () => {} } };
+    const ui = { icons: UNICODE_ICONS, addChat: (c: any) => chats.push(c), addUserPrompt: (t: string) => chats.push(userMessageComponent(t)), setTasks: (items: unknown) => lists.push(items), requestRender: () => {}, footer: { set: () => {} } };
     const detach = attachTui(fake.ctx as any, agent, ui as any, {});
     expect(lists).toEqual([[{ content: "Latest", status: "in_progress" }]]);
     fake.emit("agent/assistant-stream", { agent, frame: { type: "chunk", chunk: { type: "tool-call-delta", id: "t", name: "todo_write", argumentsDelta: "{}" } } });

@@ -73,3 +73,9 @@ You are implementing one ticket of the kumo project.
 | T52 | `kumo logs`, `--debug`, `--log-file` | T45 |
 | T53 | Split `src/setup/full.ts` and make it unit-testable | T45 |
 | T54 | Cleanups: the dead simple setup, the judge, a stale e2e report | T53 |
+| T55 | Visual system: the turn as the unit, transcript hierarchy, turn rule and receipt, clickable paths | T40 |
+| T56 | Mouse selection: drag, release, copied, notice in the top-right corner | T55 |
+| T57 | The answer is revealed on a clock, not token by token (`KUMO_NO_ANIMATION=1` to stop it) | T55 |
+| T58 | Welcome wordmark: one mark, one motion language, tied to observed state | T55 |
+| T59 | What the turn did to the files: a `changed` line under the receipt, measured with git | T55 |
+| T60 | Keys are keys, not bytes: `matchesKey` everywhere, releases dropped, a scan that forbids byte comparisons | T13a |

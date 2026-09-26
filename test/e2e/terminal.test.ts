@@ -30,6 +30,18 @@ const reasoning = (): Script => ({ chunks: [
 ] });
 // The bottom area has a 2-column margin on both sides; tests read the text.
 const footer = (h: Harness) => ([...h.screen()].reverse().find(line => line.includes("e2e-model")) ?? "").trimStart();
+
+function expectContextMarking(footerText: string): void {
+  // T55: the bar sits between `ctx` and the number, with a width the line chose.
+  const mark = /ctx [█░]* ([\d.]+)([KM]?) \(([\d.]+)%\)/.exec(footerText);
+  expect(mark, `no context marking in ${JSON.stringify(footerText)}`).not.toBeNull();
+  // A session that has spent nothing says so, and never claims a window it does
+  // not have. `0 (0%)` is the honest idle reading.
+  const pct = Number(mark![3]);
+  const used = Number(mark![1]) * (mark![2] === "M" ? 1e6 : mark![2] === "K" ? 1e3 : 1);
+  if (pct === 0) expect(used).toBe(0);
+  else expect(used).toBeGreaterThan(0);
+}
 const footerCell = (h: Harness, label: string) => {
   const rows = h.screen().map((line, i) => ({ line, i })).filter(({ line }) => line.includes("e2e-model"));
   const row = rows.at(-1)!.i;
@@ -259,19 +271,19 @@ test("modes: Shift+Tab Plan/Build and /auto /ask /full change real permissions",
   });
 });
 
-test("working: delayed first chunk shows Working within 200ms (T24.3, T27b.5)", async () => {
+test("working: delayed first chunk shows the model wait within 200ms (T24.3, T27b.5)", async () => {
   await scenario("working", [{ chunks: [{ delta: { content: "WORKING_DONE" }, delayMs: 3000 }] }], async (h) => {
     h.type("Start delayed work");
     await h.waitFor("Start delayed work");
     const start = Date.now();
     h.press("enter");
-    await h.until(() => h.screen().join("\n").includes("Working"), 2000, "Working visible");
+    await h.until(() => h.screen().join("\n").includes("Waiting for model"), 2000, "model wait visible");
     expect(Date.now() - start).toBeLessThan(1500);
     // Real llama.cpp: headers and the role chunk arrive at once, then seconds of silent
-    // prefill. Working must STAY on screen during that silence, not just flash.
+    // prefill. The wait must STAY on screen during that silence, not just flash.
     await delay(1200);
     await h.flush();
-    expect(h.screen().join("\n")).toContain("Working");
+    expect(h.screen().join("\n")).toContain("Waiting for model");
     await h.waitFor("WORKING_DONE");
     await h.dump("working");
   });
@@ -280,10 +292,14 @@ test("working: delayed first chunk shows Working within 200ms (T24.3, T27b.5)", 
 test("startup: header host and window known before first answer, pretty name (T27b.3+4)", async () => {
   await scenario("startup", [], async (h) => {
     const head = h.screen().join("\n");
+    expect(head).not.toContain("Starting session");
     expect(head).toContain("127.0.0.1");
     expect(head).toContain("e2e-model Pretty");
-    expect(footer(h)).toContain("100k");
+    // T55: the footer marks the context as `9.5K (9.5%)`, so the window is no
+    // longer printed and cannot be read off the screen. The `?` this line used to
+    // forbid is gone by construction: the marking has no unknown-window state.
     expect(footer(h)).not.toContain("?");
+    expectContextMarking(footer(h));
   });
 });
 
@@ -296,7 +312,9 @@ test("cache-context: cached 9000/input 100 counts cached in ctx (T27b.2)", async
     await h.waitFor("CTX_DONE");
     await h.waitStable(400, 2000);
     // 100 + 9000 + 50 = 9150 / 100k ≈ 9.1-9.2% (old input+output only would show 0.1%)
-    expect(footer(h)).toContain("ctx 9.");
+    // T55: the context bar sits between `ctx` and the number, and its width is
+    // whatever the line had room for.
+    expect(footer(h)).toMatch(/ctx [█░]* 9\./);
     expect(footer(h)).toContain("cache");
   });
 });
@@ -440,7 +458,7 @@ test("ASCII fallback animates with - backslash bar slash and finishes without Un
   }, true);
 });
 
-test("grouping: 4 grep collapse to +2, failed grep stays, ctrl+o expands (T27.2+3)", async () => {
+test("grouping: 4 grep collapse to +2 more, failed grep stays, ctrl+o expands (T27.2+3, T55 P1a)", async () => {
   const gp = (id: string) => toolScript("grep", { pattern: "SENTINEL", path: "note.txt" }, id);
   await scenario("grouping", [
     gp("g1"), gp("g2"), gp("g3"), gp("g4"),
@@ -451,7 +469,7 @@ test("grouping: 4 grep collapse to +2, failed grep stays, ctrl+o expands (T27.2+
     await h.waitFor("GROUP_DONE");
     await h.waitStable(400, 2000);
     const collapsed = h.screen().join("\n");
-    expect(collapsed).toContain("+2 files");
+    expect(collapsed).toContain("+2 more");
     expect(collapsed).toContain("✗ grep");
     expect(collapsed).toContain("▍");
     expect(collapsed).toContain("cache 97%");
@@ -459,7 +477,7 @@ test("grouping: 4 grep collapse to +2, failed grep stays, ctrl+o expands (T27.2+
     expect(collapsed).toContain("tokens");
     await h.dump("t27-collapsed");
     h.press("ctrlO");
-    await h.until(() => !h.screen().join("\n").includes("+2 files"), 2000, "expanded");
+    await h.until(() => !h.screen().join("\n").includes("+2 more"), 2000, "expanded");
     const full = (() => {
       const buf = h.term.buffer.active;
       const out: string[] = [];
@@ -469,7 +487,7 @@ test("grouping: 4 grep collapse to +2, failed grep stays, ctrl+o expands (T27.2+
     expect(full.match(/✓ grep/g)?.length).toBeGreaterThanOrEqual(4);
     await h.dump("t27-expanded");
     h.press("ctrlO");
-    await h.waitFor("+2 files");
+    await h.waitFor("+2 more");
   });
 });
 
@@ -486,7 +504,7 @@ test("questions: Down Enter picks second option (T28A)", async () => {
     textScript("Q_DONE"),
   ], async (h) => {
     await h.prompt("Pick a database");
-    await h.waitFor("Space toggle");
+    await h.waitFor("Enter choose");
     h.press("down");
     await delay(100);
     h.press("enter");
@@ -503,7 +521,7 @@ test("questions: multi-select Space Space Enter (T28A)", async () => {
     textScript("Q_DONE"),
   ], async (h) => {
     await h.prompt("Pick");
-    await h.waitFor("Space toggle");
+    await h.waitFor("Enter choose");
     h.type(" ");
     await delay(100);
     h.press("down");
@@ -525,7 +543,7 @@ test("questions: Other free text (T28A)", async () => {
     textScript("Q_DONE"),
   ], async (h) => {
     await h.prompt("Pick");
-    await h.waitFor("Space toggle");
+    await h.waitFor("Enter choose");
     h.press("down");
     await delay(100);
     h.press("enter");
@@ -544,7 +562,7 @@ test("questions: Esc skips, turn goes on (T28A)", async () => {
     textScript("Q_DONE"),
   ], async (h) => {
     await h.prompt("Pick");
-    await h.waitFor("Space toggle");
+    await h.waitFor("Enter choose");
     h.press("escape");
     await h.waitFor("Q_DONE");
     const toolMsg = h.server.mainRequests()[1]!.body.messages.find((m) => m.role === "tool");
@@ -631,8 +649,9 @@ test("/new: two turns, new conversation, next request has only new history (T31.
     expect(lastBody).not.toContain("First hello");
     expect(lastBody).not.toContain("Second hello");
     expect(h.screen().join("\n")).not.toContain("First hello");
-    // The context window of the route survives /new (real screen showed "ctx 0% of ?").
-    expect(footer(h)).toContain("of 100k");
+    // T55: the context is marked with its absolute cost. The window is no longer
+    // printed, so the marking is checked for shape rather than for a literal.
+    expectContextMarking(footer(h));
   });
 });
 
@@ -789,8 +808,17 @@ test("errors: 401 then 404 print the exact two lines (T33b)", async () => {
       expect(s1).not.toContain("at Object");
       await h.prompt("second");
       await h.waitFor('Model "e2e-model" not found on', 30_000);
+      // T55: the error line is printed without waiting for the model list, and
+      // the list fills the hint in once the server answers, so the screen is
+      // waited on for the finished hint rather than for the message alone.
+      await h.waitFor("Available: e2e-model. Change it: kumo setup", 30_000);
       const s2 = h.screen().join("\n");
       expect(s2).toContain("Available: e2e-model. Change it: kumo setup");
+      // Each turn's receipt belongs under its own error, not above it. Turn 1
+      // failed too (401), so it is turn 2's receipt that closes the 404.
+      const err2 = s2.indexOf('Model "e2e-model" not found on');
+      expect(s2.indexOf("turn 2 ·")).toBeGreaterThan(err2);
+      expect(s2.indexOf("turn 1 ·")).toBeLessThan(err2);
     },
     {
       server: {
@@ -894,7 +922,6 @@ test("/model switches the wire model and keeps the prompt prefix byte-identical 
       h.press("down"); await delay(50); h.press("enter");
       await h.waitFor("Model: e2e-model-2 (local) · next message");
       await h.until(() => /e2e-model-2/.test(footer(h)), 3000, "footer follows the route");
-      expect(footer(h)).toContain("of 50k"); // the new model's own window
 
       await h.prompt("two");
       await h.waitFor("TURN_TWO");
@@ -955,6 +982,10 @@ test("/model <route> sets directly and /provider lists them all (T37, T39)", asy
       await h.prompt("hi");
       await h.waitFor("TURN_DONE");
       expect(h.server.mainRequests().at(-1)!.body.model).toBe("e2e-model-2");
+      // T55: the footer marks the context, and the marking is well formed. The
+      // window itself is no longer printed anywhere, so it cannot be read off the
+      // screen; the e2e that used to check it checked a string that is now gone.
+      expectContextMarking(footer(h));
 
       // An unknown provider is refused, naming what is configured.
       await h.prompt("/model grok/x");

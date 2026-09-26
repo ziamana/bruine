@@ -205,11 +205,13 @@ describe("Repl", () => {
 });
 
 describe("slash palette source of truth (T31.1)", () => {
-  test("kumo commands: 11 items incl. new/compact/reload/help/exit", async () => {
+  test("kumo commands: 12 items incl. new/compact/reload/mouse/help/exit", async () => {
     const { KUMO_COMMANDS, mergeCommands } = await import("../src/plugins/repl.js");
-    expect(KUMO_COMMANDS).toHaveLength(11);
+    // T56 added /mouse: taking the mouse costs the wheel, so the choice has to
+    // be reachable without restarting.
+    expect(KUMO_COMMANDS).toHaveLength(12);
     const names = KUMO_COMMANDS.map((c) => c.name);
-    for (const n of ["/new", "/compact", "/plan", "/permissions", "/auto", "/ask", "/full", "/skills", "/reload", "/help", "/exit"]) {
+    for (const n of ["/new", "/compact", "/plan", "/permissions", "/auto", "/ask", "/full", "/skills", "/reload", "/mouse", "/help", "/exit"]) {
       expect(names).toContain(n);
     }
     const merged = mergeCommands([

@@ -45,7 +45,10 @@ export const NUAGE = {
   pink: { hex: "#ff9ed2", basic: 35 },
   text: { hex: "#e6e9f2", basic: 37 },
   muted: { hex: "#8a90a6", basic: 90 },
-  faint: { hex: "#5b6178", basic: 90 },
+  // 3.20:1 on `surface`, the AA floor for a border or control. It was #5b6178
+  // (2.64:1), under the floor, and it drew the editor border and the dock
+  // divider. Structure only: anything a user has to read is `muted` (5.10:1).
+  faint: { hex: "#676e87", basic: 90 },
   // Painted surfaces (the console band and the prompt band). These are the
   // authored values for a dark terminal; setTerminalBackdrop re-derives them
   // from the background the terminal reports.
@@ -74,9 +77,42 @@ function mix(a: [number, number, number], b: [number, number, number], t: number
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
-/** Relative luminance, 0 (black) to 1 (white). */
+/** One sRGB channel, gamma-encoded 0..255, to linear light 0..1. */
+function linearize(v: number): number {
+  const c = v / 255;
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+/** WCAG relative luminance, 0 (black) to 1 (white). */
 function luma(c: [number, number, number]): number {
-  return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+  return 0.2126 * linearize(c[0]) + 0.7152 * linearize(c[1]) + 0.0722 * linearize(c[2]);
+}
+
+/** WCAG relative luminance of a hex color. The palette owns the maths for its own roles. */
+export function luminance(hex: string): number {
+  return luma(rgb(hex));
+}
+
+/**
+ * WCAG contrast ratio between two hex colors, 1:1 to 21:1. AA asks 4.5:1 for
+ * body text and 3:1 for borders, controls and other structural marks, so this
+ * is how a role is checked before it is trusted with a job.
+ */
+export function contrastRatio(a: string, b: string): number {
+  const x = luminance(a);
+  const y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+/**
+ * Gamma-encoded brightness, 0..1. NOT the WCAG luminance above: this one keeps
+ * the sRGB curve, which is what makes 0.5 land on mid gray. It only ever
+ * answers "is this terminal light or dark", where the perceived midpoint is the
+ * right question and the linear one would move the boundary.
+ */
+function brightness(hex: string): number {
+  const [r, g, b] = rgb(hex);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
 }
 
 /** Blend two hex colors; t is clamped to 0..1. Returns "#rrggbb". */
@@ -95,7 +131,7 @@ export type Backdrop = Record<ProbedRole, string>;
  */
 export function deriveBackdrop(bg: { r: number; g: number; b: number }): Backdrop {
   const base: [number, number, number] = [bg.r, bg.g, bg.b];
-  if (luma(base) > 0.5) {
+  if (brightness(toHex(base)) > 0.5) {
     const surface = toHex(mix(base, [214, 221, 238], 0.78));
     return {
       surface,

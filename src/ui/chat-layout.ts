@@ -33,7 +33,14 @@ export function chipMarkers(line: string): string {
 const RAIL_FADE = {
   blue: ["#7dcfff", "#4aa8e0"],
   red: ["#ff7a90", "#c04a5e"],
+  // T55 P1c: the live rail is the brightest mark in the transcript. A tool in
+  // flight and a tool that finished ten seconds ago used to be the same blue, so
+  // "where is kumo right now" meant reading every block.
+  active: ["#afe3ff", "#8fd4ff"],
 } as const;
+
+/** What the left rail is saying: live, settled, or failed. */
+export type RailState = keyof typeof RAIL_FADE;
 
 /**
  * The tool rail, shaded from `sky` to `skyDeep` down the block so a run of tool
@@ -41,9 +48,12 @@ const RAIL_FADE = {
  * terminals keep the flat blue/red, where a blended hex would collapse to a
  * single code.
  */
-export function railPaint(rail: "blue" | "red", char: string, t: number): string {
+export function railPaint(rail: RailState, char: string, t: number): string {
   const d = colorDepth();
-  if (d !== "truecolor" && d !== "256") return rail === "red" ? ansi.red(char) : ansi.blue(char);
+  if (d !== "truecolor" && d !== "256") {
+    if (rail === "active") return ansi.cyan(char);
+    return rail === "red" ? ansi.red(char) : ansi.blue(char);
+  }
   const [from, to] = RAIL_FADE[rail];
   return paintHex(blendHex(from, to, t), char);
 }
@@ -59,7 +69,7 @@ export class ChatTranscript extends Container {
     // A thicker rail (Aron, 2026-09-26: "la barre bleue est trop fine").
     const railChar = this.icons.think === "*" ? "|" : "▍";
     for (const child of this.children) {
-      const rail = (child as { rail?: "blue" | "red" }).rail;
+      const rail = (child as { rail?: RailState }).rail;
       // Same 2-column margin on both sides: railed blocks lose 2 more cells to "▍ ".
       const block = child.render(rail === undefined ? inner : Math.max(1, width - 6));
       if (!block.length) continue;
@@ -69,11 +79,23 @@ export class ChatTranscript extends Container {
         // side, opening on the same 1-column accent as the console band.
         const band = (text: string): string => {
           const painted = bgEnabled();
-          const cut = truncateToWidth(text, width - 1);
-          const body = painted ? cut + " ".repeat(Math.max(0, width - 1 - visibleWidth(cut))) : cut;
+          const inner = width - 1;
+          // Only clip a line that genuinely overflows. truncateToWidth reserves
+          // three cells for its ellipsis as soon as the text carries ANSI, so a
+          // full-width line that already fits would come back with its last
+          // three characters replaced by "...".
+          const cut = visibleWidth(text) > inner ? truncateToWidth(text, inner) : text;
+          const body = painted ? cut + " ".repeat(Math.max(0, inner - visibleWidth(cut))) : cut;
           return fillLine("surface", (painted ? ansi.edge(" ") : " ") + body);
         };
-        lines.push(band(""));
+        // T55 P1b: the turn number rides the band's own top line, right-aligned.
+        // It costs no extra row (that line was already a blank pad), and it lands
+        // exactly where the eye already goes to find out which turn it is on.
+        const turn = (child as { turn?: number }).turn;
+        const label = turn === undefined ? "" : ansi.gray(`turn ${String(turn)}`);
+        const inner = width - 1;
+        const top = label === "" ? "" : " ".repeat(Math.max(1, inner - visibleWidth(label))) + label;
+        lines.push(band(top));
         // The accent spends the first of the band's two leading columns, so the
         // prompt still starts in column 2.
         for (const line of block) lines.push(band(` ${withoutEmoji(line)}`));

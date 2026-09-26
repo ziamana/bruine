@@ -8,6 +8,7 @@ import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { kumoIcons } from "../render/chars.js";
 import { KumoUi, readSettingsRoute } from "../ui/kumo-ui.js";
+import { awaitBootHandoff } from "../ui/boot-loader.js";
 import { fetchProps, isPrivateIPv4 } from "../setup/discover.js";
 import { KUMO_MODES_SERVICE, NOTICE_ASK, NOTICE_AUTO, NOTICE_FULL } from "./modes.js";
 import kumoEffort, { KUMO_EFFORT_SERVICE } from "./effort.js";
@@ -53,6 +54,7 @@ export const KUMO_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/full", description: "Switch permissions directly" },
   { name: "/skills", description: "List the enabled skills" },
   { name: "/reload", description: "Re-read settings.yaml and the terminal background" },
+  { name: "/mouse", description: "Turn mouse selection on or off (the wheel scrolls while off)" },
   { name: "/help", description: "Show commands and keys" },
   { name: "/exit", description: "Quit kumo (also ctrl+d)" },
 ];
@@ -423,6 +425,14 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         return;
       }
     }
+    // T56: the wheel and the drag cannot both have the mouse, so the choice is
+    // the user's to make, mid-session, without restarting.
+    if (cmd === "/mouse" && ui !== undefined) {
+      const arg = clean.split(/\s+/)[1]?.toLowerCase();
+      const want = arg === "on" ? true : arg === "off" ? false : undefined;
+      reply(ui.mouse.toggle(want));
+      return;
+    }
     if (cmd === "/permissions") {
       if (ui === undefined) {
         const r: string | undefined = modes()?.runCommand?.(clean);
@@ -688,6 +698,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       }
     })();
 
+    await awaitBootHandoff();
     ui.start();
     await repl.run(startup?.initialPrompt);
     return;

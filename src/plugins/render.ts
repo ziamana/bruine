@@ -10,6 +10,7 @@ import { ReasoningComponent } from "../ui/reasoning-component.js";
 import { ToolCallComponent } from "../ui/tool-call-component.js";
 import { AssistantTextComponent, userMessageComponent } from "../ui/assistant-text.js";
 import { WorkingComponent } from "../ui/working.js";
+import { gitStatus, turnChanges, type ChangedFile, type GitStatus } from "../ui/changes.js";
 import { MODE_ANNOUNCEMENTS } from "./modes.js";
 import { TpsMeter } from "../ui/tps.js";
 import { ansi } from "../ui/theme.js";
@@ -110,6 +111,8 @@ export function attachTui(
   let lastCacheTokens = 0;
   let turnStartWall = Date.now();
   let turnOutput = 0;
+  /** T59: the workspace as it was when this turn started, to diff against. */
+  let turnBefore: GitStatus | undefined;
   let turnToolIds: string[] = [];
   let turnBreaks = new Set<string>();
   let needBreak = false;
@@ -180,7 +183,9 @@ export function attachTui(
 
   const ensureText = (): AssistantTextComponent => {
     if (text === undefined) {
-      text = new AssistantTextComponent();
+      // T57: the repaint hook is what lets the answer be revealed at a readable
+      // pace instead of one token at a time. Without it every delta lands whole.
+      text = new AssistantTextComponent({ onTick: () => ui.requestRender(), icons: ui.icons });
       ui.addChat(text);
     }
     return text;
@@ -207,6 +212,26 @@ export function attachTui(
     (ui as unknown as { footer?: { state?: Record<string, unknown> } }).footer?.state ?? {};
 
   /** T33b: one red actionable line + one dim hint; detail only to kumo.log. */
+  /**
+   * T59: publish what the turn did to the files, once the receipt is on screen.
+   *
+   * The receipt is synchronous and this is not, so the line lands a frame or two
+   * later. That ordering is deliberate: a turn that took four minutes should not
+   * have its summary held hostage to a `git status` in a large repository.
+   */
+  const reportTurnChanges = (ordered: ReadonlyArray<{ tool: string; comp: unknown }>): void => {
+    const declared = ordered
+      .map((t) => (t.comp as { touchedPath?: () => string | undefined }).touchedPath?.())
+      .filter((p): p is string => p !== undefined);
+    const before = turnBefore;
+    turnBefore = undefined;
+    void turnChanges({ before, declared, cwd: process.cwd() }).then((changed) => {
+      if (changed.length === 0) return;
+      (ui as unknown as { showTurnChanges?: (files: readonly ChangedFile[]) => void }).showTurnChanges?.(changed);
+      ui.requestRender();
+    });
+  };
+
   const showLlmError = async (failure: unknown): Promise<void> => {
     const f = (failure ?? {}) as { code?: unknown; message?: unknown; status?: unknown };
     const settings = readSettingsRoute();
@@ -218,15 +243,23 @@ export function attachTui(
       ...(typeof state.contextWindow === "number" ? { contextWindow: state.contextWindow } : {}),
     };
     const lines = describeLlmError(f, route);
-    let hint = lines.hint;
+    // T55: the error is written straight away and the model list fills the hint
+    // in place once the server answers. It used to wait on that network call
+    // before printing anything, which delayed the message the user actually needs
+    // and let the turn receipt land above the error it belongs to.
+    const message = new Text(ansi.red(`${ui.icons.fail} ${lines.message}`), 0, 0);
+    const hint = new Text(dim(lines.hint), 0, 0);
+    ui.addChat(message);
+    ui.addChat(hint);
+    ui.requestRender();
     if (lines.wantAvailableModels === true && settings?.baseUrl !== undefined) {
       const ids = await fetchAvailableModels(settings.baseUrl);
-      if (ids.length > 0) hint = `Available: ${ids.join(", ")}. ${hint}`;
+      if (ids.length > 0) {
+        hint.setText(dim(`Available: ${ids.join(", ")}. ${lines.hint}`));
+        ui.requestRender();
+      }
     }
-    ui.addChat(new Text(ansi.red(`${ui.icons.fail} ${lines.message}`), 0, 0));
-    ui.addChat(new Text(dim(hint), 0, 0));
     void appendErrorLog(f);
-    ui.requestRender();
   };
 
   // T33b: visible compaction (notice while running, one dim line after).
@@ -248,6 +281,13 @@ export function attachTui(
     if (f.type === "start") {
       tps.startCall(now);
       closeLive();
+      // T59: the workspace is read now so the end of the turn can be diffed
+      // against it. Fire and forget: a slow repository must never delay the
+      // first token, and a reading that misses the start measures nothing rather
+      // than something wrong.
+      void gitStatus(process.cwd()).then((status) => {
+        turnBefore = status;
+      });
       // A call starts the moment the request is sent; a local server then prefills in
       // silence for seconds. Keep (or show) Working until the first content delta.
       // Hiding it here made it vanish instantly on llama.cpp (BOS, real server, 2026-09-26).
@@ -323,6 +363,14 @@ export function attachTui(
           inputTokens: Number(u.inputTokens ?? NaN),
           cacheReadTokens: cached,
         });
+        // T55: publish the running context on every usage chunk, not only at
+        // turn/end, so the meter in the footer is seen to climb. This is the
+        // server's own running total, never an estimate: a server that does not
+        // stream usage leaves the number where it was, which is the honest answer.
+        const window = agent.session?.requestContext?.()?.contextWindow;
+        if (typeof window === "number" && window > 0) {
+          ui.footer.set({ contextUsed: lastInputTokens + lastCacheTokens + lastOutputTokens, contextWindow: window });
+        }
         ui.footer.set({ tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
         ui.requestRender();
         return;
@@ -360,7 +408,8 @@ export function attachTui(
             working !== undefined ||
             (chat?.children ?? []).some((c) => (c as { constructor?: { name?: string } }).constructor?.name === "WorkingComponent");
           if (hadWorking) hideWorking();
-          ui.addChat(userMessageComponent(trimmed));
+          // T55 P1b: the prompt opens a turn, so the shell numbers it.
+          ui.addUserPrompt(trimmed);
           if (hadWorking) showWorking();
         }
         return;
@@ -488,6 +537,7 @@ export function attachTui(
               };
             })
             .filter((t) => t !== undefined);
+          reportTurnChanges(ordered);
           (ui as unknown as { onTurnEnd?: (i: unknown) => void }).onTurnEnd?.({
             tools: ordered,
             wallSec,

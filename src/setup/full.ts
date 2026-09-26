@@ -9,6 +9,7 @@ import {
   SelectList,
   Text,
   TuiMainScreen,
+  isKeyRelease,
   matchesKey,
   type Component,
   type SelectItem,
@@ -21,6 +22,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ansi, selectListTheme } from "../ui/theme.js";
+import { dropLastChar, typedText } from "../ui/keys.js";
 import {
   SetupFlow,
   defaultAnswers,
@@ -103,22 +105,20 @@ class LineInput implements Component {
   invalidate(): void {}
   handleInput(data: string): void {
     if (this.#done) return;
-    if (data === "\x7f" || data === "\b") {
-      const chars = [...this.#value];
-      chars.pop();
-      this.#value = chars.join("");
+    // T60: the kitty protocol turns a typed letter into `CSI 115 u`, and the
+    // guard below dropped every one of them: this field accepted nothing at all
+    // on a terminal with the protocol on.
+    if (isKeyRelease(data)) return;
+    if (matchesKey(data, "backspace")) {
+      this.#value = dropLastChar(this.#value);
       return;
     }
-    if (data === "\r" || data === "\n") {
+    if (matchesKey(data, "enter")) {
       this.#done = true;
       this.onSubmit?.(this.#value);
       return;
     }
-    if (data.startsWith("\x1b")) return;
-    for (const ch of data) {
-      const code = ch.codePointAt(0) ?? 0;
-      if (code >= 32 && code !== 127) this.#value += ch;
-    }
+    this.#value += typedText(data);
   }
 }
 
@@ -174,8 +174,11 @@ class CheckList implements Component {
   }
   invalidate(): void {}
   handleInput(data: string): void {
-    // T35: `s` skips the whole step (keep current), same as the Skip item.
-    if (data === "s" || data === "S") {
+    if (isKeyRelease(data)) return;
+    // T35: `s` skips the whole step (keep current), same as the Skip item. T60:
+    // read through the decoder, so the shortcut survives the kitty protocol.
+    const typed = typedText(data).toLowerCase();
+    if (typed === "s") {
       this.onSkip?.();
       return;
     }
@@ -187,13 +190,13 @@ class CheckList implements Component {
       this.#cursor = this.#nearest(this.#cursor + 1, 1) ?? this.#cursor;
       return;
     }
-    if (data === " ") {
+    if (matchesKey(data, "space")) {
       if (this.items[this.#cursor]?.disabled === true) return;
       if (this.checked.has(this.#cursor)) this.checked.delete(this.#cursor);
       else this.checked.add(this.#cursor);
       return;
     }
-    if (data === "\r" || data === "\n") {
+    if (matchesKey(data, "enter")) {
       this.onDone?.([...this.checked].sort((a, b) => a - b));
     }
   }
@@ -674,7 +677,7 @@ export async function runFullSetup(
       if (skipIdx >= 0) {
         const origInput = list.handleInput.bind(list);
         list.handleInput = (data: string) => {
-          if (data === "s" || data === "S") {
+          if (!isKeyRelease(data) && typedText(data).toLowerCase() === "s") {
             list.setSelectedIndex(skipIdx);
             finish(map(skipIdx));
             return;

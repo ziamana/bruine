@@ -15,10 +15,12 @@ import {
   type SlashCommand,
   type TUI,
   type Terminal,
+  type TuiInputListener,
 } from "@earendil-works/pi-tui";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi, editorTheme, selectListTheme } from "./theme.js";
 import { bgEnabled, colorDepth, gradientStops, setTerminalBackdrop } from "./palette.js";
+import { LOGO_STOPS, terminalMotionAllowed, wordmarkFrame } from "./logo-motion.js";
 import { ChatTranscript, ConsoleBand, Gap, Margin, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
 import { displayModel } from "./footer.js";
@@ -26,7 +28,14 @@ import { QuestionForm } from "./questions.js";
 import { WorkingComponent } from "./working.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
 import { DashboardPanel, DockRow } from "./dock.js";
-import { CollapsedToolsComponent, groupRuns, turnSummary, type GroupedTool } from "./tool-group.js";
+import {
+  CollapsedToolsComponent,
+  groupRuns,
+  turnReceipt,
+  type GroupedTool,
+  type ReceiptSegment,
+} from "./tool-group.js";
+import { userMessageComponent } from "./assistant-text.js";
 import {
   draggedImagePath,
   readClipboardImage,
@@ -35,6 +44,10 @@ import {
   type ClipboardRead,
 } from "../image/clipboard.js";
 import { PendingImages } from "../image/pending.js";
+import { selectedText, SelectionLayer, viewportTop, type SelectionSpan } from "./selection.js";
+import { MouseFeature, type CopyClipboard } from "./mouse.js";
+import { ChangedFilesComponent, type ChangedFile } from "./changes.js";
+import { typedText } from "./keys.js";
 
 /** T29: where a paste gets its bytes; injectable so tests never spawn a tool. */
 export type ClipboardImageReader = () => Promise<ClipboardRead>;
@@ -64,6 +77,11 @@ export interface KumoUiHandlers {
   onQuit(): void;
   /** Shift+Tab: toggle Plan/Build (T31.4). */
   onShiftTab?: () => void;
+  /**
+   * T56: where a mouse selection is written. Left out, the platform clipboard
+   * is used, which means a test never spawns wl-copy.
+   */
+  copyText?: CopyClipboard;
 }
 
 /** Overlay container that forwards key input to its SelectList. */
@@ -93,36 +111,6 @@ class NoticeBox extends Container {
     if (this.children.length === 0) return [""];
     return super.render(width);
   }
-}
-
-/** Startup cloud frames (T27.4): block/braille `kumo`, no emoji. */
-export const STARTUP_FRAMES = [
-  "░ kumo",
-  "▒ kumo",
-  "▓ kumo",
-  "█ kumo",
-  "⡿ kumo ⡿",
-  "⣿ kumo ⣿",
-];
-
-/** The kumo wordmark, two rows of half blocks (no emoji, no box art). */
-export const LOGO = ["█▄▀ █ █ █▀▄▀█ █▀█", "█ █ █▄█ █ ▀ █ █▄█"];
-/** Sky → lavender → pink → sky, so the shimmer loops without a seam. */
-export const LOGO_STOPS = ["#7dcfff", "#b4a7ff", "#ff9ed2", "#7dcfff"];
-
-export function shouldAnimateStartup(opts: {
-  stdoutTTY?: boolean;
-  env?: NodeJS.ProcessEnv;
-  ascii?: boolean;
-} = {}): boolean {
-  const env = opts.env ?? process.env;
-  const tty = opts.stdoutTTY ?? process.stdout.isTTY === true;
-  if (!tty) return false;
-  if (opts.ascii === true) return false;
-  if (env.KUMO_ASCII === "1") return false;
-  if (env.CI === "1") return false;
-  if (env.KUMO_NO_ANIMATION === "1") return false;
-  return true;
 }
 
 /** Host for header: base URL hostname, or provider for cloud (pure; tested). */
@@ -292,6 +280,12 @@ export class KumoUi {
   readonly editor: PlainGlyphEditor;
   readonly footer: FooterComponent;
   readonly icons: KumoIcons;
+  /**
+   * T56: the mouse. Drag to select, release to copy. It owns the gesture, the
+   * clipboard, and the one terminal sequence nobody else writes, so all this
+   * class does is hand it a chunk and paint what comes back.
+   */
+  readonly mouse: MouseFeature;
   readonly noticeBox: NoticeBox;
   readonly taskPanel: TaskPanel;
   readonly dock: DockRow;
@@ -301,14 +295,20 @@ export class KumoUi {
   readonly pendingImages = new PendingImages();
   #lastCtrlC = 0;
   #animation: ReturnType<typeof setInterval> | undefined;
+  #headerSweep: ReturnType<typeof setInterval> | undefined;
+  #headerSweepPhase = 0;
+  #headerSweepStarted = false;
   #closed = false;
   #noticeTimer: ReturnType<typeof setTimeout> | undefined;
   #persistentNotice: Component | undefined;
   /** A notice that arrived while a question form owned the box. */
   #pendingNotice: { text: string; red: boolean; persistent?: boolean } | undefined;
   #confirming = false;
-  #animTimer: ReturnType<typeof setInterval> | undefined;
   #cachedHost: string | undefined;
+  /** T56: the frame, with the mouse selection painted on top of it. */
+  #layer: SelectionLayer;
+  /** T55 P1b: turns run so far, shared by the band label and the turn receipt. */
+  #turn = 0;
   #toolsCollapsed = true;
   /** T29: the last vision answer, kept per route so ctrl+v stays instant. */
   #visionKey: string | undefined;
@@ -372,10 +372,25 @@ export class KumoUi {
     }
     this.updateHeader();
 
-    this.tui.addChild(this.header);
-    this.tui.addChild(this.chat);
-    this.tui.addChild(new Margin(new Gap(this.taskPanel)));
-    this.tui.addChild(new Margin(this.noticeBox));
+    // T56: every row goes through one layer, because a selection can cross the
+    // transcript, the task panel and the console band, and only the composed
+    // frame knows which line a screen row belongs to.
+    this.#layer = new SelectionLayer(
+      () => this.mouse.span,
+      () => this.terminal.rows,
+    );
+    this.mouse = new MouseFeature({
+      tui: this.tui,
+      terminal: this.terminal,
+      repaint: () => this.requestRender(),
+      notify: (text, opts) => this.showNotice(text, opts),
+      readText: (span) => this.#readSelection(span),
+      copy: handlers.copyText,
+    });
+    this.#layer.addChild(this.header);
+    this.#layer.addChild(this.chat);
+    this.#layer.addChild(new Margin(new Gap(this.taskPanel)));
+    this.#layer.addChild(new Margin(this.noticeBox));
     // Cockpit (Nuage + Cockpit mix): live speed/cache/context next to the editor on
     // wide color terminals; ctrl+b hides it. Basic/ASCII terminals keep the plain editor.
     this.dock = new DockRow(
@@ -396,157 +411,163 @@ export class KumoUi {
     this.dock.visible = this.fancyHeader;
     this.footer.compact = (w) => this.dock.shown(w);
     // The editor, the cockpit and the footer share one painted surface (T40).
-    this.tui.addChild(new ConsoleBand([this.dock, this.footer]));
+    this.#layer.addChild(new ConsoleBand([this.dock, this.footer]));
+    this.tui.addChild(this.#layer);
 
     // T30: the launcher ran the 24 h registry check in the background; the
     // session only reads its cached result — never any network here, never
     // any delay.
     void this.#maybeUpdateNotice(version);
 
-    this.tui.addInputListener((data: string) => {
-      if (
-        data.includes("\x1b[200~") ||
-        (!data.startsWith("\x1b") && [...data].some((ch) => (ch.codePointAt(0) ?? 0) >= 32))
-      ) {
-        handlers.onUserActivity?.();
-      }
-      if (matchesKey(data, "ctrl+v") && !this.#confirming) {
-        void this.pasteClipboardImage();
+    this.tui.addInputListener((data: string) => this.#onInput(data, handlers));
+  }
+
+  #onInput(data: string, handlers: KumoUiHandlers): ReturnType<TuiInputListener> {
+    const mouse = this.mouse.read(data);
+    if (mouse.handled) {
+      // A chunk can carry a release and the key typed after it in one read. The
+      // shell still decides what that key means, and handing the leftover back
+      // is how pi-tui routes it to the focused component: poking the editor's
+      // handleInput by hand needed a private accessor and reached one layer
+      // deeper than its contract allows.
+      if (mouse.rest === "") return { consume: true };
+      this.#onKey(mouse.rest, handlers);
+      return { data: mouse.rest };
+    }
+    return this.#onKey(data, handlers);
+  }
+
+  /** Everything that is a key: the mode switches, the editor, the slash commands. */
+  #onKey(data: string, handlers: KumoUiHandlers): ReturnType<TuiInputListener> {
+    // T60: "the user typed something" is a question about the encoding, and
+    // under the kitty protocol a letter is an escape sequence. Reading it as
+    // bytes meant a background suggestion was never dismissed by typing.
+    if (data.includes("\x1b[200~") || typedText(data) !== "") {
+      handlers.onUserActivity?.();
+    }
+    if (matchesKey(data, "ctrl+v") && !this.#confirming) {
+      void this.pasteClipboardImage();
+      return { consume: true };
+    }
+    // T29: a dropped image arrives as a bracketed paste carrying its path.
+    // Only a single-chunk paste is claimed, so a split paste still reaches
+    // the editor as the text it is.
+    if (data.includes("\x1b[200~") && data.includes("\x1b[201~") && !this.#confirming) {
+      const start = data.indexOf("\x1b[200~") + "\x1b[200~".length;
+      const file = draggedImagePath(data.slice(start, data.indexOf("\x1b[201~")));
+      if (file !== undefined) {
+        void this.pasteDroppedImage(file);
         return { consume: true };
       }
-      // T29: a dropped image arrives as a bracketed paste carrying its path.
-      // Only a single-chunk paste is claimed, so a split paste still reaches
-      // the editor as the text it is.
-      if (data.includes("\x1b[200~") && data.includes("\x1b[201~") && !this.#confirming) {
-        const start = data.indexOf("\x1b[200~") + "\x1b[200~".length;
-        const file = draggedImagePath(data.slice(start, data.indexOf("\x1b[201~")));
-        if (file !== undefined) {
-          void this.pasteDroppedImage(file);
-          return { consume: true };
-        }
-      }
-      if (matchesKey(data, "ctrl+t")) {
-        if (this.#confirming) return { consume: true };
-        this.taskPanel.toggleExpanded();
-        this.requestRender();
+    }
+    if (matchesKey(data, "ctrl+t")) {
+      if (this.#confirming) return { consume: true };
+      this.taskPanel.toggleExpanded();
+      this.requestRender();
+      return { consume: true };
+    }
+    if (matchesKey(data, "ctrl+b")) {
+      if (this.#confirming) return { consume: true };
+      this.dock.visible = !this.dock.visible;
+      this.requestRender();
+      return { consume: true };
+    }
+    if (matchesKey(data, "ctrl+o")) {
+      if (this.#confirming) return { consume: true };
+      this.#toolsCollapsed = !this.#toolsCollapsed;
+      this.applyToolsCollapsed();
+      this.requestRender();
+      return { consume: true };
+    }
+    if (this.#confirming) {
+      if (matchesKey(data, "tab") || matchesKey(data, "shift+tab")) {
         return { consume: true };
       }
-      if (matchesKey(data, "ctrl+b")) {
-        if (this.#confirming) return { consume: true };
-        this.dock.visible = !this.dock.visible;
-        this.requestRender();
-        return { consume: true };
-      }
-      if (matchesKey(data, "ctrl+o")) {
-        if (this.#confirming) return { consume: true };
-        this.#toolsCollapsed = !this.#toolsCollapsed;
-        this.applyToolsCollapsed();
-        this.requestRender();
-        return { consume: true };
-      }
-      if (this.#confirming) {
-        if (matchesKey(data, "tab") || matchesKey(data, "shift+tab")) {
-          return { consume: true };
-        }
-        if (matchesKey(data, "escape")) {
-          return {};
-        }
-        if (matchesKey(data, "ctrl+c") || matchesKey(data, "ctrl+d")) {
-          return { consume: true };
-        }
+      if (matchesKey(data, "escape")) {
         return {};
       }
-      if (handlers.onShiftTab !== undefined && matchesKey(data, "shift+tab")) {
-        handlers.onShiftTab();
+      if (matchesKey(data, "ctrl+c") || matchesKey(data, "ctrl+d")) {
+        return { consume: true };
+      }
+      return {};
+    }
+    if (handlers.onShiftTab !== undefined && matchesKey(data, "shift+tab")) {
+      handlers.onShiftTab();
+      this.requestRender();
+      return { consume: true };
+    }
+    // T31.4: Tab is completion only (the Editor owns it). Never a mode action.
+    if (matchesKey(data, "escape")) {
+      handlers.onEscape();
+      return { consume: true };
+    }
+    if (matchesKey(data, "ctrl+c")) {
+      const now = Date.now();
+      if (this.#lastCtrlC !== 0 && now - this.#lastCtrlC < 500) {
+        handlers.onQuit();
+      } else {
+        this.editor.setText("");
+        this.requestRender();
+      }
+      this.#lastCtrlC = now;
+      return { consume: true };
+    }
+    if (matchesKey(data, "ctrl+d")) {
+      if (this.editor.getText() === "") {
+        handlers.onQuit();
+        return { consume: true };
+      }
+    }
+    const ghost = this.editor.ghost;
+    const empty = this.editor.getText() === "";
+    if (ghost !== "" && empty) {
+      // Tab accepts, like every other shell suggestion. It cannot steal the
+      // editor's completion: a suggestion only ever shows on an empty
+      // buffer, and completion only matters once something has been typed.
+      // T60: right and ctrl+f, matched by name: `[C` is the right arrow in
+      // one encoding only, and `` is ctrl+f in one encoding only.
+      if (matchesKey(data, "right") || matchesKey(data, "ctrl+f") || matchesKey(data, "tab")) {
+        this.editor.setText(ghost);
+        this.editor.clearGhost();
         this.requestRender();
         return { consume: true };
       }
-      // T31.4: Tab is completion only (the Editor owns it). Never a mode action.
-      if (matchesKey(data, "escape")) {
-        handlers.onEscape();
+      if (matchesKey(data, "enter")) {
         return { consume: true };
       }
-      if (matchesKey(data, "ctrl+c")) {
-        const now = Date.now();
-        if (this.#lastCtrlC !== 0 && now - this.#lastCtrlC < 500) {
-          handlers.onQuit();
-        } else {
-          this.editor.setText("");
-          this.requestRender();
-        }
-        this.#lastCtrlC = now;
-        return { consume: true };
+      if (typedText(data) !== "") {
+        this.editor.clearGhost();
+        this.requestRender();
+        return {};
       }
-      if (matchesKey(data, "ctrl+d")) {
-        if (this.editor.getText() === "") {
-          handlers.onQuit();
-          return { consume: true };
-        }
-      }
-      const ghost = this.editor.ghost;
-      const empty = this.editor.getText() === "";
-      if (ghost !== "" && empty) {
-        // Tab accepts, like every other shell suggestion. It cannot steal the
-        // editor's completion: a suggestion only ever shows on an empty
-        // buffer, and completion only matters once something has been typed.
-        if (data === "\x1b[C" || data === "\x06" || matchesKey(data, "tab")) {
-          this.editor.setText(ghost);
-          this.editor.clearGhost();
-          this.requestRender();
-          return { consume: true };
-        }
-        if (data === "\r" || data === "\n") {
-          return { consume: true };
-        }
-        if (!data.startsWith("\x1b") && [...data].some((ch) => (ch.codePointAt(0) ?? 0) >= 32)) {
-          this.editor.clearGhost();
-          this.requestRender();
-          return {};
-        }
-      }
-      return {};
-    });
+    }
+    return {};
+  }
+
+  /**
+   * T56: a form owns the screen, so the terminal gets its mouse back. The wheel
+   * and the native selection belong to the terminal, and a form is exactly the
+   * moment the user wants them: they are reading what came before to answer it.
+   */
+  #setConfirming(value: boolean): void {
+    if (this.#confirming === value) return;
+    this.#confirming = value;
+    this.mouse.setFormsUp(value);
+  }
+
+  /** T56: the visible text of a selection, read out of the frame we compose. */
+  #readSelection(span: SelectionSpan): string {
+    const lines = this.tui.render(this.terminal.columns);
+    return selectedText(lines, viewportTop(lines.length, this.terminal.rows), span);
   }
 
   start(): void {
     this.tui.setFocus(this.editor);
     this.tui.start();
+    // T56: ask for the mouse, so a drag can be seen and copied. KUMO_MOUSE_SELECT=0
+    // and a form both keep the terminal's.
+    this.mouse.start();
     void this.probeBackdrop();
-    if (!shouldAnimateStartup({ ascii: this.icons.think === "*" })) return;
-    let i = 0;
-    // The wordmark never freezes: one full sweep of the light band, then
-    // straight back to the first frame, so the header keeps exactly the look
-    // it has when the app opens instead of settling into a still picture.
-    this.#animTimer = setInterval(() => {
-      if (this.#closed) {
-        this.stopHeaderAnimation();
-        return;
-      }
-      const frames = this.fancyHeader ? 12 : STARTUP_FRAMES.length;
-      if (this.fancyHeader) {
-        this.header.setText(this.headerText(i / frames));
-      } else {
-        const frame = STARTUP_FRAMES[i]!;
-        this.header.setText(
-          `${frame}\n${ansi.gray("escape interrupt · ctrl+c clear · ctrl+d exit · / commands")}`,
-        );
-      }
-      this.requestRender();
-      i = (i + 1) % frames;
-    }, 70);
-    this.#animTimer.unref?.();
-  }
-
-  /**
-   * Stop the looping header animation. The header is left on its live text
-   * (`updateHeader` is a no-op while closed), which is also what `close` needs.
-   */
-  stopHeaderAnimation(): void {
-    if (this.#animTimer === undefined) return;
-    clearInterval(this.#animTimer);
-    this.#animTimer = undefined;
-    this.updateHeader();
-    this.requestRender();
   }
 
   /**
@@ -590,7 +611,41 @@ export class KumoUi {
 
   addChat(component: Component): void {
     this.chat.addChild(component);
+    if (component instanceof WorkingComponent) this.#startHeaderSweep();
     this.requestRender();
+  }
+
+  #startHeaderSweep(): void {
+    if (this.#headerSweepStarted || this.#turn > 1 || !this.fancyHeader || !terminalMotionAllowed()) return;
+    this.#headerSweepStarted = true;
+    const started = Date.now();
+    this.#headerSweep = setInterval(() => {
+      this.#headerSweepPhase = Math.min(1, (Date.now() - started) / 420);
+      if (this.#headerSweepPhase >= 1) {
+        clearInterval(this.#headerSweep);
+        this.#headerSweep = undefined;
+        this.#headerSweepPhase = 0;
+      }
+      this.requestRender();
+    }, 32);
+    this.#headerSweep.unref?.();
+  }
+
+  /**
+   * The user's prompt opens a turn, so it carries the turn number and the band
+   * shows it (T55 P1b). One place numbers the turns, so the label on the band and
+   * the number on the receipt can never drift apart.
+   */
+  addUserPrompt(text: string): void {
+    this.#turn += 1;
+    const comp = userMessageComponent(text) as Component & { turn?: number };
+    comp.turn = this.#turn;
+    this.addChat(comp);
+  }
+
+  /** How many turns this session has run. */
+  get turn(): number {
+    return this.#turn;
   }
 
   removeChat(component: Component): void {
@@ -719,6 +774,7 @@ export class KumoUi {
     );
     if (has) return;
     this.chat.addChild(new WorkingComponent(Date.now, this.icons));
+    this.#startHeaderSweep();
     this.requestRender();
   }
 
@@ -774,7 +830,7 @@ export class KumoUi {
   }
 
   /** Header first line (T27.4, T28b.1): settings route first, kumo.json fallback. */
-  headerFirstLine(): string {
+  headerFirstLine(includeBrand = true): string {
     const st = this.footer.state;
     const model = displayModel(st.model, st.modelName);
     if (this.#cachedHost === undefined) {
@@ -793,7 +849,8 @@ export class KumoUi {
     }
     const host = this.#cachedHost ?? "?";
     const sep = this.icons.think === "*" ? "-" : "·";
-    return `${ansi.bold("kumo")}  ${ansi.faint(sep)}  ${ansi.text(model)}  ${ansi.faint(sep)}  ${ansi.gray(host)}  ${ansi.faint(`v${this.version}`)}`;
+    const details = `${ansi.text(model)}  ${ansi.faint(sep)}  ${ansi.gray(host)}  ${ansi.faint(`v${this.version}`)}`;
+    return includeBrand ? `${ansi.bold("kumo")}  ${ansi.faint(sep)}  ${details}` : details;
   }
 
   /** The big gradient wordmark is for color terminals; basic/ASCII keep one line. */
@@ -802,13 +859,17 @@ export class KumoUi {
     return this.icons.think !== "*" && (d === "truecolor" || d === "256");
   }
 
-  headerText(phase = 0): string {
-    const help = ansi.faint("escape interrupt · ctrl+c clear · ctrl+d exit · / commands");
-    if (!this.fancyHeader) return `${this.headerFirstLine()}\n${ansi.gray("escape interrupt · ctrl+c clear · ctrl+d exit · / commands")}`;
+  headerText(): string {
+    // The line that says how to quit has to be readable, not decorative. It used
+    // to be `faint` on a color terminal while the plain terminal got `muted`, so
+    // the words a first-time user needs were the hardest ones to read.
+    const help = ansi.gray("escape interrupt · ctrl+c clear · ctrl+d exit · / commands");
+    if (!this.fancyHeader) return `${this.headerFirstLine()}\n${help}`;
+    const mark = wordmarkFrame(1);
     return [
       "",
-      ` ${gradientStops(LOGO[0]!, LOGO_STOPS, phase)}`,
-      ` ${gradientStops(LOGO[1]!, LOGO_STOPS, phase)}   ${this.headerFirstLine()}`,
+      ` ${gradientStops(mark[0]!, [...LOGO_STOPS], this.#headerSweepPhase)}`,
+      ` ${gradientStops(mark[1]!, [...LOGO_STOPS], this.#headerSweepPhase)}   ${this.headerFirstLine(false)}`,
       "",
       ` ${help}`,
     ].join("\n");
@@ -816,7 +877,6 @@ export class KumoUi {
 
   updateHeader(): void {
     if (this.#closed) return;
-    if (this.#animTimer !== undefined) return;
     this.header.setText(this.headerText());
   }
 
@@ -852,6 +912,38 @@ export class KumoUi {
   }
 
   /** Turn end from render (T27.2+3): collapse groups + summary line. */
+  /**
+   * Paint a receipt segment (T55). The numbers get `muted`, which is 5.10:1 on the
+   * surface; the labels and separators get `faint` at 3.20:1; the mark is the one
+   * accent. The line used to be a single raw `dim`, which is not a palette role
+   * at all, so the only record of what a turn cost was the least legible ink in
+   * the transcript.
+   */
+  #paintReceipt(segments: ReceiptSegment[]): string {
+    return segments
+      .map((s) => {
+        if (s.role === "value") return ansi.gray(s.text);
+        if (s.role === "ok") return ansi.green(s.text);
+        if (s.role === "fail") return ansi.red(s.text);
+        return ansi.faint(s.text);
+      })
+      .join("");
+  }
+
+  /**
+   * T59: what the turn did to the files, printed under the receipt.
+   *
+   * It arrives a frame or two after the receipt, because the workspace is read
+   * with a process and the receipt must not wait for one. An empty list prints
+   * nothing at all: a "changed" line with no files is noise, and a turn that
+   * touched nothing is the common case.
+   */
+  showTurnChanges(files: readonly ChangedFile[]): void {
+    if (this.#closed || files.length === 0) return;
+    this.addChat(new ChangedFilesComponent(files, process.cwd()));
+    this.requestRender();
+  }
+
   onTurnEnd(info: {
     tools: Array<{ tool: string; ok: boolean; seconds: number; comp: unknown; breakBefore?: boolean; hidden?: boolean }>;
     wallSec: number;
@@ -862,18 +954,21 @@ export class KumoUi {
     if (this.#closed) return;
     const ascii = this.icons.think === "*";
     if (info.cancelled) {
-      const line = turnSummary({
-        tools: 0,
-        wallSec: info.wallSec,
-        outputTokens: 0,
-        cancelled: true,
-        okMark: ascii ? "v" : "✓",
-        cancelMark: ascii ? "-" : "·",
-      });
-      if (line !== undefined) this.addChat(new Text(ansi.dim(line), 1, 0));
+      this.addChat(new Text(this.#paintReceipt(turnReceipt({
+        tools: 0, wallSec: info.wallSec, outputTokens: 0, cancelled: true, turn: this.turn,
+        okMark: ascii ? "v" : "✓", cancelMark: ascii ? "-" : "·",
+      })), 0, 0));
       return;
     }
-    if (info.error) return;
+    if (info.error) {
+      // T55: a failed turn gets its receipt too, in rose. The turn where the
+      // numbers matter most used to be the one that showed none.
+      this.addChat(new Text(this.#paintReceipt(turnReceipt({
+        tools: 0, wallSec: info.wallSec, outputTokens: info.outputTokens, cancelled: false,
+        turn: this.turn, error: true, okMark: ascii ? "x" : "✗", cancelMark: ascii ? "-" : "·",
+      })), 0, 0));
+      return;
+    }
     let offset = 0;
     let segment: Array<{ tool: string; ok: boolean; seconds: number }> = [];
     let segStart = 0;
@@ -918,15 +1013,20 @@ export class KumoUi {
       offset += 1;
     }
     flushSegment();
-    const line = turnSummary({
+    // T55: the receipt closes the turn the band opened, structured so the numbers
+    // are readable, and on the same left edge as the prose above it (the extra
+    // padding column it used to carry put it off the grid).
+    this.addChat(new Text(this.#paintReceipt(turnReceipt({
       tools: info.tools.length,
       wallSec: info.wallSec,
       outputTokens: info.outputTokens,
       cancelled: false,
+      turn: this.turn,
+      // The cache only when the model actually reported one.
+      cachePct: this.footer.state.cachePct,
       okMark: ascii ? "v" : "✓",
       cancelMark: ascii ? "-" : "·",
-    });
-    if (line !== undefined) this.addChat(new Text(ansi.dim(line), 1, 0));
+    })), 0, 0));
   }
 
   /** Transient dim (or red) notice directly above the editor for 3 s (T24.4). */
@@ -1003,7 +1103,7 @@ export class KumoUi {
   confirmFullAccess(): Promise<boolean> {
     if (this.#closed) return Promise.resolve(false);
     this.clearNoticeBox();
-    this.#confirming = true;
+    this.#setConfirming(true);
     const title = new Text(
       ansi.red("Enable full access? kumo will run commands and edit files without asking."),
       1,
@@ -1019,7 +1119,7 @@ export class KumoUi {
     this.requestRender();
     return new Promise((resolve) => {
       const finish = (ok: boolean) => {
-        this.#confirming = false;
+        this.#setConfirming(false);
         this.clearNoticeBox();
         this.tui.setFocus(this.editor);
         this.requestRender();
@@ -1041,7 +1141,7 @@ export class KumoUi {
   askChoice(title: string, items: SelectItem[], opts: { initial?: number } = {}): Promise<number> {
     if (this.#closed) return Promise.resolve(-1);
     this.clearNoticeBox();
-    this.#confirming = true;
+    this.#setConfirming(true);
     const titleText = new Text(ansi.yellow(title), 1, 0);
     const list = new SelectList(items, Math.max(items.length, 5), selectListTheme);
     if (opts.initial !== undefined && opts.initial >= 0 && opts.initial < items.length) {
@@ -1052,7 +1152,7 @@ export class KumoUi {
     this.requestRender();
     return new Promise((resolve) => {
       const finish = (index: number) => {
-        this.#confirming = false;
+        this.#setConfirming(false);
         this.clearNoticeBox();
         this.tui.setFocus(this.editor);
         this.requestRender();
@@ -1080,13 +1180,13 @@ export class KumoUi {
   ): Promise<Array<{ id: string; selected: string[]; custom?: string }> | undefined> {
     if (this.#closed) return Promise.resolve(undefined);
     this.clearNoticeBox();
-    this.#confirming = true;
+    this.#setConfirming(true);
     const form = new QuestionForm(questions);
     this.noticeBox.addChild(form);
     this.requestRender();
     return new Promise((resolve) => {
       const finish = (answers: Array<{ id: string; selected: string[]; custom?: string }> | undefined) => {
-        this.#confirming = false;
+        this.#setConfirming(false);
         this.clearNoticeBox();
         this.tui.setFocus(this.editor);
         this.requestRender();
@@ -1110,7 +1210,10 @@ export class KumoUi {
     this.#closed = true;
     clearInterval(this.#animation);
     this.#animation = undefined;
-    this.stopHeaderAnimation();
+    if (this.#headerSweep !== undefined) clearInterval(this.#headerSweep);
+    this.#headerSweep = undefined;
+    // T56: give the mouse back, whatever was in flight.
+    this.mouse.stop();
     if (this.#noticeTimer !== undefined) {
       clearTimeout(this.#noticeTimer);
       this.#noticeTimer = undefined;

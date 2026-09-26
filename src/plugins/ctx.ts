@@ -62,6 +62,8 @@ export interface KumoRepl {
     };
     routeSeesImages?(): Promise<VisionAnswer>;
     addChat(component: any): void;
+    /** T55 P1b: the prompt opens a turn, so the shell numbers it and the band shows it. */
+    addUserPrompt(text: string): void;
     removeChat?(component: any): void;
     showNotice?(text: string, opts?: { red?: boolean }): void;
     confirmFullAccess?(): Promise<boolean>;

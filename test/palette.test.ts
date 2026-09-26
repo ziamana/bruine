@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import {
   bgCode,
   bgEnabled,
+  contrastRatio,
   bgOptOut,
   blendHex,
   deriveBackdrop,
@@ -16,7 +17,8 @@ import {
 } from "../src/ui/palette.js";
 import { ChatTranscript, ConsoleBand, pasteChip, railPaint } from "../src/ui/chat-layout.js";
 import { userMessageComponent } from "../src/ui/assistant-text.js";
-import { DockRow, meter, SpeedHistory, sparkline } from "../src/ui/dock.js";
+import { DashboardPanel, DockRow, meter, SpeedHistory, sparkline } from "../src/ui/dock.js";
+import { NUAGE } from "../src/ui/palette.js";
 import type { Component } from "@earendil-works/pi-tui";
 
 describe("Nuage palette", () => {
@@ -153,6 +155,28 @@ describe("painted surfaces (T40)", () => {
     expect(railPaint("blue", "▍", 0)).toBe("\x1b[34m▍\x1b[39m");
     expect(railPaint("red", "▍", 1)).toBe("\x1b[31m▍\x1b[39m");
   });
+
+  test("a running tool owns the rail, so the eye can find it without reading (T55 P1c)", () => {
+    process.env.KUMO_COLOR = "truecolor";
+    resetColorDepth();
+    // The defect: a tool in flight and a tool that finished ten seconds ago were
+    // the same blue, so "where is kumo right now" meant reading the whole block.
+    const running = railPaint("active", "▍", 0);
+    const done = railPaint("blue", "▍", 0);
+    const failed = railPaint("red", "▍", 0);
+    expect(running).not.toBe(done);
+    expect(running).not.toBe(failed);
+    // The live rail is the brightest of the three: it is the only moving part.
+    const bright = (s: string): number => {
+      const m = s.match(/38;2;(\d+);(\d+);(\d+)m/);
+      return m === null ? 0 : Number(m[1])! + Number(m[2])! + Number(m[3])!;
+    };
+    expect(bright(running)).toBeGreaterThan(bright(done));
+    process.env.KUMO_COLOR = "basic";
+    resetColorDepth();
+    // At 16 colors a running tool still has to be findable: bright cyan.
+    expect(railPaint("active", "▍", 0)).toBe("\x1b[36m▍\x1b[39m");
+  });
 });
 
 describe("console band (T40)", () => {
@@ -243,11 +267,72 @@ describe("painted transcript (T40)", () => {
 
 describe("cockpit dock", () => {
   test("sparkline and meter", () => {
-    expect(sparkline([1, 2, 4, 8], 10)).toBe("▂▃▅█");
+    // T55 P4: floor, not round. With round the bottom rung was unreachable, so a
+    // tenth of the peak still read as "▂" and nothing ever looked slow.
+    expect(sparkline([1, 2, 4, 8], 10)).toBe("▁▂▄█");
     expect(sparkline([], 10)).toBe("");
     expect(meter(97)).toEqual({ filled: "██████████", empty: "" });
     expect(meter(5)).toEqual({ filled: "█", empty: "░░░░░░░░░" });
   });
+  test("the sparkline is scaled against a sticky peak, not against its own window (T55 P4)", () => {
+    // The defect: sparkline divided by the max of the window it was handed, so a
+    // steady 5 tok/s filled the whole graph and looked identical to a steady 50.
+    // The cockpit said "everything is fine" for a model that had slowed 10x.
+    expect(sparkline([5, 5, 5, 5], 4, 50)).toBe("▁▁▁▁");
+    expect(sparkline([50, 5, 5, 5], 4, 50)).toBe("█▁▁▁");
+    // With no reference at all the series scales to itself. That is the honest
+    // answer when nothing has been seen yet, and it is why the peak is sticky:
+    // the graph corrects itself the first time anything faster arrives.
+    expect(sparkline([5, 5, 5, 5], 4)).toBe("████");
+    expect(sparkline([1, 2, 4, 8], 10)).toBe("▁▂▄█");
+
+    // A moving clock, or the 250 ms throttle folds both pushes into one sample.
+    let t = 0;
+    const h = new SpeedHistory(() => (t += 300), 8);
+    h.push(50);
+    h.push(5);
+    expect(h.peak).toBe(50);
+    // 50 then 5: the drop is the whole point, and it is visible.
+    expect(sparkline(h.values, 2, h.peak)).toBe("█▁");
+    // A burst inside one throttle window still raises the peak, or a single fast
+    // sample would be lost from the scale entirely.
+    const fast = new SpeedHistory(() => 7, 8);
+    fast.push(5);
+    fast.push(50);
+    expect(fast.peak).toBe(50);
+  });
+
+  test("the cockpit marks the context like the footer does (T55)", () => {
+    const speed = new SpeedHistory(() => 0, 8);
+    const panel = new DashboardPanel(
+      () => ({ contextUsed: 259_000, contextWindow: 1_036_000 }),
+      speed,
+      () => ({ done: 0, total: 0 }),
+    );
+    const row = panel.render(40).join("\n");
+    // The meter says how full; the number says what it costs. Same marking as the
+    // footer, so the two never tell different stories.
+    expect(row).toContain("259.0K (25%)");
+  });
+
+  test("the cockpit prints the number next to the graph, so a full graph cannot lie (T55 P4)", () => {
+    // A moving clock: SpeedHistory keeps one sample per 250 ms, so a frozen clock
+    // would collapse four pushes into one cell.
+    let t = 0;
+    const speed = new SpeedHistory(() => (t += 300), 8);
+    for (const v of [5, 5, 5, 5]) speed.push(v);
+    const panel = new DashboardPanel(
+      () => ({ tps: 5, cachePct: 10, contextUsed: 1, contextWindow: 100 }),
+      speed,
+      () => ({ done: 0, total: 0 }),
+    );
+    const row = panel.render(40).join("\n");
+    // The graph is full (nothing faster has been seen) but the exact value is
+    // right there, which is the real guard against a self-scaled graph lying.
+    expect(row).toContain("████");
+    expect(row).toContain("5 tok/s");
+  });
+
   test("speed history throttles to one sample per 250 ms and caps", () => {
     let t = 0;
     const h = new SpeedHistory(() => t, 3);
@@ -286,5 +371,41 @@ describe("prompt band keeps its columns (T40)", () => {
     resetColorDepth();
     // Painting the band must not push the prompt one column to the right.
     expect(start()).toMatch(/^ {2}› Read note\.txt/);
+  });
+});
+
+describe("contrast floors (T55 P0)", () => {
+  const surface = NUAGE.surface.hex;
+  /** What each role is actually asked to do, so the floor is never arbitrary. */
+  const STRUCTURAL: Array<[string, string]> = [
+    ["faint", "the editor border, the dock divider, empty meter cells"],
+    ["edge", "the accent that opens every painted surface"],
+    ["skyDeep", "the tool rail on a block with no gradient left to spend"],
+  ];
+  const TEXT: Array<[string, string]> = [
+    ["muted", "a tool argument, the host in the header"],
+    ["text", "an assistant answer"],
+  ];
+
+  test.each(STRUCTURAL)("%s carries structure, so it needs 3:1 on the surface (%s)", (role) => {
+    // The defect: faint was 2.64:1, under the 3:1 floor for a border or control,
+    // and it drew the help line that says how to quit the app.
+    expect(contrastRatio(NUAGE[role as keyof typeof NUAGE].hex, surface)).toBeGreaterThanOrEqual(3);
+  });
+
+  test.each(TEXT)("%s carries text, so it needs 4.5:1 on the surface (%s)", (role) => {
+    expect(contrastRatio(NUAGE[role as keyof typeof NUAGE].hex, surface)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("the accent must also read against the surface, or the band has no edge", () => {
+    expect(contrastRatio(NUAGE.edge.hex, surface)).toBeGreaterThanOrEqual(3);
+    // And it must not be the same color as the surface, which is what a failed
+    // probe would leave behind.
+    expect(NUAGE.edge.hex).not.toBe(surface);
+  });
+
+  test("contrastRatio is the WCAG ratio, not a vibe", () => {
+    expect(contrastRatio("#000000", "#ffffff")).toBeCloseTo(21, 1);
+    expect(contrastRatio("#ffffff", "#ffffff")).toBeCloseTo(1, 5);
   });
 });

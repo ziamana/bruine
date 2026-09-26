@@ -177,4 +177,4 @@ API keys: system keyring (`secret-tool` on Linux), fallback `~/.kumo/.env` chmod
 | 0.3 | **local voice input** (hold Space = push-to-talk like Claude Code `/voice`, configurable; STT on the user's machine: small Whisper, or any OpenAI-compatible `/v1/audio/transcriptions` server; offline). Spike first: cross-platform mic capture from a terminal. Decided by Aron 2026-09-25, after the first public release |
 | 0.3 | browser control via Playwright MCP (dsh already has `dsh-mcp-client`) |
 | 0.4 | `kumo doctor`, persistent memory, proof mode |
-| later | mouse/keyboard control, OFF by default |
+| later | mouse as *control* (click to act), OFF by default. Mouse *reading* is on since T56: drag to select, release to copy, notice in the corner. It takes the wheel with it (kumo has no scroll of its own), so `/mouse` and `KUMO_MOUSE_SELECT=0` give it back, and a form does it by itself |

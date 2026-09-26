@@ -1,8 +1,8 @@
-import { truncateToWidth, type Component } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 import { bgEnabled, onBg, paint } from "./palette.js";
-import { SpeedHistory } from "./dock.js";
+import { meter, SpeedHistory } from "./dock.js";
 
 export interface FooterState {
   contextUsed?: number;
@@ -29,8 +29,21 @@ function formatK(n: number): string {
 
 function formatPct(used: number, window: number): string {
   const pct = (used / window) * 100;
-  return pct < 10 ? `${pct.toFixed(1)}%` : `${String(Math.round(pct))}%`;
+  if (pct === 0) return "0";
+  return pct < 10 ? pct.toFixed(1) : String(Math.round(pct));
 }
+
+/**
+ * A token count as `259.0K` (T55). One decimal at every scale, so a column of
+ * them lines up: `9.5K`, `259.0K`, `1.0M`.
+ */
+export function formatVolume(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  if (n < 1000) return String(Math.round(n));
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
 
 /** Display model: settings name, else basename without .gguf, never a full path. */
 export function displayModel(id?: string, name?: string): string {
@@ -82,9 +95,16 @@ export class FooterComponent implements Component {
 
     let ctxPart: string;
     if (s.contextUsed !== undefined && s.contextWindow !== undefined && s.contextWindow > 0) {
-      ctxPart = `ctx ${formatPct(s.contextUsed, s.contextWindow)} of ${formatK(s.contextWindow)}`;
+      // T55: a bar, then the absolute cost, then the share. The only meter used to
+      // live in the cockpit, behind ctrl+b AND at 116+ columns, so a default
+      // session had a number that changed once per turn and no bar at all. A
+      // percentage alone did not say whether 25% was 4k or 259k tokens either.
+      const pct = (s.contextUsed / s.contextWindow) * 100;
+      // T55: the bar is a fixed, cheap prefix and its cell count is decided once
+      // the rest of the line is known (see the budget below), not guessed here.
+      ctxPart = `ctx ${formatVolume(s.contextUsed)} (${formatPct(s.contextUsed, s.contextWindow)}%)`;
     } else {
-      ctxPart = "ctx 0% of ?";
+      ctxPart = "ctx 0";
     }
     const modelName = displayModel(s.model, s.modelName);
     const model = `${s.provider === "local" ? "(local) " : ""}${modelName}`;
@@ -114,8 +134,10 @@ export class FooterComponent implements Component {
     if (s.tps !== undefined && s.tps > 0) {
       parts.push(tpsColor(`${String(Math.round(s.tps))} tok/s`));
     }
+    let ppIndex = -1;
     if (s.pp !== undefined && s.pp > 0) {
       const ppText = `pp ${formatK(Math.round(s.pp * 10) / 10)} tok/s`;
+      ppIndex = parts.length;
       parts.push(plain ? ppText : ansi.dim(ppText));
     }
     if (s.cachePct !== undefined) {
@@ -136,25 +158,55 @@ export class FooterComponent implements Component {
       }
     }
     parts.push(model, effort);
-    // Modes come first so a narrow window or long model name cannot hide them.
-    if (!plain && bgEnabled()) {
-      // Nuage: pills. The mode pill is filled, the metrics sit on a quiet chip.
-      const modePill =
-        modeName === "FULL ACCESS"
-          ? onBg("rose", paint("onSky", ` ${modeName} `))
-          : modeName === "ask"
-            ? ansi.chipBg(paint("muted", ` ${modeName} `))
-            : onBg("sky", paint("onSky", ` ${modeName} `));
-      const planPill = planOn ? onBg("lavender", paint("onSky", " plan ")) : "";
-      const pill = (text: string): string => ansi.chipBg(` ${text} `);
-      const pills = this.compact(width) ? [] : parts.slice(0, -2).map(pill);
-      const tail = paint("faint", `  ${model}  ${sep}  `) + paint("muted", effort);
-      const line = [modePill, planPill, ...pills].filter((x) => x !== "").join(" ") + tail;
-      return [truncateToWidth(line, width)];
+
+    // T55: the context bar is sized from the room the rest of the line leaves,
+    // never the other way round. A bar that pushed the model or the effort off
+    // the edge is a worse trade than a shorter bar, and a metric that gets cut is
+    // a metric the user stops reading. So the line is measured first and the bar
+    // spends what is left: 10 cells, else 4, else nothing.
+    const ctxPct =
+      s.contextUsed !== undefined && s.contextWindow !== undefined && s.contextWindow > 0
+        ? (s.contextUsed / s.contextWindow) * 100
+        : undefined;
+
+    // The prefill rate is the one metric here that is a diagnostic rather than a
+    // reading, so it is what goes when the bar and the route both want the room.
+    const build = (cells: number, keepPp = true): string => {
+      // ctxColor, not the raw text: the green/amber/red thresholds are the whole
+      // point of the reading, and rebuilding the part uncoloured dropped them.
+      let first = ctxColor(ctxPart);
+      if (ctxPct !== undefined && cells > 0) {
+        const bar = meter(ctxPct, cells);
+        first = ctxColor(ctxPart.replace(/^ctx /, `ctx ${bar.filled}${bar.empty} `));
+      }
+      // By index, not by prefix: the pp part is wrapped in a dim SGR, so matching
+      // on its text would silently never match.
+      const rest = parts.slice(1).filter((_, i) => keepPp || i + 1 !== ppIndex);
+      const body = [first, ...rest];
+      if (!plain && bgEnabled()) {
+        // Nuage: pills. The mode pill is filled, the metrics sit on a quiet chip.
+        const modePill =
+          modeName === "FULL ACCESS"
+            ? onBg("rose", paint("onSky", ` ${modeName} `))
+            : modeName === "ask"
+              ? ansi.chipBg(paint("muted", ` ${modeName} `))
+              : onBg("sky", paint("onSky", ` ${modeName} `));
+        const planPill = planOn ? onBg("lavender", paint("onSky", " plan ")) : "";
+        const pill = (text: string): string => ansi.chipBg(` ${text} `);
+        const pills = this.compact(width) ? [] : body.slice(0, -2).map(pill);
+        const tail = paint("faint", `  ${model}  ${sep}  `) + paint("muted", effort);
+        return [modePill, planPill, ...pills].filter((x) => x !== "").join(" ") + tail;
+      }
+      const head = plan === undefined ? mode : `${mode}  ${plan}`;
+      const detail = body.join(`  ${sep}  `);
+      return `${head}  ${plain ? detail : ansi.gray(detail)}`;
+    };
+
+    for (const [cells, keepPp] of [[10, true], [4, true], [10, false], [4, false], [0, false]] as const) {
+      const line = build(cells, keepPp);
+      if (visibleWidth(line) <= width) return [truncateToWidth(line, width)];
     }
-    const head = plan === undefined ? mode : `${mode}  ${plan}`;
-    const detail = parts.join(`  ${sep}  `);
-    return [truncateToWidth(`${head}  ${plain ? detail : ansi.gray(detail)}`, width)];
+    return [truncateToWidth(build(0, false), width)];
   }
 
   invalidate(): void {

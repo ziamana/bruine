@@ -6,11 +6,11 @@
  * installed wins. A missing tool is a normal outcome with one line of advice,
  * never a crash and never a stack trace in the editor.
  */
-import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { platform } from "node:os";
 import { extname } from "node:path";
+import { hasTool, runTool } from "../platform/tool.js";
 
 /** Raster formats the dsh attachment store accepts. */
 export type ImageMediaType = "image/png" | "image/jpeg" | "image/webp" | "image/gif";
@@ -162,43 +162,7 @@ export interface RunResult {
 export type RunClipboard = (reader: ClipboardReader) => Promise<RunResult>;
 
 const runNode: RunClipboard = (reader) =>
-  new Promise((resolve) => {
-    execFile(
-      reader.cmd,
-      reader.args,
-      { encoding: "buffer", maxBuffer: MAX_IMAGE_BYTES * 2, timeout: 5000 },
-      (error, stdout, stderr) => {
-        const code = error === null ? 0 : typeof error.code === "number" ? error.code : 1;
-        resolve({
-          code,
-          stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.alloc(0),
-          stderr: typeof stderr === "string" ? stderr : String((stderr as Buffer | undefined)?.toString() ?? ""),
-        });
-      },
-    );
-  });
-
-/** True when the binary exists on PATH (or is an absolute path that does). */
-async function hasBinary(cmd: string): Promise<boolean> {
-  if (cmd.includes("/")) {
-    try {
-      await access(cmd);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  for (const dir of (process.env["PATH"] ?? "").split(":")) {
-    if (dir === "") continue;
-    try {
-      await access(`${dir}/${cmd}`);
-      return true;
-    } catch {
-      // keep looking
-    }
-  }
-  return false;
-}
+  runTool(reader.cmd, reader.args, { maxBuffer: MAX_IMAGE_BYTES * 2, timeoutMs: 5000 });
 
 /** Human size for the chip and for the refusal line. */
 export function formatBytes(bytes: number): string {
@@ -220,7 +184,7 @@ export function rejectionNotice(reason: string): string {
 export async function readClipboardImage(
   run: RunClipboard = runNode,
   readers: ClipboardReader[] = clipboardReaders(),
-  has: (cmd: string) => Promise<boolean> = hasBinary,
+  has: (cmd: string) => Promise<boolean> = hasTool,
 ): Promise<ClipboardRead> {
   let missing: string | undefined;
   for (const reader of readers) {

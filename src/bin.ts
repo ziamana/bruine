@@ -12,6 +12,7 @@ import { simpleSetup, type SetupIO } from "./setup/simple.js";
 import { migrateAgentsSkills } from "./setup/skills.js";
 import { localDefaultRoute } from "./setup/discover.js";
 import { ansi } from "./ui/theme.js";
+import { BootLoader } from "./ui/boot-loader.js";
 import { checkForUpdate, detectInstallKind, updateCommand } from "./update.js";
 
 const require = createRequire(import.meta.url);
@@ -37,6 +38,13 @@ Environment:
   KUMO_HOME          Override the kumo home directory (default: .kumo
                      inside your home directory).
   KUMO_ASCII=1       Use plain-ASCII glyphs instead of emoji/symbols.
+  KUMO_NO_ANIMATION=1
+                     No motion at all: no wordmark sweep, no waiting dots, and
+                     the answer arrives whole instead of being revealed.
+  KUMO_MOUSE_SELECT=0
+                     Do not take the mouse: dragging selects nothing and the
+                     wheel keeps scrolling the transcript. "/mouse" flips it
+                     back for the rest of the session.
   KUMO_NO_UPDATE_CHECK=1
                      Never contact the npm registry for an update check.
 `;
@@ -361,15 +369,67 @@ async function main(): Promise<void> {
   // or a non-TTY stdout.
   void checkForUpdate({ dshHome }).catch(() => undefined);
 
-  const child = spawn(command, args, { env, stdio: "inherit" });
+  const boot = new BootLoader(process.stdout, env);
+  delete env.KUMO_BOOT_IPC;
+  if (boot.enabled) env.KUMO_BOOT_IPC = "1";
+  boot.start();
+  const child = spawn(command, args, {
+    env,
+    stdio: boot.enabled ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
+  });
+
+  let readingBootKey = false;
+  let changedRawMode = false;
+  const stopReadingBootKey = (): void => {
+    if (!readingBootKey) return;
+    process.stdin.off("data", onBootKey);
+    if (changedRawMode) process.stdin.setRawMode(false);
+    process.stdin.pause();
+    readingBootKey = false;
+  };
+  const onBootKey = (): void => {
+    boot.skip();
+    stopReadingBootKey();
+  };
+  const finishBoot = (): void => {
+    stopReadingBootKey();
+    boot.stop();
+  };
+
+  if (boot.enabled) {
+    child.once("spawn", () => {
+      boot.processSpawned();
+      if (!boot.animated || process.stdin.isTTY !== true || typeof process.stdin.setRawMode !== "function") return;
+      changedRawMode = process.stdin.isRaw !== true;
+      if (changedRawMode) process.stdin.setRawMode(true);
+      process.stdin.on("data", onBootKey);
+      process.stdin.resume();
+      readingBootKey = true;
+    });
+    child.on("message", (message: unknown) => {
+      if (typeof message !== "object" || message === null || !("type" in message) || message.type !== "kumo:ui-ready") return;
+      const candidate = "route" in message ? message.route : undefined;
+      const route = typeof candidate === "object" && candidate !== null &&
+        "model" in candidate && typeof candidate.model === "string" &&
+        "host" in candidate && typeof candidate.host === "string"
+        ? { model: candidate.model, host: candidate.host } : undefined;
+      boot.skip();
+      boot.processReady(route);
+      stopReadingBootKey();
+      finishBoot();
+      child.send({ type: "kumo:boot-cleared" });
+    });
+  }
 
   child.on("error", (err: NodeJS.ErrnoException) => {
+    finishBoot();
     if (err.code === "ENOENT") console.error(DSH_MISSING);
     else console.error(`kumo: ${err.message}`);
     process.exit(1);
   });
 
   child.on("close", (code, signal) => {
+    finishBoot();
     if (signal) process.kill(process.pid, signal);
     process.exit(code ?? 0);
   });

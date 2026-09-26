@@ -52,4 +52,5 @@ You are implementing one ticket of the kumo project.
 | T32 | Task list panel for the AI's todo_write (tool already loaded, no UI) | T31 |
 | T33 | Lean toolset (9.2k → ≤5.5k base tokens), clear errors, quiet first run, visible compaction | T32 |
 | T34 | Effort really sent (chat_template_kwargs), /effort + ctrl+e, preserve_thinking for the cache | T31 + T30 |
+| T35 | `kumo setup` on an existing install: prefill from settings.yaml, change-one-thing menu, Skip everywhere | T33b |
 | T29 | Paste an image (clipboard ctrl+v, vision models only) | after first public release |

@@ -86,6 +86,19 @@ export interface SetupAnswers {
   skills: string[];
   theme: Theme;
   telemetry: boolean;
+  /**
+   * T35: the parsed settings.yaml the prefill came from (source of truth).
+   * Kept verbatim so Save without changes round-trips compat /
+   * reasoningEfforts / contextWindow / name / displayName untouched.
+   * Never set by wizard steps — only by loadPrefill.
+   */
+  settingsOrig?: SettingsDoc;
+  /**
+   * T35: the parsed kumo.json the prefill came from (for model-ref
+   * preservation: name / missing baseUrl / etc stay untouched when the
+   * route did not change). Never set by wizard steps.
+   */
+  kumoOrig?: Record<string, unknown>;
 }
 
 export function defaultAnswers(): SetupAnswers {
@@ -190,6 +203,18 @@ export class SetupFlow {
     return true;
   }
 
+  /**
+   * T35 menu: merge one step's result without moving the index.
+   * Validation is deferred to saveFromMenu (roles must still be valid).
+   * settingsOrig / kumoOrig are never overwritten by step patches.
+   */
+  apply(patch: Partial<SetupAnswers>): void {
+    const { settingsOrig, kumoOrig } = this.#answers;
+    this.#answers = { ...this.#answers, ...patch };
+    if (settingsOrig !== undefined) this.#answers.settingsOrig = settingsOrig;
+    if (kumoOrig !== undefined) this.#answers.kumoOrig = kumoOrig;
+  }
+
   cancel(): void {
     this.canceled = true;
   }
@@ -202,6 +227,20 @@ export class SetupFlow {
   }): Promise<void> {
     if (this.canceled) throw new Error("setup was canceled. Nothing was written");
     if (!this.atSummary) throw new Error("save is only available on the summary step");
+    if (this.validate("roles").length > 0) throw new Error("no main role");
+    await commitPlan(opts.dshHome, this.buildPlan(opts));
+  }
+
+  /**
+   * T35 menu Save and exit: writes once, atomically, from any index.
+   * Same guards as save() except the summary position (menu has no linear index).
+   */
+  async saveFromMenu(opts: {
+    dshHome: string;
+    bundledSkillsRoot: string;
+    bundledSkills: SkillMeta[];
+  }): Promise<void> {
+    if (this.canceled) throw new Error("setup was canceled. Nothing was written");
     if (this.validate("roles").length > 0) throw new Error("no main role");
     await commitPlan(opts.dshHome, this.buildPlan(opts));
   }
@@ -220,9 +259,35 @@ export class SetupFlow {
     if (a.roles.main === undefined) throw new Error("no main role");
     const fast = a.roles.fast ?? a.roles.main; // T21.2: fast defaults to main
 
+    // T35: original providers by baseURL (settings.yaml source of truth).
+    // Unchanged routes keep displayName/api/apiKeyEnv + every model entry
+    // (name, contextWindow, compat, reasoningEfforts) verbatim.
+    const origDoc = a.settingsOrig as Record<string, any> | undefined;
+    const origProviders = (origDoc?.["llm-pi-ai"] as any)?.providers as Record<string, any> | undefined;
+    const origByBaseUrl = new Map<string, string>();
+    const origNames = new Set<string>();
+    if (origProviders !== undefined) {
+      for (const [pName, pConf] of Object.entries(origProviders)) {
+        origNames.add(pName);
+        if (pConf !== null && typeof pConf === "object" && typeof (pConf as any).baseURL === "string") {
+          const bu = (pConf as any).baseURL as string;
+          if (!origByBaseUrl.has(bu)) origByBaseUrl.set(bu, pName);
+        }
+      }
+    }
+    const origModelByProviderAndId = (providerName: string, id: string): any | undefined => {
+      const p = origProviders?.[providerName];
+      const models = (p as any)?.models;
+      if (!Array.isArray(models)) return undefined;
+      return models.find((m: any) => m !== null && typeof m === "object" && (m as any).id === id);
+    };
+
     // Route names for discovered servers, in role order: local, local-2, …
+    // T35: reuse the original provider name when the baseURL matches, so
+    // agent-default-model and round-trips stay identical.
     const routeName = new Map<string, string>();
     const providers: Record<string, unknown> = {};
+    const deepCopy = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
     type ModelRef = {
       provider: string;
       model: string;
@@ -239,37 +304,68 @@ export class SetupFlow {
       const key = `${d.host}:${String(d.port)}`;
       let name = routeName.get(key);
       if (name === undefined) {
-        name = routeName.size === 0 ? "local" : `local-${String(routeName.size + 1)}`;
+        const origName = origByBaseUrl.get(d.baseUrl);
+        if (origName !== undefined) {
+          name = origName;
+        } else {
+          // Fresh route: local, local-2, … avoiding original names.
+          if (routeName.size === 0 && !origNames.has("local")) {
+            name = "local";
+          } else {
+            let n = routeName.size + 1;
+            if (n === 1) n = 2;
+            let candidate = `local-${String(n)}`;
+            while (origNames.has(candidate) || [...routeName.values()].includes(candidate)) {
+              n += 1;
+              candidate = `local-${String(n)}`;
+            }
+            name = candidate;
+          }
+        }
         routeName.set(key, name);
-        providers[name] = {
-          displayName: `Kumo server ${key}`,
-          api: "openai-completions",
-          baseURL: d.baseUrl,
-          apiKeyEnv: "KUMO_LOCAL_API_KEY",
-          // T19.A.2: an `off` effort so the Auto judge can get a plain answer.
-          models: [],
-        };
+        const origConf = origProviders?.[name];
+        if (origConf !== undefined && origConf !== null && typeof origConf === "object") {
+          providers[name] = {
+            ...(deepCopy(origConf) as Record<string, unknown>),
+            baseURL: d.baseUrl,
+            models: [],
+          };
+        } else {
+          providers[name] = {
+            displayName: `Kumo server ${key}`,
+            api: "openai-completions",
+            baseURL: d.baseUrl,
+            apiKeyEnv: "KUMO_LOCAL_API_KEY",
+            // T19.A.2: an `off` effort so the Auto judge can get a plain answer.
+            models: [],
+          };
+        }
       }
       const entry = providers[name] as { models: unknown[] };
       if (!entry.models.some((m) => (m as { id: string }).id === pick.model)) {
-        const advertised = d.modelInfos?.find((m) => m.id === pick.model)?.contextWindow;
-        const contextWindow = pick.contextWindow ?? advertised;
-        // T34: a llama.cpp chat template detected in setup drives the compat
-        // block; anything else keeps the T19 minimum (off + low) so the Auto
-        // judge can still ask for a plain answer.
-        const reasoning =
-          d.template !== undefined
-            ? reasoningSettingsFor(d.template)
-            : { reasoningEfforts: { off: null, low: "low" } as Record<string, string | null> };
-        entry.models.push({
-          id: pick.model,
-          name: pick.model,
-          ...(contextWindow !== undefined ? { contextWindow } : {}),
-          ...(reasoning.compat !== undefined ? { compat: reasoning.compat } : {}),
-          reasoningEfforts: reasoning.reasoningEfforts,
-        });
+        const preserved = origModelByProviderAndId(name, pick.model);
+        if (preserved !== undefined) {
+          entry.models.push(deepCopy(preserved));
+        } else {
+          const advertised = d.modelInfos?.find((m) => m.id === pick.model)?.contextWindow;
+          const contextWindow = pick.contextWindow ?? advertised;
+          // T34: a llama.cpp chat template detected in setup drives the compat
+          // block; anything else keeps the T19 minimum (off + low) so the Auto
+          // judge can still ask for a plain answer.
+          const reasoning =
+            d.template !== undefined
+              ? reasoningSettingsFor(d.template)
+              : { reasoningEfforts: { off: null, low: "low" } as Record<string, string | null> };
+          entry.models.push({
+            id: pick.model,
+            name: pick.model,
+            ...(contextWindow !== undefined ? { contextWindow } : {}),
+            ...(reasoning.compat !== undefined ? { compat: reasoning.compat } : {}),
+            reasoningEfforts: reasoning.reasoningEfforts,
+          });
+        }
       }
-      return {
+      const fresh: ModelRef = {
         provider: name,
         model: pick.model,
         baseUrl: d.baseUrl,
@@ -280,26 +376,80 @@ export class SetupFlow {
             ? { contextWindow: d.modelInfos.find((m) => m.id === pick.model)?.contextWindow }
             : {}),
       };
+      return fresh;
     };
 
-    const main = modelFor(a.roles.main)!;
-    const fastRef = modelFor(fast)!;
-    const visionRef = modelFor(a.roles.vision);
-
-    if (a.roles.main?.cloud === "openrouter" || a.roles.fast?.cloud === "openrouter" || a.roles.vision?.cloud === "openrouter") {
-      providers.openrouter = { apiKeyEnv: "OPENROUTER_API_KEY" };
+    const mainFresh = modelFor(a.roles.main)!;
+    const fastFresh = modelFor(fast)!;
+    const visionFresh = modelFor(a.roles.vision);
+    const kumoModelsOrig = a.kumoOrig?.models as Record<string, any> | undefined;
+    const reuseForRole = (role: string, freshRef: ModelRef): ModelRef => {
+      const o = kumoModelsOrig?.[role];
+      if (o !== null && typeof o === "object" && (o as any).provider === freshRef.provider && (o as any).model === freshRef.model) {
+        return deepCopy(o) as ModelRef;
+      }
+      return freshRef;
+    };
+    // fast defaulting to main: when the user did not pick a separate fast and
+    // the saved home also defaults (no fast, or fast == main), keep main's ref.
+    let main: ModelRef;
+    let fastRef: ModelRef;
+    let visionRef: ModelRef | undefined;
+    {
+      const mainIsDefaultFast = a.roles.fast === undefined;
+      const origFastMissingOrSame =
+        kumoModelsOrig?.fast === undefined ||
+        (kumoModelsOrig?.main !== undefined &&
+          (kumoModelsOrig.fast as any)?.provider === (kumoModelsOrig.main as any)?.provider &&
+          (kumoModelsOrig.fast as any)?.model === (kumoModelsOrig.main as any)?.model);
+      main = reuseForRole("main", mainFresh);
+      if (mainIsDefaultFast && origFastMissingOrSame && kumoModelsOrig !== undefined) {
+        // Keep fast identical to main (as the saved home does).
+        fastRef = main.provider === (kumoModelsOrig.main as any)?.provider && main.model === (kumoModelsOrig.main as any)?.model
+          ? (deepCopy(kumoModelsOrig.fast ?? kumoModelsOrig.main) as ModelRef)
+          : reuseForRole("fast", fastFresh);
+        if (kumoModelsOrig.fast === undefined) fastRef = main;
+      } else {
+        fastRef = reuseForRole("fast", fastFresh);
+      }
+      visionRef = visionFresh !== undefined ? reuseForRole("vision", visionFresh) : undefined;
     }
 
-    const doc: SettingsDoc = {};
+    if (a.roles.main?.cloud === "openrouter" || a.roles.fast?.cloud === "openrouter" || a.roles.vision?.cloud === "openrouter") {
+      const origOpenRouter = origProviders?.openrouter;
+      providers.openrouter =
+        origOpenRouter !== undefined && origOpenRouter !== null && typeof origOpenRouter === "object"
+          ? deepCopy(origOpenRouter)
+          : { apiKeyEnv: "OPENROUTER_API_KEY" };
+    }
+
+    const doc: SettingsDoc = { ...(origDoc ?? {}) };
     if (Object.keys(providers).length > 0) {
       doc["llm-pi-ai"] = { providers };
+    } else {
+      delete doc["llm-pi-ai"];
     }
     doc["agent-default-model"] = { provider: main.provider, model: main.model };
     // dsh's ui-theme registry only accepts light/dark/system (T21.7 note):
     // high-contrast is kumo's own setting and maps to dark for dsh surfaces.
-    doc["ui-theme"] = {
-      preference: a.theme === "high-contrast" ? "dark" : a.theme,
-    };
+    // T35: an original without ui-theme stays without it when the effective
+    // preference is dark (implicit default) so Save-without-changes round-trips.
+    // Fresh installs (no original) always write it, as before.
+    {
+      const pref = a.theme === "high-contrast" ? "dark" : a.theme;
+      if (origDoc === undefined) {
+        doc["ui-theme"] = { preference: pref };
+      } else {
+        const hadUi = Object.prototype.hasOwnProperty.call(origDoc, "ui-theme");
+        if (hadUi) {
+          doc["ui-theme"] = { preference: pref };
+        } else if (pref !== "dark") {
+          doc["ui-theme"] = { preference: pref };
+        } else {
+          delete doc["ui-theme"];
+        }
+      }
+    }
 
     const env: Array<[string, string]> = [];
     if (usesLocalServer(a)) env.push(["KUMO_LOCAL_API_KEY", "local"]);

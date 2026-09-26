@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { parse as parseYaml } from "yaml";
 
-export type DiscoverySource = "localhost" | "network" | "tailscale" | "manual";
+export type DiscoverySource = "localhost" | "network" | "tailscale" | "manual" | "settings";
 
 export interface Discovered {
   source: DiscoverySource;
@@ -26,6 +26,13 @@ export interface Discovered {
    * detection stays in charge there.
    */
   template?: TemplateCaps;
+  /**
+   * T35: this entry comes from settings.yaml (source of truth). Shown as
+   * current in the Models step and never dropped by scans.
+   */
+  current?: boolean;
+  /** T35: the original provider key in settings.yaml (for name preservation). */
+  providerName?: string;
 }
 
 /** Which thinking knobs a chat template understands (T34). */
@@ -58,6 +65,8 @@ export function detectTemplateCaps(chatTemplate: unknown): TemplateCaps | undefi
 export interface ModelInfo {
   id: string;
   contextWindow?: number;
+  /** T35: pretty name from settings.yaml (model entry `name`). */
+  name?: string;
 }
 
 /** Ports probed on localhost (T21 adds 5000 to the v0.1 list). */
@@ -337,7 +346,39 @@ export async function scanTailscale(
 
 /** Human label for a discovery in the wizard lists. */
 export function discoveredLabel(d: Discovered): string {
+  if (d.current === true) {
+    // T35: settings.yaml routes show their pretty name + host as current.
+    const firstId = d.models[0] ?? "";
+    const pretty = d.modelInfos.find((m) => m.id === firstId)?.name ?? firstId;
+    const label = pretty !== "" ? pretty : d.baseUrl;
+    let host = d.host;
+    try {
+      host = new URL(d.baseUrl).hostname;
+    } catch {
+      // keep parsed host
+    }
+    const extra = d.models.length > 1 ? ` +${String(d.models.length - 1)}` : "";
+    return `✓ ${label}${extra} · ${host} (current)`;
+  }
   return `${d.baseUrl} · ${String(d.models.length)} model${d.models.length === 1 ? "" : "s"}`;
+}
+
+/**
+ * T35: short Models value for the change-one-thing menu
+ * (`Ornith 1.5 9B · 192.168.1.64`), from a settings.yaml discovery.
+ */
+export function currentModelsSummary(discoveries: Discovered[]): string {
+  const cur = discoveries.find((d) => d.current === true) ?? discoveries[0];
+  if (cur === undefined) return "none";
+  const firstId = cur.models[0] ?? "";
+  const pretty = cur.modelInfos.find((m) => m.id === firstId)?.name ?? firstId;
+  let host = cur.host;
+  try {
+    host = new URL(cur.baseUrl).hostname;
+  } catch {
+    // keep host
+  }
+  return `${pretty !== "" ? pretty : cur.baseUrl} · ${host}`;
 }
 
 /**

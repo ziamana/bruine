@@ -1434,6 +1434,28 @@ describe("the suggestion is drawn in the editor, not above it", () => {
     await ui.shutdown();
   });
 
+  test("the cursor's inverse video is closed before the suggestion (real bug: white line)", async () => {
+    // Aron's real terminal, 2026-09-26: the suggestion line turned white and the white
+    // spilled into the cockpit. Slicing the editor line at the cursor kept the cursor's
+    // "\x1b[7m" (inverse) and dropped its closing code, so everything after stayed inverse.
+    const { ui } = await started();
+    ui.editor.setGhost("run the tests");
+    for (const width of [60, 90]) {
+      const row = ui.editor.render(width)[1]!;
+      const ghostAt = row.indexOf("run the tests");
+      expect(ghostAt).toBeGreaterThan(0);
+      const before = row.slice(0, ghostAt);
+      const open = before.lastIndexOf("\x1b[7m");
+      if (open !== -1) {
+        const after = before.slice(open);
+        expect(/\x1b\[(27|0)?m/.test(after.slice(4)), JSON.stringify(before)).toBe(true);
+      }
+      // And nothing after the suggestion is inverse either.
+      expect(row.slice(ghostAt)).not.toContain("\x1b[7m");
+    }
+    await ui.shutdown();
+  });
+
   test("a long suggestion is clipped to the width, never spills over", async () => {
     const { ui } = await started();
     ui.editor.setGhost("veux tu que je relance aussi les tests de la suite complete du projet");

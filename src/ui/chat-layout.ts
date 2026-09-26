@@ -158,7 +158,10 @@ export class PlainGlyphEditor extends Editor {
     const out = [...lines];
     // Plain spaces, not the editor's own tail: slicing it would re-open the
     // cursor's inverse attribute and leave a highlighted block after the text.
-    out[row] = head + shown + " ".repeat(Math.max(0, width - at - visibleWidth(shown)));
+    // The slice ends right after the cursor cell, whose inverse video ("\x1b[7m") is closed
+    // later in the editor's own tail, which we drop: close it here, or the suggestion and
+    // everything after it on the line (the cockpit too) turns white.
+    out[row] = head + "\x1b[27m" + shown + " ".repeat(Math.max(0, width - at - visibleWidth(shown)));
     return out;
   }
 }

@@ -1,0 +1,7 @@
+# T36 — the three instructions together, in the order they were written.
+name: all
+note: verify + plan + style
+add:
+  - "Before saying a task is done, run the project's tests or the closest check, and report the result."
+  - "For work with 3+ steps, keep a todo_write list and update it as you go."
+  - "Match the existing code style and structure; change only what the task needs."

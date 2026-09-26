@@ -1,0 +1,5 @@
+# T36 — "keep a todo list": one line appended to the persona.
+name: plan
+note: keep a todo_write list for 3+ step work
+add:
+  - "For work with 3+ steps, keep a todo_write list and update it as you go."

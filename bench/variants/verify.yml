@@ -1,0 +1,6 @@
+# T36 — "verify your work": one line appended to the persona, nothing else.
+# A variant that helps the 9B but not the 27B is rejected (T36 decision).
+name: verify
+note: run the project's tests before saying done
+add:
+  - "Before saying a task is done, run the project's tests or the closest check, and report the result."

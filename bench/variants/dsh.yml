@@ -1,0 +1,6 @@
+# T36 — the baseline: today's kumo prompt, byte for byte. The persona is
+# composed at boot from the route's model display name (src/profile.ts); this
+# variant adds nothing, so a `dsh` run sends what a plain `kumo` session sends.
+name: dsh
+note: baseline (today's prompt)
+add: []

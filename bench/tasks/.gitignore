@@ -1,0 +1,5 @@
+# T36 — a check run inside a task directory (bench/tools/verify-tasks.sh
+# copies first, but a manual run does not) must not leave Python bytecode in
+# the task set.
+__pycache__/
+*.pyc

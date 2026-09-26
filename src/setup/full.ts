@@ -41,7 +41,7 @@ import {
   scanNetwork,
   scanTailscale,
   tailscalePeerIPs,
-  type Discovered,
+  type Discovered, type TemplateCaps,
   type ScanOptions,
 } from "./discover.js";
 import { readBundledSkills, scanFoundSkills, scanProjectSkills, type FoundSkill, type SkillMeta } from "./skills.js";
@@ -203,7 +203,17 @@ export function bundledSkillsRoot(): string {
 
 interface KumoJsonShape {
   mode?: string;
-  models?: Record<string, { provider?: string; model?: string; baseUrl?: string; contextWindow?: number } | undefined>;
+  models?: Record<
+    string,
+    {
+      provider?: string;
+      model?: string;
+      baseUrl?: string;
+      contextWindow?: number;
+      /** T34: chat-template switches captured at the last setup. */
+      template?: TemplateCaps;
+    } | undefined
+  >;
   permissionMode?: string;
   access?: string;
   search?: SearchChoice;
@@ -243,6 +253,7 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
       model: ref.model,
       ...(ref.baseUrl !== undefined ? { baseUrl: ref.baseUrl } : {}),
       ...(ref.contextWindow !== undefined ? { contextWindow: ref.contextWindow } : {}),
+      ...(ref.template !== undefined ? { template: ref.template } : {}),
     });
     if (pick === undefined) continue;
     roles[role] = pick;
@@ -942,6 +953,8 @@ function mergeInto(into: Discovered[], hits: Discovered[]): void {
     else {
       existing.models = h.models;
       existing.modelInfos = h.modelInfos;
+      // T34: a fresh probe's template view wins; a missing one keeps the last.
+      if (h.template !== undefined) existing.template = h.template;
     }
   }
 }

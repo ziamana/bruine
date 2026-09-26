@@ -1,6 +1,9 @@
 import { Text, type Terminal } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
-import { describe, expect, test, vi } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { KumoUi } from "../src/ui/kumo-ui.js";
 import { ReasoningComponent } from "../src/ui/reasoning-component.js";
 import { ToolCallComponent } from "../src/ui/tool-call-component.js";
@@ -10,6 +13,17 @@ import { TpsMeter } from "../src/ui/tps.js";
 import { attachTui } from "../src/plugins/render.js";
 import { LineEmitter, Repl } from "../src/plugins/repl.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
+
+// Never read the developer's real ~/.kumo (this test used to pass only because the
+// old hand-written YAML reader failed on the real settings.yaml).
+const savedDshHome = process.env.DSH_HOME;
+beforeAll(() => {
+  process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "kumo-ui-test-"));
+});
+afterAll(() => {
+  if (savedDshHome === undefined) delete process.env.DSH_HOME;
+  else process.env.DSH_HOME = savedDshHome;
+});
 import { fakeCtx, strip } from "./fakes.js";
 
 class FakeTerminal implements Terminal {
@@ -937,5 +951,30 @@ describe("slash autocomplete provider (T31.1)", () => {
     const co = await provider.getSuggestions(["/co"], 0, 3, { signal });
     expect(co).not.toBeNull();
     expect(co!.items[0]!.value).toBe("/compact");
+  });
+});
+
+describe("settings.yaml reader (real YAML, kumo's own list style)", () => {
+  test("finds name and window when `- id:` sits at the same indent as `models:`", async () => {
+    const { writeFileSync } = await import("node:fs");
+    const { readSettingsRoute } = await import("../src/ui/kumo-ui.js");
+    const home = mkdtempSync(join(tmpdir(), "kumo-settings-"));
+    writeFileSync(join(home, "settings.yaml"), [
+      "llm-pi-ai:",
+      "  providers:",
+      "    local:",
+      "      baseURL: 'http://192.168.1.64:8081/v1'",
+      "      models:",
+      "      - id: '/m/Ornith.gguf'",
+      "        name: 'Ornith 1.5 9B'",
+      "        contextWindow: 100096",
+      "agent-default-model:",
+      "  provider: 'local'",
+      "  model: '/m/Ornith.gguf'",
+      "",
+    ].join("\n"));
+    expect(readSettingsRoute(home)).toEqual({
+      provider: "local", model: "/m/Ornith.gguf", baseUrl: "http://192.168.1.64:8081/v1", name: "Ornith 1.5 9B", contextWindow: 100096,
+    });
   });
 });

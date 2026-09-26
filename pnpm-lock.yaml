@@ -190,6 +190,9 @@ importers:
       string-width:
         specifier: ^8.3.0
         version: 8.3.0
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
@@ -209,9 +212,6 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@24.13.6)(yaml@2.9.1)
-      yaml:
-        specifier: ^2.9.1
-        version: 2.9.1
 
 packages:
 

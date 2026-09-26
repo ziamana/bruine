@@ -80,7 +80,9 @@ export class FooterComponent implements Component {
     }
     const modelName = displayModel(s.model, s.modelName);
     const model = `${s.provider === "local" ? "(local) " : ""}${modelName}`;
-    const effort = `effort ${s.effort ?? "off"}`;
+    // T34: the footer shows the REAL effort the effort plugin sends; "?"
+    // until the plugin resolves the model's levels (never a silent lie).
+    const effort = `effort ${s.effort ?? "?"}`;
     // T31.5: ctx <60 green, 60-74 yellow, >=75 red; tok/s >=30 green, 15-29
     // yellow, <15 red. ASCII / no-color terminals: same text, no color.
     const ctxColor = (text: string): string => {

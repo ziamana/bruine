@@ -4,16 +4,17 @@
  * commitPlan(). Esc = back(), ctrl+c = cancel() — a canceled flow can never
  * commit.
  */
-import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   renderSettingsYaml,
   writeEnvVar,
+  reasoningSettingsFor,
   type SettingsDoc,
   type SearchChoice,
 } from "./simple.js";
 import { syncSkills, type SkillMeta } from "./skills.js";
-import type { Discovered } from "./discover.js";
+import type { Discovered, TemplateCaps } from "./discover.js";
 
 export type PermissionModeValue = "ask" | "auto" | "full";
 export type Theme = "dark" | "light" | "high-contrast";
@@ -50,6 +51,8 @@ export function roleFromModelRef(ref: {
   model: string;
   baseUrl?: string;
   contextWindow?: number;
+  /** T34: template switches captured at the last setup. */
+  template?: TemplateCaps;
 }): RolePick | undefined {
   if (ref.provider === "deepseek-official") return { cloud: "deepseek-official", model: ref.model };
   if (ref.provider === "openrouter") return { cloud: "openrouter", model: ref.model };
@@ -64,6 +67,7 @@ export function roleFromModelRef(ref: {
         baseUrl: ref.baseUrl,
         models: [ref.model],
         modelInfos: [{ id: ref.model, contextWindow: ref.contextWindow }],
+        ...(ref.template !== undefined ? { template: ref.template } : {}),
       },
       model: ref.model,
       ...(ref.contextWindow !== undefined ? { contextWindow: ref.contextWindow } : {}),
@@ -219,7 +223,14 @@ export class SetupFlow {
     // Route names for discovered servers, in role order: local, local-2, …
     const routeName = new Map<string, string>();
     const providers: Record<string, unknown> = {};
-    type ModelRef = { provider: string; model: string; baseUrl?: string; contextWindow?: number };
+    type ModelRef = {
+      provider: string;
+      model: string;
+      baseUrl?: string;
+      contextWindow?: number;
+      /** T34: the chat-template switches the route serves (round-tripped). */
+      template?: TemplateCaps;
+    };
     const modelFor = (pick: RolePick | undefined): ModelRef | undefined => {
       if (pick === undefined) return undefined;
       if (pick.cloud !== undefined) return { provider: pick.cloud, model: pick.model };
@@ -243,17 +254,26 @@ export class SetupFlow {
       if (!entry.models.some((m) => (m as { id: string }).id === pick.model)) {
         const advertised = d.modelInfos?.find((m) => m.id === pick.model)?.contextWindow;
         const contextWindow = pick.contextWindow ?? advertised;
+        // T34: a llama.cpp chat template detected in setup drives the compat
+        // block; anything else keeps the T19 minimum (off + low) so the Auto
+        // judge can still ask for a plain answer.
+        const reasoning =
+          d.template !== undefined
+            ? reasoningSettingsFor(d.template)
+            : { reasoningEfforts: { off: null, low: "low" } as Record<string, string | null> };
         entry.models.push({
           id: pick.model,
           name: pick.model,
           ...(contextWindow !== undefined ? { contextWindow } : {}),
-          reasoningEfforts: { off: null, low: "low" },
+          ...(reasoning.compat !== undefined ? { compat: reasoning.compat } : {}),
+          reasoningEfforts: reasoning.reasoningEfforts,
         });
       }
       return {
         provider: name,
         model: pick.model,
         baseUrl: d.baseUrl,
+        ...(d.template !== undefined ? { template: d.template } : {}),
         ...(pick.contextWindow !== undefined
           ? { contextWindow: pick.contextWindow }
           : d.modelInfos?.find((m) => m.id === pick.model)?.contextWindow !== undefined
@@ -333,7 +353,20 @@ export interface SetupPlan {
 export async function commitPlan(dshHome: string, plan: SetupPlan): Promise<void> {
   if (plan.env.some(([name]) => name === undefined)) throw new Error("bad env entry");
   await writeAtom(join(dshHome, "settings.yaml"), plan.settingsYaml, 0o600);
-  await writeAtom(join(dshHome, "kumo.json"), plan.kumoJson, 0o600);
+  // T34: per-model effort levels are runtime state (kumo-effort owns them);
+  // a wizard Save rewrites kumo.json but must not forget the user's choices.
+  let kumoJson = plan.kumoJson;
+  try {
+    const previous = JSON.parse(await readFile(join(dshHome, "kumo.json"), "utf8")) as Record<string, unknown>;
+    if (previous.reasoningEffort !== undefined) {
+      const doc = JSON.parse(kumoJson) as Record<string, unknown>;
+      doc.reasoningEffort = previous.reasoningEffort;
+      kumoJson = `${JSON.stringify(doc, null, 2)}\n`;
+    }
+  } catch {
+    // no previous kumo.json: write the plan as-is
+  }
+  await writeAtom(join(dshHome, "kumo.json"), kumoJson, 0o600);
   for (const [name, value] of plan.env) {
     await writeEnvVar(join(dshHome, ".env"), name, value);
   }

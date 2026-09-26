@@ -1,3 +1,4 @@
+import { parse as parseYaml } from "yaml";
 import {
   Container,
   Editor,
@@ -145,7 +146,7 @@ export interface SettingsRoute {
   contextWindow?: number;
 }
 
-/** Minimal settings.yaml reader (T28b.1): default route + baseURL/name/window. No YAML dep. */
+/** settings.yaml reader: default route + baseURL/name/window (real YAML parser; the hand-written one broke on kumo's own list style). */
 export function readSettingsRoute(dshHome?: string): SettingsRoute | undefined {
   try {
     const home = dshHome ?? process.env.DSH_HOME ?? join(homedir(), ".kumo");
@@ -159,96 +160,21 @@ export function readSettingsRoute(dshHome?: string): SettingsRoute | undefined {
   }
 }
 
-function unquoteYaml(s: string): string | number {
-  const t = s.trim();
-  if (t.length >= 2 && t.startsWith("'") && t.endsWith("'")) return t.slice(1, -1).replace(/''/g, "'");
-  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) {
-    try {
-      return JSON.parse(t) as string;
-    } catch {
-      return t.slice(1, -1);
-    }
-  }
-  if (/^-?\d+$/.test(t)) return Number(t);
-  return t;
-}
-
 function parseKumoSettingsYaml(text: string): SettingsRoute | undefined {
-  const lines = text.split(/\r?\n/);
-  // Indentation stack of {indent, kind, obj} for maps and model list items.
-  interface Frame {
-    indent: number;
-    obj: Record<string, unknown>;
-  }
-  const root: Record<string, unknown> = {};
-  const stack: Frame[] = [{ indent: -1, obj: root }];
-  let providers: Record<string, unknown> | undefined;
-  let currentModelItem: Record<string, unknown> | undefined;
-  const top = (): Frame => stack[stack.length - 1]!;
-  for (const rawLine of lines) {
-    const line = rawLine.replace(/#.*$/, "");
-    if (line.trim() === "") continue;
-    const indent = line.search(/\S/);
-    const content = line.trim();
-    while (stack.length > 1 && indent <= top().indent) {
-      const popped = stack.pop()!;
-      if (popped.obj === currentModelItem) currentModelItem = undefined;
-    }
-    if (content.startsWith("- ")) {
-      const item: Record<string, unknown> = {};
-      const rest = content.slice(2).trim();
-      if (rest !== "") {
-        const m = /^([^:]+):\s*(.*)$/.exec(rest);
-        if (m !== null) item[m[1]!.trim()] = unquoteYaml(m[2] ?? "");
-      }
-      const parent = top().obj;
-      // The `models:` line itself created a placeholder map; a list takes over.
-      let arr = parent.models;
-      if (!Array.isArray(arr)) {
-        arr = [];
-        parent.models = arr;
-      }
-      (arr as Array<Record<string, unknown>>).push(item);
-      stack.push({ indent, obj: item });
-      currentModelItem = item;
-      continue;
-    }
-    const m = /^([^:]+):\s*(.*)$/.exec(content);
-    if (m === null) continue;
-    const key = m[1]!.trim();
-    const value = m[2] ?? "";
-    if (value !== "") {
-      top().obj[key] = unquoteYaml(value);
-      currentModelItem = undefined;
-    } else {
-      const child: Record<string, unknown> = {};
-      top().obj[key] = child;
-      stack.push({ indent, obj: child });
-      if (key === "providers") providers = child;
-      currentModelItem = undefined;
-    }
-  }
-  const agent = root["agent-default-model"] as Record<string, unknown> | undefined;
-  const provider = typeof agent?.provider === "string" ? (agent.provider as string) : undefined;
-  const model = typeof agent?.model === "string" ? (agent.model as string) : undefined;
+  const doc = parseYaml(text) as any;
+  const def = doc?.["agent-default-model"];
+  const provider = typeof def?.provider === "string" ? def.provider : undefined;
+  const model = typeof def?.model === "string" ? def.model : undefined;
   if (provider === undefined || model === undefined) return undefined;
-  const pi = root["llm-pi-ai"] as Record<string, unknown> | undefined;
-  const provs = pi?.providers as Record<string, Record<string, unknown>> | undefined;
-  const route = provs?.[provider] as Record<string, unknown> | undefined;
-  const baseUrl = typeof route?.baseURL === "string" ? (route.baseURL as string) : undefined;
-  const models = Array.isArray(route?.models) ? (route.models as Array<Record<string, unknown>>) : [];
-  const entry =
-    models.find((e) => typeof e.id === "string" && (e.id as string) === model) ?? models[0];
-  const name = entry !== undefined && typeof entry.name === "string" ? (entry.name as string) : undefined;
-  const contextWindow =
-    entry !== undefined && typeof entry.contextWindow === "number" ? (entry.contextWindow as number) : undefined;
-  return {
-    provider,
-    model,
-    ...(baseUrl !== undefined ? { baseUrl } : {}),
-    ...(name !== undefined ? { name } : {}),
-    ...(contextWindow !== undefined ? { contextWindow } : {}),
-  };
+  const route = doc?.["llm-pi-ai"]?.providers?.[provider];
+  const entry = Array.isArray(route?.models)
+    ? route.models.find((m: any) => m !== null && typeof m === "object" && m.id === model)
+    : undefined;
+  const out: SettingsRoute = { provider, model };
+  if (typeof route?.baseURL === "string") out.baseUrl = route.baseURL;
+  if (typeof entry?.name === "string") out.name = entry.name;
+  if (typeof entry?.contextWindow === "number") out.contextWindow = entry.contextWindow;
+  return out;
 }
 
 /**

@@ -642,3 +642,104 @@ test("/help prints commands and keys without model traffic (T31.3)", async () =>
     expect(h.server.mainRequests()).toHaveLength(0);
   });
 });
+
+// ── T34: reasoning effort that really reaches the wire ─────────────────────
+const EFFORT_TEMPLATE = { enableThinking: true, reasoningEffort: true, preserveThinking: true };
+const BINARY_TEMPLATE = { enableThinking: true, reasoningEffort: false, preserveThinking: false };
+
+async function templateScenario(
+  name: string,
+  scripts: Script[],
+  permissionMode: "ask" | "auto",
+  template: typeof EFFORT_TEMPLATE,
+  run: (h: Harness) => Promise<void>,
+) {
+  let h: Harness | undefined;
+  try {
+    h = await Harness.start(scripts, permissionMode, false, { template });
+    await h.waitFor("e2e-model", 30_000);
+    await run(h);
+    expect(h.server.errors, name).toEqual([]);
+  } catch (error) {
+    if (h) {
+      await h.dump(`${name}-failure`);
+      console.error(`SCENARIO FAILED: ${name}\n${h.screen().join("\n")}`);
+    }
+    throw error;
+  } finally {
+    await h?.close();
+  }
+}
+
+test("effort: defaults medium; /effort off and ctrl+e high change request params only (T34)", async () => {
+  await templateScenario("effort-cycle", [
+    textScript("TURN_ONE"), textScript("TURN_TWO"), textScript("TURN_THREE"),
+  ], "ask", EFFORT_TEMPLATE, async (h) => {
+    // Setup wrote the template → kumo defaults a local thinking model to medium.
+    await h.waitFor("effort medium", 15_000);
+    await h.prompt("one");
+    await h.waitFor("TURN_ONE");
+    const b1 = h.server.mainRequests()[0]!.body;
+    expect(b1.chat_template_kwargs).toEqual({
+      enable_thinking: true, reasoning_effort: "medium", preserve_thinking: true,
+    });
+
+    await h.prompt("/effort off");
+    await h.waitFor("Effort: off (next message)");
+    await h.prompt("two");
+    await h.waitFor("TURN_TWO");
+    const mains = h.server.mainRequests();
+    const b2 = mains[mains.length - 1]!.body;
+    expect(b2.chat_template_kwargs).toEqual({ enable_thinking: false, preserve_thinking: true });
+    expect(b2.reasoning_effort).toBeUndefined();
+
+    // ctrl+e cycles off → low → medium → high.
+    h.press("ctrlE"); await delay(150);
+    h.press("ctrlE"); await delay(150);
+    h.press("ctrlE");
+    await h.waitFor("Effort: high (next message)");
+    await h.prompt("three");
+    await h.waitFor("TURN_THREE");
+    const b3 = h.server.mainRequests().at(-1)!.body;
+    expect(b3.chat_template_kwargs?.reasoning_effort).toBe("high");
+    expect(b3.chat_template_kwargs?.enable_thinking).toBe(true);
+    expect(footer(h)).toContain("effort high");
+
+    // Cache rule: system and tools stay byte-identical across effort changes.
+    const sys = (b: (typeof b1)): string =>
+      JSON.stringify(b.messages.filter((m) => ["system", "developer"].includes(m.role)));
+    const tools = (b: (typeof b1)): string => JSON.stringify(b.tools ?? null);
+    expect(sys(b2)).toBe(sys(b1));
+    expect(sys(b3)).toBe(sys(b1));
+    expect(tools(b2)).toBe(tools(b1));
+    expect(tools(b3)).toBe(tools(b1));
+  });
+}, 90_000);
+
+test("judge + ghost suggestion send enable_thinking false on a binary template (T28b)", async () => {
+  await templateScenario("effort-side-requests", [
+    toolScript("bash", { command: "touch t34_probe.txt", description: "create the probe file" }), textScript("TOOLED"),
+  ], "auto", BINARY_TEMPLATE, async (h) => {
+    // binary template → the default is "on"; footer tells the truth.
+    await h.waitFor("effort on", 15_000);
+    await h.prompt("create a file");
+    await h.waitFor("TOOLED");
+    await h.waitFor("✓ bash");
+    const b1 = h.server.mainRequests()[0]!.body;
+    expect(b1.chat_template_kwargs).toEqual({ enable_thinking: true });
+
+    const find = (needle: string) =>
+      h!.server.requests.find(
+        (r) => !r.main && JSON.stringify(r.body.messages).includes(needle),
+      );
+    await h.until(() => find("Answer ALLOW or ASK") !== undefined, 15_000, "judge request");
+    await h.until(() => find("Suggest") !== undefined, 15_000, "suggestion request");
+    const judge = find("Answer ALLOW or ASK")!;
+    // T34 mechanism: off → the template receives enable_thinking:false.
+    expect(judge.body.chat_template_kwargs).toEqual({ enable_thinking: false });
+    expect(judge.body.reasoning_effort).toBeUndefined();
+
+    const suggest = find("Suggest")!;
+    expect(suggest.body.chat_template_kwargs).toEqual({ enable_thinking: false });
+  });
+}, 90_000);

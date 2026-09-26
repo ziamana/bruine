@@ -55,13 +55,15 @@ describe("probePort", () => {
   });
 
   test("fetches the right URL", async () => {
-    let url = "";
+    const urls: string[] = [];
     const fetchImpl: FetchLike = async (u) => {
-      url = u;
+      urls.push(u);
       return { ok: true, json: async () => ({ data: [{ id: "x" }] }) };
     };
     await probePort(11434, { fetchImpl });
-    expect(url).toBe("http://127.0.0.1:11434/v1/models");
+    // T34: after /v1/models a localhost probe also reads /props (chat template).
+    expect(urls[0]).toBe("http://127.0.0.1:11434/v1/models");
+    expect(urls[1]).toBe("http://127.0.0.1:11434/props");
   });
 
   test("connection refused → undefined", async () => {

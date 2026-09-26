@@ -5,6 +5,8 @@
  */
 export interface DshContext {
   get(service: string): any;
+  /** Mount another Cordis plugin (T34: kumo-effort from kumo-repl). */
+  plugin?(plugin: unknown, config?: unknown): unknown;
   provide(name: string, value: unknown): void;
   inject(services: string[], callback: (ctx: any) => void): void;
   on(event: string, listener: (...args: any[]) => any): () => void;
@@ -23,6 +25,12 @@ export interface KumoStartup {
 /** The service published by kumo-repl once its agent exists. */
 export interface KumoRepl {
   agent: any;
+  /**
+   * T34: the dsh ModelSelectionRef holder. dsh reads `.current` at prompt
+   * assembly and request time, so replacing it changes the NEXT request's
+   * parameters only — never the system prompt or the tools.
+   */
+  selection?: { current?: { provider: string; model: string; reasoningEffort?: string } };
   /** Non-TTY mode: ask one line on the readline interface. */
   ask?: (question: string) => Promise<string>;
   /** TTY mode: the pi-tui shell (askChoice, addChat, footer). */

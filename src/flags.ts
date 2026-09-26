@@ -18,6 +18,7 @@ export interface HeadlessRequest {
 
 export interface ParsedFlags {
   headless: HeadlessRequest | undefined;
+  permission?: "ask" | "auto" | "full";
   /** Strip kumo's own flags; the rest goes to dsh verbatim. */
   passthrough: string[];
   /** `--output-format` named a format that does not exist. */
@@ -27,7 +28,7 @@ export interface ParsedFlags {
 const FORMATS: readonly string[] = ["text", "json", "stream-json"];
 
 /** `-p=task`, `-p task`, `--print=task`, `--print task`. */
-function valueOf(arg: string, inline: string | undefined): string | undefined {
+function valueOf(inline: string | undefined): string | undefined {
   if (inline !== undefined) return inline;
   return undefined;
 }
@@ -35,6 +36,7 @@ function valueOf(arg: string, inline: string | undefined): string | undefined {
 export function parseFlags(argv: readonly string[]): ParsedFlags {
   const prompts: string[] = [];
   let format: OutputFormat = "text";
+  let permission: "ask" | "auto" | "full" | undefined;
   const passthrough: string[] = [];
 
 
@@ -52,12 +54,12 @@ export function parseFlags(argv: readonly string[]): ParsedFlags {
     const inline = eq === -1 ? undefined : arg.slice(eq + 1);
 
     if (name === "-p" || name === "--print") {
-      const value = valueOf(arg, inline);
+      const value = valueOf(inline);
       if (value === undefined) {
         // The next token is the prompt, unless it is another flag: `-p -p` is
         // not a prompt of "-p".
         const next = argv[i + 1];
-        if (next === undefined || next.startsWith("-")) {
+        if (next === undefined || (next.startsWith("-") && next !== "-")) {
           return { headless: undefined, passthrough, error: `${name} needs a task` };
         }
         prompts.push(next);
@@ -83,13 +85,30 @@ export function parseFlags(argv: readonly string[]): ParsedFlags {
       continue;
     }
 
-    passthrough.push(arg);
+    if (name === "--permission-mode") {
+      const value = inline ?? argv[i + 1];
+      if (inline === undefined) i += 1;
+      if (value !== "ask" && value !== "auto" && value !== "full") {
+        return { headless: undefined, passthrough, error: "--permission-mode must be ask, auto, or full" };
+      }
+      permission = value;
+      continue;
+    }
+    if (name === "--dangerously-skip-permissions") {
+      permission = "full";
+      continue;
+    }
+
+    // dsh owns the first unknown option and all following tokens, including
+    // a possible -p value. Never claim one of its argument values as ours.
+    passthrough.push(...argv.slice(i));
+    break;
   }
 
   if (prompts.length === 0) {
     // No task: kumo boots the REPL. `--output-format` on its own is not ours to
     // interpret, so it stays in the passthrough for dsh.
-    return { headless: undefined, passthrough };
+    return { headless: undefined, passthrough, ...(permission !== undefined ? { permission } : {}) };
   }
-  return { headless: { prompts, format }, passthrough };
+  return { headless: { prompts, format }, passthrough, ...(permission !== undefined ? { permission } : {}) };
 }

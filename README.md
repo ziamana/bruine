@@ -34,6 +34,9 @@ sent anywhere you did not point it at.
 
 ```
 kumo                Start kumo. Extra args are passed through to dsh.
+kumo --continue     Resume the latest conversation in this project.
+kumo -p "task"      Run a task without the terminal UI and print its answer.
+kumo -p -           Read a task from stdin.
 kumo setup          (Re)run the setup wizard, pre-filled with your current values.
 kumo skills         List the skills kumo has enabled.
 kumo update         Update kumo through its installer.
@@ -41,7 +44,11 @@ kumo --version      Print the version.
 kumo --help         Print the help.
 ```
 
-Inside a session, `/` opens the command palette: `/new`, `/compact`, `/plan`, `/permissions`,
+Use `--output-format json` or `--output-format stream-json` with `-p` for scripts. A headless
+task denies any tool action that would need a permission prompt; use `--permission-mode full`
+only when that task should run with full access.
+
+Inside a session, `/` opens the command palette: `/new`, `/resume`, `/verify`, `/compact`, `/plan`, `/permissions`,
 `/model`, `/provider`, `/effort`, `/skills`, `/reload`, `/help`, `/exit`. `f2` walks the routes you
 used recently. `ctrl+t` shows the task list, `ctrl+o` expands tool output, `ctrl+e` cycles the
 reasoning effort, `ctrl+v` pastes an image.

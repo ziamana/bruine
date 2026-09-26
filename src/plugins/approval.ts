@@ -51,7 +51,7 @@ export function parseAnswer(line: string): boolean {
 export function apply(ctx: DshContext): void {
   let repl: KumoRepl | undefined;
   let render: RenderService | undefined;
-  let modes: Pick<KumoModesService, "rememberFor" | "decisionFor"> | undefined;
+  let modes: Pick<KumoModesService, "rememberFor" | "decisionFor" | "governs"> | undefined;
   ctx.inject(["kumoRepl"], (c: any) => {
     repl = c.kumoRepl;
   });
@@ -75,7 +75,7 @@ export function apply(ctx: DshContext): void {
       }>;
       signal?: { aborted: boolean };
     }, next: () => Promise<{ answers: Array<{ id: string; selected: string[]; custom?: string }> }>) => {
-      if (repl === undefined || request.agent !== repl.agent) return next();
+      if (repl === undefined || !(modes?.governs(request.agent) ?? request.agent === repl.agent)) return next();
       if (request.signal?.aborted) {
         return { answers: request.questions.map((q) => ({ id: q.id, selected: [], custom: "skipped by the user" })) };
       }
@@ -129,15 +129,17 @@ export function apply(ctx: DshContext): void {
   ctx.on(
     "approval/request",
     (request: ApprovalRequestLike, next: () => Promise<ApprovalOutcome>) => {
-      if (repl === undefined || request.agent !== repl.agent) return next();
+      if (!(modes?.governs(request.agent) ?? request.agent === repl?.agent)) return next();
       if (request.signal?.aborted) return "cancelled";
 
       if (modes !== undefined) {
         const decision = modes.decisionFor(request.callId);
         if (decision === "allow") return "allowed-once";
         if (decision === "deny") return "rejected";
-        if (decision !== "ask") return next();
+        if (decision !== "ask") return repl === undefined ? "rejected" : next();
       }
+
+      if (repl === undefined) return "rejected";
 
       const ui = repl.ui;
       if (ui !== undefined) {

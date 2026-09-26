@@ -18,6 +18,8 @@ function kumoCommand(): Command {
       "Interactive terminal agent. Type a message and press Enter; /exit or Ctrl+D quits.",
     )
     .helpOption("-h, --help", "show this help")
+    .option("-p, --print <task>", "run a task and exit", (value: string, previous: string[]) => [...previous, value], [] as string[])
+    .option("-f, --output-format <format>", "headless output: text, json, or stream-json", "text")
     .argument("[prompt...]", "optional first prompt, sent before the loop starts")
     .addHelpText(
       "after",
@@ -33,6 +35,14 @@ Examples:
 export function apply(ctx: DshContext): void {
   const program = kumoCommand();
   program.action(() => {
+    const options = program.opts<{ print: string[]; outputFormat: string }>();
+    if (options.print.length > 0) {
+      if (!["text", "json", "stream-json"].includes(options.outputFormat)) {
+        throw new Error("--output-format must be one of: text, json, stream-json");
+      }
+      ctx.provide(KUMO_STARTUP_SERVICE, { headless: { prompts: options.print, format: options.outputFormat } });
+      return;
+    }
     const prompt = program.args.join(" ").trim();
     const startup: KumoStartup = prompt === "" ? {} : { initialPrompt: prompt };
     ctx.provide(KUMO_STARTUP_SERVICE, startup);

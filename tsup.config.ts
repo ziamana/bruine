@@ -5,6 +5,7 @@ export default defineConfig({
     bin: "src/bin.ts",
     "plugins/startup": "src/plugins/startup.ts",
     "plugins/repl": "src/plugins/repl.ts",
+    "plugins/headless": "src/plugins/headless.ts",
     "plugins/render": "src/plugins/render.ts",
     "plugins/approval": "src/plugins/approval.ts",
     "plugins/modes": "src/plugins/modes.ts",

@@ -106,6 +106,12 @@
     - id: kumo-repl
       name: 'kumo-code/repl'
       inject: [kumoStartup]
+      disabled: !!js process.env.KUMO_HEADLESS === '1'
+
+    - id: kumo-headless
+      name: 'kumo-code/headless'
+      inject: [kumoStartup]
+      disabled: !!js process.env.KUMO_HEADLESS !== '1'
 
     - id: kumo-render
       name: 'kumo-code/render'

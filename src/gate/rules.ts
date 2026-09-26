@@ -5,6 +5,7 @@
  * announcement messages.
  */
 import path from "node:path";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 
 export type PermissionMode = "ask" | "auto" | "full";
 
@@ -42,13 +43,15 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
  */
 export const READONLY_COMMANDS: ReadonlySet<string> = new Set([
   "ls", "cat", "head", "tail", "wc", "pwd", "which", "whereis", "whoami",
-  "printenv", "uname", "df", "du", "free", "uptime",
+  "uname", "df", "du", "free", "uptime",
   "grep", "rg", "echo", "printf", "uniq", "jq",
   "diff", "file", "stat", "type", "alias", "ps",
 ]);
 
 /** Characters that turn "one simple read-only command" into anything goes (T18.1). */
 const NOT_SIMPLE = /[;&|<>`]|\$\(|\n/;
+/** These options can execute a helper, even though the command looks read-only. */
+const EXECUTABLE_OPTION = /--(?:pre|ext-diff|textconv)(?=$|[=\s'"\\])/;
 
 /** find flags that make it a mutation (T18.2 + T19.B prefix match). */
 const FIND_MUTATING = /\s-(exec|ok|fprint|fls|delete)/;
@@ -141,6 +144,8 @@ const GIT_BRANCH_MUTATING = /\s-(d|D|m|M|c|C)\b|--delete\b|--move\b|--copy\b/;
 
 /** bash command fragments that must always ask, in every mode below full. */
 export const ALWAYS_ASK_PATTERNS: readonly RegExp[] = [
+  /^\s*printenv\b/, // may print API keys into the model's tool result
+  EXECUTABLE_OPTION,
   /\brm\s+(-[a-zA-Z]+\s+)*[-a-zA-Z]*[rR]/, // rm -r / -R / -rf / --recursive
   /\bsudo\b/,
   /\bgit\s+push\b/,
@@ -213,7 +218,7 @@ export function ruleKey(name: string, args: Record<string, unknown>): string {
 
 /** One simple read-only command (T18.1 + T18.2). Exported for tests. */
 export function isReadonlyBash(command: string): boolean {
-  if (NOT_SIMPLE.test(command)) return false;
+  if (NOT_SIMPLE.test(command) || EXECUTABLE_OPTION.test(command)) return false;
   const words = command.trim().split(/\s+/);
   const first = words[0] ?? "";
   if (first === "find") return !FIND_MUTATING.test(command);
@@ -224,6 +229,15 @@ export function isReadonlyBash(command: string): boolean {
 /** Sensitive location in a path or command (T18.4). Exported for tests. */
 export function isSensitive(text: string): boolean {
   return SENSITIVE_PATTERNS.some((re) => re.test(text));
+}
+
+function isSensitiveTarget(target: string, projectDir: string): boolean {
+  if (isSensitive(target)) return true;
+  try {
+    return isSensitive(realpathSync(path.resolve(projectDir, target)));
+  } catch {
+    return false;
+  }
 }
 
 function looksWin32(root: string, target: string): boolean {
@@ -244,6 +258,33 @@ export function isPathInside(target: string, projectDir: string): boolean {
   const mod = looksWin32(projectDir, raw) ? path.win32 : path;
   let abs = mod.resolve(projectDir, raw);
   let root = mod.resolve(projectDir);
+  // Resolve existing ancestors: a new file below a symlink can leave the
+  // project even though its lexical path starts inside it. Synthetic win32
+  // paths on non-Windows hosts (used in tests) have no native realpath.
+  const nativePath = process.platform === "win32" ? mod === path.win32 : mod === path;
+  if (nativePath && existsSync(root)) {
+    try {
+      root = realpathSync(root);
+      const missing: string[] = [];
+      let parent = abs;
+      for (;;) {
+        try {
+          abs = mod.join(realpathSync(parent), ...missing.reverse());
+          break;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
+          // A dangling symlink is not a missing file that can be reconstructed.
+          try { if (lstatSync(parent).isSymbolicLink()) return false; } catch { /* absent */ }
+          const next = mod.dirname(parent);
+          if (next === parent) return false;
+          missing.push(mod.basename(parent));
+          parent = next;
+        }
+      }
+    } catch {
+      return false;
+    }
+  }
   if (mod === path.win32) {
     abs = abs.toLowerCase();
     root = root.toLowerCase();
@@ -290,6 +331,10 @@ export function decide(
   if (WRITE_TOOLS.has(name)) {
     const target = String(execArgs.path ?? execArgs.file_path ?? "");
     if (isSensitive(target)) return "ask";
+  }
+  if (name === "read" || name === "read_image") {
+    const target = String(execArgs.path ?? execArgs.file_path ?? "");
+    if (isSensitiveTarget(target, ctx.projectDir)) return "ask";
   }
 
   // 4. "Always for this session" rules.

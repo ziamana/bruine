@@ -13,6 +13,7 @@ import { migrateAgentsSkills } from "./setup/skills.js";
 import { localDefaultRoute } from "./setup/discover.js";
 import { ansi } from "./ui/theme.js";
 import { BootLoader } from "./ui/boot-loader.js";
+import { parseFlags } from "./flags.js";
 import { checkForUpdate, detectInstallKind, updateCommand } from "./update.js";
 
 const require = createRequire(import.meta.url);
@@ -30,6 +31,11 @@ Usage:
   kumo [args]        Start kumo. Extra args are passed through to dsh.
   kumo setup         (Re)run the setup wizard, pre-filled with current values.
   kumo skills        List the skills kumo has enabled (name, kind, source).
+  kumo --continue    Resume the latest conversation in this project.
+  kumo -p "task"     Run one task and print the answer (no terminal UI).
+  kumo -p -          Read the task from stdin.
+  kumo -p "task" --output-format json|stream-json
+  kumo -p "task" --permission-mode full
   kumo update        Update kumo to the latest version (via its installer).
   kumo --version     Print the kumo version.
   kumo --help        Print this help.
@@ -70,12 +76,13 @@ function ensureBundleInstalled(
   profileDir: string,
   dshEntry: string | undefined,
   env: Record<string, string>,
+  headless = false,
 ): void {
   const marker = join(profileDir, "node_modules", pkg.name, "package.json");
   if (existsSync(marker)) return;
 
   const spec = selfPackageRoot() ?? `${pkg.name}@${pkg.version}`;
-  console.log("Setting up kumo (one time)…");
+  if (!headless) console.log("Setting up kumo (one time)…");
   const { status, error, output } = runDsh(
     dshEntry,
     ["plugin", "--profile", "kumo", "add", spec],
@@ -93,7 +100,7 @@ function ensureBundleInstalled(
     console.error(`kumo: could not install the kumo bundle (dsh plugin exited ${status}).`);
     process.exit(1);
   }
-  console.log("Ready.");
+  if (!headless) console.log("Ready.");
 }
 
 interface KumoJson {
@@ -318,7 +325,24 @@ async function main(): Promise<void> {
   const dshEntry = resolveDshEntry();
   const settings = readKumoJson(dshHome);
 
+  const continueRequested = argv[0] === "--continue";
+  const taskArgs = continueRequested ? argv.slice(1) : argv;
+  const parsed = parseFlags(taskArgs);
+  if (parsed.error !== undefined) {
+    console.error(`kumo: ${parsed.error}`);
+    process.exit(2);
+  }
+  const headless = parsed.headless !== undefined;
+  if (headless && continueRequested) {
+    console.error("kumo: --continue cannot be combined with -p");
+    process.exit(2);
+  }
+
   if (!existsSync(join(dshHome, "settings.yaml"))) {
+    if (headless) {
+      console.error("kumo: run `kumo setup` before using -p");
+      process.exit(2);
+    }
     if (process.stdin.isTTY === true && process.stdout.isTTY === true) {
       // First run in a real terminal: the product wizard (entry screen picks
       // simple or full). Files are written once, from its Save step.
@@ -335,17 +359,25 @@ async function main(): Promise<void> {
   // T31c: on a private/localhost default route the session-title request
   // races the first answer for the single slot; the launcher turns the LLM
   // title provider off and dsh falls back to the first-prompt title.
-  const launchEnv = localDefaultRoute(dshHome)
+  const launchEnv: NodeJS.ProcessEnv = localDefaultRoute(dshHome)
     ? { ...process.env, KUMO_TITLE_LLM: "off" }
-    : process.env;
-  const { command, args, env } = buildLaunch(argv, launchEnv, os.homedir(), {
+    : { ...process.env };
+  if (continueRequested) launchEnv.KUMO_CONTINUE = "1";
+  if (headless) {
+    launchEnv.KUMO_HEADLESS = "1";
+    if (parsed.permission !== undefined) launchEnv.KUMO_PERMISSION_MODE = parsed.permission;
+  }
+  const forwarded = headless
+    ? [...parsed.passthrough, ...parsed.headless!.prompts.flatMap((prompt) => ["-p", prompt]), "--output-format", parsed.headless!.format]
+    : taskArgs;
+  const { command, args, env } = buildLaunch(forwarded, launchEnv, os.homedir(), {
     dshEntry,
     telemetry: settings.telemetry,
     tools: settings.tools,
   });
 
   const { dir } = await ensureProfile(dshHome);
-  ensureBundleInstalled(dir, dshEntry, env);
+  ensureBundleInstalled(dir, dshEntry, env, headless);
 
   // T26b: the .agents/skills migration must not need the wizard — an
   // existing user who upgrades and just runs `kumo` would otherwise silently
@@ -355,10 +387,11 @@ async function main(): Promise<void> {
   if (migrated.linked.length > 0) {
     const n = String(migrated.linked.length);
     const kept = `kumo: kept your ${n} skill${migrated.linked.length === 1 ? "" : "s"} from .agents/skills (manage them with kumo setup)`;
-    console.log(process.stdout.isTTY === true ? ansi.dim(kept) : kept);
+    const line = process.stdout.isTTY === true ? ansi.dim(kept) : kept;
+    if (headless) console.error(line); else console.log(line);
   }
   if (migrated.copied.length > 0) {
-    console.log(
+    (headless ? console.error : console.log)(
       `kumo: could not link ${String(migrated.copied.length)} of those skills; they were copied instead (sources: ${migrated.copied.join(", ")}).`,
     );
   }

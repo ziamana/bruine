@@ -77,7 +77,9 @@ export class FooterComponent implements Component {
     const sep = this.#icons.think === "*" ? "-" : "·";
     const modelName = displayModel(s.model, s.modelName);
     const model = `${s.provider === "local" ? "(local) " : ""}${modelName}`;
-    const effort = `effort ${s.effort ?? "off"}`;
+    // T34: the footer shows the REAL effort the effort plugin sends; "?"
+    // until the plugin resolves the model's levels (never a silent lie).
+    const effort = `effort ${s.effort ?? "?"}`;
     const parts: string[] = [ctxPart];
     if (s.tps !== undefined && s.tps > 0) {
       parts.push(`${String(Math.round(s.tps))} tok/s`);

@@ -9,13 +9,14 @@ import * as pty from "node-pty";
 import type { Terminal as TerminalType } from "@xterm/headless";
 import { ensureProfile } from "../../src/profile.js";
 import { localServerSettings, renderSettingsYaml } from "../../src/setup/simple.js";
+import type { TemplateCaps } from "../../src/setup/discover.js";
 import { startServer, type Script } from "./sse-server.js";
 
 const require = createRequire(import.meta.url);
 const { Terminal } = require("@xterm/headless") as { Terminal: typeof TerminalType };
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const screens = join(root, "test", "e2e", "__screens__", "run");
-const keys = { enter: "\r", escape: "\x1b", tab: "\t", shiftTab: "\x1b[Z", down: "\x1b[B", right: "\x1b[C", ctrlC: "\x03", ctrlD: "\x04", ctrlO: "\x0f" };
+const keys = { enter: "\r", escape: "\x1b", tab: "\t", shiftTab: "\x1b[Z", down: "\x1b[B", right: "\x1b[C", ctrlC: "\x03", ctrlD: "\x04", ctrlO: "\x0f", ctrlE: "\x05" };
 
 export function build() {
   execFileSync(process.platform === "win32" ? "pnpm.cmd" : "pnpm", ["build"], {
@@ -31,13 +32,16 @@ export class Harness {
   readonly emojiScreens: string[] = [];
   private constructor(readonly home: string, readonly project: string, readonly server: Awaited<ReturnType<typeof startServer>>) {}
 
-  static async start(scripts: Script[], permissionMode = "ask", ascii = false) {
+  static async start(scripts: Script[], permissionMode = "ask", ascii = false, opts: { template?: TemplateCaps } = {}) {
     const home = await mkdtemp(join(tmpdir(), "kumo-e2e-home-"));
     const project = await mkdtemp(join(tmpdir(), "kumo-e2e-project-"));
     const server = await startServer(scripts);
     const h = new Harness(home, project, server);
     try {
-      await writeFile(join(home, "settings.yaml"), renderSettingsYaml(localServerSettings({ baseUrl: server.url, models: ["e2e-model"] }, "e2e-model")));
+      await writeFile(join(home, "settings.yaml"), renderSettingsYaml(localServerSettings(
+        { baseUrl: server.url, models: ["e2e-model"], ...(opts.template !== undefined ? { template: opts.template } : {}) },
+        "e2e-model",
+      )));
       await writeFile(join(home, ".env"), "KUMO_LOCAL_API_KEY=e2e\n");
       await writeFile(
         join(home, "kumo.json"),
@@ -51,6 +55,8 @@ export class Harness {
               name: "e2e-model Pretty",
               baseUrl: server.url,
               contextWindow: 100000,
+              // T34: the setup-detected template the effort plugin trusts.
+              ...(opts.template !== undefined ? { template: opts.template } : {}),
             },
             fast: {
               provider: "local",

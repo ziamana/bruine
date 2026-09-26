@@ -5,6 +5,11 @@ export interface RequestBody {
   messages: Array<{ role: string; content?: unknown; tool_call_id?: string }>;
   tools?: unknown[];
   stream?: boolean;
+  /** T34: chat-template thinking switches (only sent with the compat block). */
+  chat_template_kwargs?: Record<string, unknown>;
+  reasoning_effort?: string;
+  max_tokens?: number;
+  max_completion_tokens?: number;
 }
 export interface Chunk {
   delta: Record<string, unknown>;
@@ -67,7 +72,15 @@ export async function startServer(scripts: Script[]) {
         record.disconnected = !record.completed;
         abort.abort();
       });
-      const script = main ? scripts[turn++] : { chunks: [{ delta: { content: "E2E session" }, delayMs: 1500 }] };
+      // T34/T28b: the Auto judge (T19) is a side request — answer it ALLOW so
+      // the session proceeds; every other side request (suggestion) keeps the
+      // E2E-session filler.
+      const isJudge = !main && JSON.stringify(body.messages).includes("Answer ALLOW or ASK");
+      const script = main
+        ? scripts[turn++]
+        : isJudge
+          ? { chunks: [{ delta: { content: "ALLOW" }, delayMs: 50 }] }
+          : { chunks: [{ delta: { content: "E2E session" }, delayMs: 1500 }] };
       if (!script) {
         errors.push(`Unexpected main request ${turn}`);
         res.writeHead(500).end("No scripted response remains");

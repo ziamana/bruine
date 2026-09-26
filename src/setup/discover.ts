@@ -16,6 +16,35 @@ export interface Discovered {
   models: string[];
   /** Per-model server facts (context window comes from the SERVER). */
   modelInfos: ModelInfo[];
+  /**
+   * T34: the thinking switches the server's chat template actually honors
+   * (from llama.cpp `GET /props` → `chat_template`). Absent for servers that
+   * do not expose a template (Ollama, LM Studio, cloud): pi-ai's own
+   * detection stays in charge there.
+   */
+  template?: TemplateCaps;
+}
+
+/** Which thinking knobs a chat template understands (T34). */
+export interface TemplateCaps {
+  enableThinking: boolean;
+  reasoningEffort: boolean;
+  preserveThinking: boolean;
+}
+
+/**
+ * T34: search a Jinja chat template for the thinking switches it reads.
+ * `undefined` = no thinking switch found → do not force chat-template.
+ */
+export function detectTemplateCaps(chatTemplate: unknown): TemplateCaps | undefined {
+  if (typeof chatTemplate !== "string" || chatTemplate === "") return undefined;
+  const caps: TemplateCaps = {
+    enableThinking: chatTemplate.includes("enable_thinking"),
+    reasoningEffort: chatTemplate.includes("reasoning_effort"),
+    preserveThinking: chatTemplate.includes("preserve_thinking"),
+  };
+  if (!caps.enableThinking && !caps.reasoningEffort) return undefined;
+  return caps;
 }
 
 /**
@@ -156,12 +185,15 @@ export async function probeServer(
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) return undefined;
-    let modelInfos = normalizeModelInfos(await res.json());
-    if (modelInfos.length === 0) return undefined;
-    if (modelInfos.every((m) => m.contextWindow === undefined)) {
-      // llama.cpp exposes the configured generation settings on /props.
-      modelInfos = await applyPropsContext(host, port, modelInfos, doFetch, timeoutMs);
-    }
+    const modelInfos0 = normalizeModelInfos(await res.json());
+    if (modelInfos0.length === 0) return undefined;
+    // llama.cpp exposes the generation settings AND the chat template on
+    // /props: n_ctx fills the context window, chat_template the T34 switches.
+    const props = await fetchProps(host, port, doFetch, timeoutMs);
+    const modelInfos =
+      props?.nctx === undefined
+        ? modelInfos0
+        : modelInfos0.map((m) => (m.contextWindow === undefined ? { ...m, contextWindow: props.nctx! } : m));
     return {
       source: opts.source ?? "localhost",
       host,
@@ -169,31 +201,39 @@ export async function probeServer(
       baseUrl,
       models: modelInfos.map((m) => m.id),
       modelInfos,
+      ...(props?.template !== undefined ? { template: props.template } : {}),
     };
   } catch {
     return undefined;
   }
 }
 
-async function applyPropsContext(
+/** GET /props, best effort: {n_ctx, chat_template} or undefined. */
+export async function fetchProps(
   host: string,
   port: number,
-  infos: ModelInfo[],
-  doFetch: FetchLike,
-  timeoutMs: number,
-): Promise<ModelInfo[]> {
+  doFetch: (
+    url: string,
+    init?: { signal?: AbortSignal },
+  ) => Promise<{ ok: boolean; json(): Promise<any> }> = fetch as unknown as FetchLike,
+  timeoutMs = 800,
+): Promise<{ nctx?: number; template?: TemplateCaps } | undefined> {
   try {
     const res = await doFetch(`http://${host}:${String(port)}/props`, {
       signal: AbortSignal.timeout(timeoutMs),
     });
-    if (!res.ok) return infos;
+    if (!res.ok) return undefined;
     const props = await res.json();
     const nctx =
       positiveInt(props?.default_generation_settings?.n_ctx) ?? positiveInt(props?.n_ctx);
-    if (nctx === undefined) return infos;
-    return infos.map((m) => (m.contextWindow === undefined ? { ...m, contextWindow: nctx } : m));
+    const template = detectTemplateCaps(props?.chat_template);
+    if (nctx === undefined && template === undefined) return undefined;
+    return {
+      ...(nctx !== undefined ? { nctx } : {}),
+      ...(template !== undefined ? { template } : {}),
+    };
   } catch {
-    return infos;
+    return undefined;
   }
 }
 

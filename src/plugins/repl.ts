@@ -8,6 +8,7 @@ import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { kumoIcons } from "../render/chars.js";
 import { KumoUi } from "../ui/kumo-ui.js";
 import { KUMO_MODES_SERVICE } from "./modes.js";
+import kumoEffort, { KUMO_EFFORT_SERVICE } from "./effort.js";
 import { KUMO_RENDER_SERVICE } from "./render.js";
 import type { DshContext, KumoRepl, KumoStartup } from "./ctx.js";
 
@@ -191,11 +192,21 @@ export function askViaReadline(rl: ReadlineInterface, question: string): Promise
   });
 }
 
-async function createAgent(ctx: DshContext): Promise<{ agent: any; selection: any } | undefined> {
+async function createAgent(ctx: DshContext): Promise<{
+  agent: any;
+  selection: any;
+  selectionRef: { current: any; assembled: unknown };
+} | undefined> {
   const agents = ctx.get("agents");
   const defaultModel = ctx.get("agentDefaultModel");
   if (agents === undefined || defaultModel === undefined) return undefined;
   const selection = defaultModel.currentSelection();
+  // T34: the holder dsh reads per request; kumo-effort replaces .current to
+  // change the reasoning effort of the NEXT request only.
+  const selectionRef: {
+    current: { provider: string; model: string; reasoningEffort?: string } | undefined;
+    assembled: unknown;
+  } = { current: selection, assembled: undefined };
   const { agent } = await agents.create({
     sessionId: SessionId(`session-${randomUUID()}`),
     meta: { cwd: process.cwd() },
@@ -203,11 +214,11 @@ async function createAgent(ctx: DshContext): Promise<{ agent: any; selection: an
     setup: (agentCtx: unknown) => {
       // Block body on purpose: returning the disposer would be treated as a
       // setup commit object by the agent factory.
-      installModelSelection(agentCtx as any, { current: selection, assembled: undefined });
+      installModelSelection(agentCtx as any, selectionRef as any);
     },
   });
   await agent.whenIdle();
-  return { agent, selection };
+  return { agent, selection, selectionRef };
 }
 
 /**
@@ -236,7 +247,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   if (sessions === undefined) return;
   const created = await createAgent(ctx);
   if (created === undefined) return;
-  const { agent, selection } = created;
+  const { agent, selection, selectionRef } = created;
 
   const followup = (text: string): void => {
     agent.followup(
@@ -251,6 +262,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   // Slash-command router: /exit is handled by Repl itself; /plan and
   // /permissions go to kumoModes (T16).
   const modes = (): any => ctx.get(KUMO_MODES_SERVICE);
+  const effort = (): any => ctx.get(KUMO_EFFORT_SERVICE);
   const router = (
     text: string,
     emitLine: (t: string) => void,
@@ -263,7 +275,14 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         reply(r);
         return;
       }
-      reply(`Unknown command "${trimmed}". Available: /plan, /permissions, /exit`);
+      // T34: /effort is answered by the effort plugin (picker or direct level).
+      if (effort()?.handles?.(trimmed) === true) {
+        void Promise.resolve(effort().runCommand(trimmed)).then((t: string | undefined) => {
+          if (t !== undefined) reply(t);
+        });
+        return;
+      }
+      reply(`Unknown command "${trimmed}". Available: /plan, /permissions, /effort, /exit`);
       return;
     }
     emitLine(text);
@@ -312,7 +331,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       },
       lines: emitter.source(),
     });
-    const service: KumoRepl = { agent, ui };
+    const service: KumoRepl = { agent, ui, selection: selectionRef };
     ctx.provide(KUMO_REPL_SERVICE, service);
     ui.start();
     await repl.run(startup?.initialPrompt);
@@ -328,6 +347,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   const service: KumoRepl = {
     agent,
     ask: (question) => askViaReadline(rl, question),
+    selection: selectionRef,
   };
   ctx.provide(KUMO_REPL_SERVICE, service);
   const base = readlineSource(rl);
@@ -349,6 +369,10 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
 }
 
 export function apply(ctx: DshContext): void {
+  // T34: kumo-effort registers /effort in dsh's commands service and owns the
+  // reasoning effort of the live selection. Mounted here so the profile's
+  // bundle patch stays untouched.
+  ctx.plugin?.(kumoEffort);
   const exit = ctx.get("appExit") as ((code: number) => void) | undefined;
   if (exit === undefined) {
     throw new Error("kumo-repl: the launcher must provide ctx.appExit before the tree mounts");

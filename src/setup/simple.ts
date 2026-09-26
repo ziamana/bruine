@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fetchProps, type TemplateCaps } from "./discover.js";
 
 /** Ports probed on 127.0.0.1 for an OpenAI-compatible model server. */
 export const PROBE_PORTS = [
@@ -12,6 +13,8 @@ export interface ProbeHit {
   baseUrl: string;
   port?: number;
   models: string[];
+  /** T34: thinking switches the server's chat template honors (/props). */
+  template?: TemplateCaps;
 }
 
 export type FetchLike = (
@@ -43,15 +46,53 @@ export async function probeUrl(
       : [];
     if (models.length === 0) return undefined;
     let port: number | undefined;
+    let host = "127.0.0.1";
     try {
-      port = Number(new URL(baseUrl).port) || undefined;
+      const u = new URL(baseUrl);
+      port = Number(u.port) || undefined;
+      host = u.hostname;
     } catch {
       port = undefined;
     }
-    return { baseUrl, port, models };
+    // T34: llama.cpp answers /props at the ORIGIN root (not under /v1) — the
+    // chat template decides which thinking switches are actually honored.
+    let template: ProbeHit["template"];
+    if (port !== undefined && (host === "127.0.0.1" || host === "localhost")) {
+      template = (await fetchProps(host, port, doFetch, timeoutMs))?.template;
+    }
+    return { baseUrl, port, models, ...(template !== undefined ? { template } : {}) };
   } catch {
     return undefined;
   }
+}
+
+/**
+ * T34: the per-model `compat` + `reasoningEfforts` settings block for one
+ * detected template. Only chat-template models get a `compat` — Ollama, LM
+ * Studio and cloud keep pi-ai's own detection. The effort levels are the
+ * pi-ai names: `off` + the template's wire spellings; `xhigh` is never
+ * declared (BOS journal 15/09: on Qwen 3.8 it produces empty answers).
+ */
+export function reasoningSettingsFor(c: TemplateCaps): {
+  compat?: { thinkingFormat: "chat-template"; chatTemplateKwargs: Record<string, unknown> };
+  reasoningEfforts: Record<string, string | null>;
+} {
+  if (!c.enableThinking && !c.reasoningEffort) {
+    return { reasoningEfforts: { off: null, low: "low" } };
+  }
+  const kwargs: Record<string, unknown> = {};
+  if (c.enableThinking) kwargs.enable_thinking = { $var: "thinking.enabled" };
+  if (c.reasoningEffort) kwargs.reasoning_effort = { $var: "thinking.effort", omitWhenOff: true };
+  if (c.preserveThinking) kwargs.preserve_thinking = true;
+  return {
+    compat: { thinkingFormat: "chat-template", chatTemplateKwargs: kwargs },
+    // enable_thinking-only templates are binary: `on` is carried by the
+    // `low` level (its wire spelling never leaves kumo — the template only
+    // reads thinking.enabled).
+    reasoningEfforts: c.reasoningEffort
+      ? { off: null, low: "low", medium: "medium", high: "high" }
+      : { off: null, low: "on" },
+  };
 }
 
 /** GET /v1/models on one port; resolves undefined on any failure. */
@@ -121,6 +162,12 @@ export type SettingsDoc = Record<string, unknown>;
 export const LOCAL_API_KEY_ENV = "KUMO_LOCAL_API_KEY";
 
 export function localServerSettings(hit: ProbeHit, model: string): SettingsDoc {
+  const reasoning =
+    hit.template !== undefined
+      ? reasoningSettingsFor(hit.template)
+      : // T19.A.2: at minimum declare an `off` effort (dsh requires one
+        // level beyond "off") so the Auto-mode judge can get a plain answer.
+        { reasoningEfforts: { off: null, low: "low" } as Record<string, string | null> };
   return {
     "llm-pi-ai": {
       providers: {
@@ -129,14 +176,12 @@ export function localServerSettings(hit: ProbeHit, model: string): SettingsDoc {
           api: "openai-completions",
           baseURL: hit.baseUrl,
           apiKeyEnv: LOCAL_API_KEY_ENV,
-          // T19.A.2: declare an `off` effort (dsh requires one level beyond
-          // "off") so the Auto-mode judge can ask this model to answer
-          // without thinking.
           models: [
             {
               id: model,
               name: model,
-              reasoningEfforts: { off: null, low: "low" },
+              ...(reasoning.compat !== undefined ? { compat: reasoning.compat } : {}),
+              reasoningEfforts: reasoning.reasoningEfforts,
             },
           ],
         },

@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { TASKS_HELP } from "../ui/task-panel.js";
 import { randomUUID } from "node:crypto";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
 import { Text } from "@earendil-works/pi-tui";
@@ -396,7 +397,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/skills  List the enabled skills",
           "/help  Show commands and keys",
           "/exit  Quit kumo (also ctrl+d)",
-          "Esc interrupt, ctrl+c clear, ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools",
+          `Esc interrupt, ctrl+c clear, ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, ${TASKS_HELP}`,
         ].join("\n"),
       );
       return;
@@ -497,6 +498,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         m.notifyChange?.();
       }
       ui.clearChat();
+      ui.clearTasks();
       ui.footer.set({ contextUsed: 0, contextWindow: 0, tps: 0, pp: undefined, cachePct: undefined });
       ui.updateHeader();
       ui.showNotice("New conversation.");

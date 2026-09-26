@@ -106,7 +106,7 @@ export function defaultAnswers(): SetupAnswers {
     discoveries: [],
     roles: {},
     keys: {},
-    permissionMode: "ask",
+    permissionMode: "auto", // T31: Auto is the default; must match modes.ts readDefaultMode
     search: { provider: "none" },
     skills: [],
     theme: "dark",

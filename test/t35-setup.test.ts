@@ -122,3 +122,11 @@ describe("T35 prefill from settings.yaml (Aron shape, no kumo.json)", () => {
     expect(loadPrefill(home)!.skills).toEqual([]);
   });
 });
+
+describe("default mode stays consistent with the runtime (BOS review 2026-09-26)", () => {
+  test("a fresh flow defaults to auto, like modes.ts readDefaultMode", async () => {
+    const { SetupFlow } = await import("../src/setup/flow.js");
+    const flow = new (SetupFlow as any)();
+    expect(flow.answers.permissionMode).toBe("auto");
+  });
+});

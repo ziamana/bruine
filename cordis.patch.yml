@@ -31,6 +31,15 @@
   config:
     agentsHome: !!js dshHomePath('agents')
 
+# T31c: the session-title LLM request fires in parallel with the first turn
+# (dsh-session-title onMainRequest); on a single-slot local server it steals
+# ~1.6 s from the first answer (BOS timing proxy). KUMO_TITLE_LLM=off — set
+# by the launcher when the default route is private/localhost — disables the
+# provider row; dsh then titles from the first prompt with NO request. Cloud
+# routes keep their LLM title.
+- id: session-title-llm
+  disabled: !!js process.env.KUMO_TITLE_LLM === 'off'
+
 # T16: safety comes from kumo's own gate, not dsh's sandbox — commands really
 # run on the machine. The sandbox is left fully open; kumo's pre-tool gate is
 # the only permission layer, so dsh escalation never fires.

@@ -595,7 +595,9 @@ test("palette: / lists 7+ items, co filters to /compact, Tab completes (T31.1)",
     h.press("tab");
     await delay(200);
     h.press("enter");
-    await h.waitFor("not wired");
+    // T33b wired /compact for real: on an empty session dsh's seam answers
+    // itself — still no request to the model.
+    await h.waitFor("No compactable history yet.");
     expect(h.server.mainRequests()).toHaveLength(0);
   });
 });
@@ -749,4 +751,122 @@ test("judge + ghost suggestion send enable_thinking false on a binary template (
     const suggest = find("Suggest")!;
     expect(suggest.body.chat_template_kwargs).toEqual({ enable_thinking: false });
   });
+}, 90_000);
+
+// ── T33b: clear errors, visible compaction, local title suppression, legacy hint ──
+async function serverScenario(
+  name: string,
+  scripts: Script[],
+  run: (h: Harness) => Promise<void>,
+  opts: Parameters<typeof Harness.start>[3] = {},
+) {
+  let h: Harness | undefined;
+  try {
+    h = await Harness.start(scripts, "ask", false, opts);
+    await h.waitFor("e2e-model", 30_000);
+    await run(h);
+  } catch (error) {
+    if (h) {
+      await h.dump(`${name}-failure`);
+      console.error(`SCENARIO FAILED: ${name}\n${h.screen().join("\n")}`);
+    }
+    throw error;
+  } finally {
+    await h?.close();
+  }
+}
+
+test("errors: 401 then 404 print the exact two lines (T33b)", async () => {
+  await serverScenario(
+    "errors-401-404",
+    [textScript("SHOULD_NOT_APPEAR"), textScript("ALSO_NOT")],
+    async (h) => {
+      await h.prompt("first");
+      await h.waitFor("The API key was refused by", 30_000);
+      const s1 = h.screen().join("\n");
+      expect(s1).toContain("Set a new key: kumo setup");
+      expect(s1).not.toContain("at Object");
+      await h.prompt("second");
+      await h.waitFor('Model "e2e-model" not found on', 30_000);
+      const s2 = h.screen().join("\n");
+      expect(s2).toContain("Available: e2e-model. Change it: kumo setup");
+    },
+    {
+      server: {
+        failFirstMain: [
+          { status: 401, body: { error: { message: "Invalid API key provided" } } },
+          { status: 404, body: { error: { message: "no deployment for model" } } },
+        ],
+      },
+    },
+  );
+}, 90_000);
+
+test("errors: connection refused prints the reach line (T33b)", async () => {
+  // Port 1 answers nothing: TRANSPORT in every shape.
+  await serverScenario(
+    "errors-refused",
+    [textScript("NOPE")],
+    async (h) => {
+      await h.prompt("hello");
+      await h.waitFor("Can't reach your model server at http://127.0.0.1:1/v1", 40_000);
+      expect(h.screen().join("\n")).toContain(
+        "Is llama.cpp / Ollama / LM Studio running?  Change it: kumo setup",
+      );
+    },
+    { baseUrlOverride: "http://127.0.0.1:1/v1" },
+  );
+}, 90_000);
+
+test("/compact on a short session: dsh answers no compactable history (T33b)", async () => {
+  await serverScenario("compact-idle", [textScript("TURN_DONE")], async (h) => {
+    // No turn yet: nothing is compactable, and the seam must answer itself.
+    await h.prompt("/compact");
+    await h.until(
+      () => /No compactable history yet\.|Compacted:/.test(h!.screen().join("\n")),
+      15_000,
+      "compact reply",
+    );
+  });
+}, 90_000);
+
+test("title: a local route sends no LLM title request (T31c)", async () => {
+  await serverScenario("title-local", [textScript("TURN_DONE")], async (h) => {
+    await h.prompt("hello there");
+    await h.waitFor("TURN_DONE");
+    await delay(1500); // suggestions/titles all land within this window
+    const title = h.server.requests.find(
+      (r) => JSON.stringify(r.body.messages ?? "").toLowerCase().includes("session title"),
+    );
+    expect(title, "no session-title request on a private route").toBeUndefined();
+    // and the title event itself must still exist via dsh's fallback:
+    const turnOne = h.server.requests.filter((r) => r.main);
+    expect(turnOne.length).toBeGreaterThanOrEqual(1);
+  });
+}, 90_000);
+
+test("legacy route: one setup hint from the /props probe, gone after the first prompt (T33b)", async () => {
+  await serverScenario(
+    "legacy-effort-hint",
+    [textScript("TURN_DONE")],
+    async (h) => {
+      await h.waitFor(
+        "Effort control is available for this model: run kumo setup to enable it.",
+        20_000,
+      );
+      await h.prompt("hi");
+      await h.waitFor("TURN_DONE");
+      await delay(500);
+      expect(h.screen().join("\n")).not.toContain("run kumo setup to enable it");
+    },
+    {
+      legacy: true,
+      server: {
+        props: {
+          chat_template: "{% if enable_thinking %}{{ 'think' }}{% endif %}",
+          default_generation_settings: { n_ctx: 100096 },
+        },
+      },
+    },
+  );
 }, 90_000);

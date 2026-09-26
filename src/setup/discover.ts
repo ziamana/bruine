@@ -3,8 +3,11 @@
  * of PRIVATE interfaces only, and explicit Tailscale peers. A public address
  * is rejected before any request goes out.
  */
+import { readFileSync } from "node:fs";
 import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
+import { join } from "node:path";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { parse as parseYaml } from "yaml";
 
 export type DiscoverySource = "localhost" | "network" | "tailscale" | "manual";
 
@@ -335,4 +338,27 @@ export async function scanTailscale(
 /** Human label for a discovery in the wizard lists. */
 export function discoveredLabel(d: Discovered): string {
   return `${d.baseUrl} · ${String(d.models.length)} model${d.models.length === 1 ? "" : "s"}`;
+}
+
+/**
+ * T31c: is the default model route a local/private server (llama.cpp, Ollama,
+ * LM Studio on the LAN)? On those the parallel session-title request steals
+ * the single slot from the first answer (BOS timing proxy), so the launcher
+ * exports KUMO_TITLE_LLM=off and the bundle patch disables the provider row.
+ */
+export function localDefaultRoute(
+  dshHome: string,
+  read: (p: string) => string = (p) => readFileSync(p, "utf8"),
+): boolean {
+  try {
+    const doc = parseYaml(read(join(dshHome, "settings.yaml"))) as Record<string, any>;
+    const def = doc?.["agent-default-model"];
+    const base = doc?.["llm-pi-ai"]?.providers?.[def?.provider]?.baseURL;
+    if (typeof base !== "string" || base === "") return false;
+    const host = new URL(base).hostname.toLowerCase();
+    if (host === "localhost" || host === "::1" || host === "[::1]") return true;
+    return isPrivateIPv4(host);
+  } catch {
+    return false;
+  }
 }

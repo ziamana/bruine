@@ -144,6 +144,10 @@ export interface SettingsRoute {
   baseUrl?: string;
   name?: string;
   contextWindow?: number;
+  /** settings.yaml provider displayName, when present (T33b error lines). */
+  providerDisplayName?: string;
+  /** True when the model entry carries compat.thinkingFormat (T34/T33b). */
+  hasCompat?: boolean;
 }
 
 /** settings.yaml reader: default route + baseURL/name/window (real YAML parser; the hand-written one broke on kumo's own list style). */
@@ -174,6 +178,8 @@ function parseKumoSettingsYaml(text: string): SettingsRoute | undefined {
   if (typeof route?.baseURL === "string") out.baseUrl = route.baseURL;
   if (typeof entry?.name === "string") out.name = entry.name;
   if (typeof entry?.contextWindow === "number") out.contextWindow = entry.contextWindow;
+  if (typeof route?.displayName === "string") out.providerDisplayName = route.displayName;
+  if (entry?.compat?.thinkingFormat !== undefined) out.hasCompat = true;
   return out;
 }
 

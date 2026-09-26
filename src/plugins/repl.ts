@@ -7,7 +7,8 @@ import { SessionId } from "@deepseek-ai/dsh-session";
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { kumoIcons } from "../render/chars.js";
-import { KumoUi } from "../ui/kumo-ui.js";
+import { KumoUi, readSettingsRoute } from "../ui/kumo-ui.js";
+import { fetchProps, isPrivateIPv4 } from "../setup/discover.js";
 import { KUMO_MODES_SERVICE, NOTICE_ASK, NOTICE_AUTO, NOTICE_FULL } from "./modes.js";
 import kumoEffort, { KUMO_EFFORT_SERVICE } from "./effort.js";
 import { KUMO_RENDER_SERVICE } from "./render.js";
@@ -438,7 +439,23 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       return;
     }
     if (cmd === "/compact") {
-      reply("Compact summaries are handled automatically by dsh; manual /compact is not wired in this build.");
+      // T33b: manual compaction through dsh's compaction seam; the visible
+      // notice + "Compacted:" line come from the compaction session events.
+      const compaction = ctx.get("compaction") as
+        | { compactNow?(a: unknown, signal: AbortSignal): Promise<{ shadowedTokenCount?: number } | null> }
+        | undefined;
+      if (compaction?.compactNow === undefined) {
+        reply("Compaction is not available in this dsh build.");
+        return;
+      }
+      try {
+        const result = await compaction.compactNow(agent, new AbortController().signal);
+        if (result === null) reply("No compactable history yet.");
+      } catch (error) {
+        const msg = error instanceof Error ? (error.message.split(/\r?\n/)[0] ?? error.message) : String(error);
+        if (/idle|busy|open turn/i.test(msg)) reply("Compaction needs an idle session: let the answer finish first.");
+        else reply(`Compaction failed: ${msg}`);
+      }
       return;
     }
     if (cmd === "/new") {
@@ -544,6 +561,28 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       repl = fresh;
       await fresh.run();
     };
+
+    // T33b: a route written before T34 has no compat block, so /effort and
+    // ctrl+e cannot control it. If /props proves the template would support
+    // enable_thinking, say so once — settings.yaml is never rewritten here.
+    void (async (): Promise<void> => {
+      try {
+        const route = readSettingsRoute();
+        if (route === undefined || route.baseUrl === undefined || route.hasCompat === true) return;
+        const u = new URL(route.baseUrl);
+        const host = u.hostname;
+        if (!(host === "localhost" || host === "::1" || isPrivateIPv4(host))) return;
+        const port = Number(u.port) || (u.protocol === "https:" ? 443 : 80);
+        const props = await fetchProps(host, port, undefined, 2000);
+        if (props?.template?.enableThinking === true) {
+          (ui as unknown as {
+            showPersistentNotice?: (t: string) => void;
+          }).showPersistentNotice?.("Effort control is available for this model: run kumo setup to enable it.");
+        }
+      } catch {
+        // the probe is best effort
+      }
+    })();
 
     ui.start();
     await repl.run(startup?.initialPrompt);

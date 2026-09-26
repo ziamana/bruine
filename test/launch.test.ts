@@ -3,6 +3,7 @@ import { join } from "node:path";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { buildLaunch, dshInvocation, flagMode, resolveDshEntry } from "../src/launch.js";
+import { localDefaultRoute } from "../src/setup/discover.js";
 
 describe("flagMode (T11.2)", () => {
   test("intercepts only as the FIRST argument", () => {
@@ -96,5 +97,29 @@ describe("dshInvocation", () => {
     expect(inv.command).toBe(process.execPath);
     expect(inv.args[0]).toBe("/x/bin.js");
     expect(inv.args.slice(1)).toEqual(["plugin", "--profile", "kumo"]);
+  });
+});
+
+// T31c: the launcher turns the session-title LLM off for local routes.
+const settingsWith = (baseURL: string) =>
+  `llm-pi-ai:\n  providers:\n    local:\n      baseURL: ${baseURL}\nagent-default-model:\n  provider: local\n  model: m\n`;
+
+describe("localDefaultRoute (T31c)", () => {
+  const read = (text: string) => () => text;
+  test("localhost and private ranges are local", () => {
+    expect(localDefaultRoute("/h", read(settingsWith("http://127.0.0.1:8081/v1")))).toBe(true);
+    expect(localDefaultRoute("/h", read(settingsWith("http://localhost:11434/v1")))).toBe(true);
+    expect(localDefaultRoute("/h", read(settingsWith("http://192.168.1.64:8081/v1")))).toBe(true);
+    expect(localDefaultRoute("/h", read(settingsWith("http://10.0.0.5:1234/v1")))).toBe(true);
+  });
+  test("public routes and unreadable homes are not", () => {
+    expect(localDefaultRoute("/h", read(settingsWith("https://api.deepseek.com/v1")))).toBe(false);
+    expect(localDefaultRoute("/h", read("not: [valid"))).toBe(false);
+    expect(localDefaultRoute("/h", () => { throw new Error("ENOENT"); })).toBe(false);
+  });
+  test("buildLaunch passes an injected KUMO_TITLE_LLM through", () => {
+    expect(buildLaunch([], {}, "/home").env.KUMO_TITLE_LLM).toBeUndefined();
+    const off = buildLaunch([], { KUMO_TITLE_LLM: "off" }, "/home");
+    expect(off.env.KUMO_TITLE_LLM).toBe("off");
   });
 });

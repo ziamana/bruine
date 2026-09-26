@@ -14,6 +14,8 @@ import { MODE_ANNOUNCEMENTS } from "./modes.js";
 import { TpsMeter } from "../ui/tps.js";
 import { ansi } from "../ui/theme.js";
 import { TaskPanel, taskItems, type TaskItem } from "../ui/task-panel.js";
+import { readSettingsRoute } from "../ui/kumo-ui.js";
+import { appendErrorLog, describeLlmError, fetchAvailableModels, formatK } from "../ui/errors.js";
 import type { DshContext, KumoRepl } from "./ctx.js";
 
 /** Stable Cordis plugin name. */
@@ -201,6 +203,36 @@ export function attachTui(
     return comp;
   };
 
+  const footerState = (): Record<string, unknown> =>
+    (ui as unknown as { footer?: { state?: Record<string, unknown> } }).footer?.state ?? {};
+
+  /** T33b: one red actionable line + one dim hint; detail only to kumo.log. */
+  const showLlmError = async (failure: unknown): Promise<void> => {
+    const f = (failure ?? {}) as { code?: unknown; message?: unknown; status?: unknown };
+    const settings = readSettingsRoute();
+    const state = footerState();
+    const route = {
+      provider: settings?.providerDisplayName ?? settings?.provider ?? "the model server",
+      model: settings?.model ?? "",
+      ...(settings?.baseUrl !== undefined ? { baseUrl: settings.baseUrl } : {}),
+      ...(typeof state.contextWindow === "number" ? { contextWindow: state.contextWindow } : {}),
+    };
+    const lines = describeLlmError(f, route);
+    let hint = lines.hint;
+    if (lines.wantAvailableModels === true && settings?.baseUrl !== undefined) {
+      const ids = await fetchAvailableModels(settings.baseUrl);
+      if (ids.length > 0) hint = `Available: ${ids.join(", ")}. ${hint}`;
+    }
+    ui.addChat(new Text(ansi.red(`${ui.icons.fail} ${lines.message}`), 0, 0));
+    ui.addChat(new Text(dim(hint), 0, 0));
+    void appendErrorLog(f);
+    ui.requestRender();
+  };
+
+  // T33b: visible compaction (notice while running, one dim line after).
+  let compactionBefore: number | undefined;
+  let compactionShadowed: number | undefined;
+
   const liveAgent = (): { session: any } => {
     try {
       return getAgent?.() ?? agent;
@@ -375,6 +407,42 @@ export function attachTui(
         if (tasks !== undefined) setUiTasks(tasks);
         return;
       }
+      case "compaction/start": {
+        const state = footerState();
+        const pct =
+          typeof state.contextUsed === "number" &&
+          typeof state.contextWindow === "number" &&
+          state.contextWindow > 0
+            ? Math.round((state.contextUsed / state.contextWindow) * 100)
+            : 80;
+        compactionBefore = typeof state.contextUsed === "number" ? state.contextUsed : undefined;
+        compactionShadowed = undefined;
+        (ui as unknown as { showNotice?: (t: string) => void }).showNotice?.(
+          `Context ${String(pct)}% full: summarizing the conversation…`,
+        );
+        return;
+      }
+      case "compaction/summary": {
+        const n = Number(event.data?.shadowedTokenCount);
+        if (Number.isFinite(n)) compactionShadowed = n;
+        return;
+      }
+      case "compaction/end": {
+        // A failed close carries `error`; the /compact reply or the next
+        // retry tells the story — do not print a fake "Compacted:" line.
+        if (event.data?.error === undefined) {
+        if (compactionBefore !== undefined && compactionShadowed !== undefined) {
+          const after = Math.max(0, compactionBefore - compactionShadowed);
+          ui.addChat(new Text(dim(`Compacted: ${formatK(compactionBefore)} → ${formatK(after)} tokens`), 0, 0));
+        } else {
+          ui.addChat(new Text(dim("Compacted."), 0, 0));
+        }
+        }
+        compactionBefore = undefined;
+        compactionShadowed = undefined;
+        ui.requestRender();
+        return;
+      }
       case "turn/end": {
         hideWorking();
         closeLive();
@@ -389,7 +457,7 @@ export function attachTui(
         const reason = event.data.reason;
         const wallSec = Math.max(0, (Date.now() - turnStartWall) / 1000);
         if (reason?.kind === "error") {
-          ui.addChat(new Text(ansi.red(`${ui.icons.fail} ${reason.error.code}: ${reason.error.message}`), 0, 0));
+          void showLlmError(reason.error);
           (ui as unknown as { onTurnEnd?: (i: unknown) => void }).onTurnEnd?.({
             tools: [],
             wallSec,
@@ -575,6 +643,9 @@ export function attach(
     if (lines.length > 0) ui.screen.write(`${lines.join("\n")}\n`);
   };
 
+  let compactionBefore: number | undefined;
+  let compactionShadowed: number | undefined;
+
   const offStream = ctx.on("agent/assistant-stream", ({ agent: subject, frame }: any) => {
     if (subject !== agent) return;
     const f = frame as StreamFrame;
@@ -651,12 +722,37 @@ export function attach(
       case "todo/write":
         showTasks(event.data?.todos);
         return;
+      case "compaction/start":
+        ui.screen.write("\nsummarizing the conversation…\n");
+        return;
+      case "compaction/summary": {
+        const n = Number(event.data?.shadowedTokenCount);
+        if (Number.isFinite(n)) compactionShadowed = n;
+        return;
+      }
+      case "compaction/end":
+        if (compactionBefore !== undefined && compactionShadowed !== undefined) {
+          const after = Math.max(0, compactionBefore - compactionShadowed);
+          ui.screen.write(`${dim(`Compacted: ${formatK(compactionBefore)} → ${formatK(after)} tokens`)}\n`);
+        } else {
+          ui.screen.write(`${dim("Compacted.")}\n`);
+        }
+        compactionBefore = undefined;
+        compactionShadowed = undefined;
+        return;
       case "turn/end": {
         ui.reasoning.end();
         ui.text.end();
         const reason = event.data.reason;
         if (reason?.kind === "error") {
-          ui.screen.write(`\n${ui.icons.fail} ${reason.error.code}: ${reason.error.message}\n`);
+          const settings = readSettingsRoute();
+          const lines = describeLlmError(reason.error ?? {}, {
+            provider: settings?.providerDisplayName ?? settings?.provider ?? "the model server",
+            model: settings?.model ?? "",
+            ...(settings?.baseUrl !== undefined ? { baseUrl: settings.baseUrl } : {}),
+          });
+          ui.screen.write(`\n${ui.icons.fail} ${lines.message}\n${dim(lines.hint)}\n`);
+          void appendErrorLog(reason.error ?? {});
         } else if (reason?.kind === "aborted") {
           ui.screen.write("\n- cancelled\n");
         }

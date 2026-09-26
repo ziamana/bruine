@@ -713,14 +713,41 @@ describe("attachTui wiring", () => {
     expect(rendered(chats[0])).toContain("hello");
   });
 
-  test("turn/end with usage fills footer context + error prints line", () => {
-    const { chats, ui, stream, event } = setup();
-    stream({ type: "usage", usage: { inputTokens: 1000, outputTokens: 50 } });
-    event("turn/end", { turn: 1, reason: { kind: "error", error: { code: "E1", message: "boom" } } });
-    expect(ui.footerState.contextWindow).toBe(100_000);
-    expect(ui.footerState.contextUsed).toBe(1050);
-    const last = chats[chats.length - 1];
-    expect(rendered(last)).toContain("✗ E1: boom");
+  test("turn/end with usage fills footer context + T33b maps the error", async () => {
+    const prev = process.env.DSH_HOME;
+    process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "kumo-uitest-err-"));
+    try {
+      const { chats, ui, stream, event } = setup();
+      stream({ type: "usage", usage: { inputTokens: 1000, outputTokens: 50 } });
+      event("turn/end", { turn: 1, reason: { kind: "error", error: { code: "E1", message: "boom" } } });
+      expect(ui.footerState.contextWindow).toBe(100_000);
+      expect(ui.footerState.contextUsed).toBe(1050);
+      await new Promise((r) => setTimeout(r, 20)); // showLlmError is async
+      const texts = chats.map((c) => rendered(c)).join("\n");
+      expect(texts).toContain("boom");
+      expect(texts).toContain("Details in logs/kumo.log");
+      expect(texts).not.toContain("stack");
+    } finally {
+      if (prev === undefined) delete process.env.DSH_HOME;
+      else process.env.DSH_HOME = prev;
+    }
+  });
+
+  test("compaction events: notice on start, dim before/after line on end (T33b)", () => {
+    const { chats, ui, event } = setup();
+    (ui.footer as unknown as { state: Record<string, unknown> }).state = {
+      contextUsed: 81000,
+      contextWindow: 100_000,
+    };
+    const notices: string[] = [];
+    (ui as unknown as { showNotice: (t: string) => void }).showNotice = (t) => {
+      notices.push(t);
+    };
+    event("compaction/start", { compactionId: "c1", turn: 3 });
+    expect(notices.at(-1)).toBe("Context 81% full: summarizing the conversation…");
+    event("compaction/summary", { compactionId: "c1", shadowedTokenCount: 67000 });
+    event("compaction/end", { compactionId: "c1" });
+    expect(chats.map((c) => rendered(c)).join("\n")).toContain("Compacted: 81k → 14k tokens");
   });
 
   test("other agents are ignored", () => {

@@ -29,6 +29,13 @@ export interface RecordedRequest {
 }
 export const textScript = (text: string): Script => ({ chunks: [{ delta: { content: text } }] });
 
+export interface ServerOptions {
+  /** Answer GET /props with this JSON body (T33b legacy-effort probe). */
+  props?: unknown;
+  /** Fail the first N MAIN requests with these statuses, in order (T33b). */
+  failFirstMain?: Array<{ status: number; body: unknown }>;
+}
+
 /** Identity once, then indexed argument fragments, then a tool_calls finish. */
 export function toolScript(name: string, args: Record<string, unknown>, id = "call_e2e_1"): Script {
   const json = JSON.stringify(args);
@@ -46,14 +53,20 @@ export function toolScript(name: string, args: Record<string, unknown>, id = "ca
 }
 
 /** Side requests (e.g. titles) never consume the main conversation's script. */
-export async function startServer(scripts: Script[]) {
+export async function startServer(scripts: Script[], opts: ServerOptions = {}) {
   const requests: RecordedRequest[] = [];
   const errors: string[] = [];
   let turn = 0;
+  const fails = [...(opts.failFirstMain ?? [])];
   const server = createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/v1/models") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ object: "list", data: [{ id: "e2e-model", object: "model", owned_by: "e2e" }] }));
+      return;
+    }
+    if (req.method === "GET" && req.url === "/props" && opts.props !== undefined) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(opts.props));
       return;
     }
     if (req.method !== "POST" || req.url !== "/v1/chat/completions") {
@@ -67,6 +80,14 @@ export async function startServer(scripts: Script[]) {
       const main = body.messages.some((m) => ["system", "developer"].includes(m.role) && JSON.stringify(m.content).includes("terminal coding agent"));
       const record: RecordedRequest = { body, main, completed: false, disconnected: false };
       requests.push(record);
+      // T33b: HTTP-level failures (401/404/5xx) for the error-mapping scenarios.
+      if (main && fails.length > 0) {
+        const fail = fails.shift()!;
+        record.completed = true;
+        res.writeHead(fail.status, { "content-type": "application/json" });
+        res.end(JSON.stringify(fail.body));
+        return;
+      }
       const abort = new AbortController();
       res.on("close", () => {
         record.disconnected = !record.completed;

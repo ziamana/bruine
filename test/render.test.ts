@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { attach, createUi } from "../src/plugins/render.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
@@ -100,10 +103,28 @@ describe("render plugin (T24.5 piped, no spinner, no CR)", () => {
     expect(strip(screen.writes[screen.writes.length - 2]).startsWith("✗")).toBe(true);
   });
 
-  test("turn/end error prints the failure", () => {
+  test("turn/end error prints the T33b two lines (never the raw code)", () => {
+    const prev = process.env.DSH_HOME;
+    process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "kumo-render-err-"));
+    try {
+      const { screen, event } = setup();
+      event("turn/end", { turn: 1, reason: { kind: "error", error: { code: "LLM_TIMEOUT", message: "timed out" } } });
+      const out = strip(screen.all);
+      expect(out).toContain("The model server did not answer in time");
+      expect(out).toContain("It may still be loading the model. Try again, or check the server logs");
+    } finally {
+      if (prev === undefined) delete process.env.DSH_HOME;
+      else process.env.DSH_HOME = prev;
+    }
+  });
+
+  test("compaction events print a start line and one dim summary (T33b)", () => {
     const { screen, event } = setup();
-    event("turn/end", { turn: 1, reason: { kind: "error", error: { code: "LLM_TIMEOUT", message: "timed out" } } });
-    expect(screen.all).toContain("✗ LLM_TIMEOUT: timed out");
+    event("compaction/start", { compactionId: "c1", turn: 0 });
+    expect(strip(screen.all)).toContain("summarizing the conversation");
+    event("compaction/summary", { compactionId: "c1", shadowedTokenCount: 67000 });
+    event("compaction/end", { compactionId: "c1" });
+    expect(strip(screen.all)).toContain("Compacted.");
   });
 
   test("turn/end aborted prints cancelled", () => {

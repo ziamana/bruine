@@ -10,6 +10,7 @@ import { buildLaunch, flagMode, resolveDshEntry, runDsh } from "./launch.js";
 import { ensureProfile } from "./profile.js";
 import { simpleSetup, type SetupIO } from "./setup/simple.js";
 import { migrateAgentsSkills } from "./setup/skills.js";
+import { localDefaultRoute } from "./setup/discover.js";
 import { ansi } from "./ui/theme.js";
 import { checkForUpdate, detectInstallKind, updateCommand } from "./update.js";
 
@@ -308,11 +309,6 @@ async function main(): Promise<void> {
 
   const dshEntry = resolveDshEntry();
   const settings = readKumoJson(dshHome);
-  const { command, args, env } = buildLaunch(argv, process.env, os.homedir(), {
-    dshEntry,
-    telemetry: settings.telemetry,
-    tools: settings.tools,
-  });
 
   if (!existsSync(join(dshHome, "settings.yaml"))) {
     if (process.stdin.isTTY === true && process.stdout.isTTY === true) {
@@ -328,6 +324,18 @@ async function main(): Promise<void> {
       await simpleSetup(dshHome, terminalIO());
     }
   }
+  // T31c: on a private/localhost default route the session-title request
+  // races the first answer for the single slot; the launcher turns the LLM
+  // title provider off and dsh falls back to the first-prompt title.
+  const launchEnv = localDefaultRoute(dshHome)
+    ? { ...process.env, KUMO_TITLE_LLM: "off" }
+    : process.env;
+  const { command, args, env } = buildLaunch(argv, launchEnv, os.homedir(), {
+    dshEntry,
+    telemetry: settings.telemetry,
+    tools: settings.tools,
+  });
+
   const { dir } = await ensureProfile(dshHome);
   ensureBundleInstalled(dir, dshEntry, env);
 

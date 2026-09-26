@@ -6,11 +6,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kumo-code/kumo.git"
+    "url": "git+https://github.com/ziamana/kumo-code.git"
   },
-  "homepage": "https://github.com/kumo-code/kumo#readme",
+  "homepage": "https://github.com/ziamana/kumo-code#readme",
   "bugs": {
-    "url": "https://github.com/kumo-code/kumo/issues"
+    "url": "https://github.com/ziamana/kumo-code/issues"
   },
   "keywords": [
     "ai",

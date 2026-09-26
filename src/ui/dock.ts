@@ -3,7 +3,7 @@ import type { FooterState } from "./footer.js";
 import { ansi } from "./theme.js";
 
 /** Terminal width from which the cockpit panel sits next to the editor. */
-export const DOCK_MIN_WIDTH = 120;
+export const DOCK_MIN_WIDTH = 116; // 120-column terminal minus the 2+2 margin
 export const DOCK_PANEL_WIDTH = 34;
 
 const SPARK = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];

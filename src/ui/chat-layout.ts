@@ -25,11 +25,13 @@ export class ChatTranscript extends Container {
   render(width: number): string[] {
     const inner = Math.max(1, width - 4);
     const lines: string[] = [];
-    const railChar = this.icons.think === "*" ? "|" : "│";
+    // A thicker rail (Aron, 2026-09-26: "la barre bleue est trop fine").
+    const railChar = this.icons.think === "*" ? "|" : "▍";
     for (const child of this.children) {
-      const block = child.render(inner);
-      if (!block.length) continue;
       const rail = (child as { rail?: "blue" | "red" }).rail;
+      // Same 2-column margin on both sides: railed blocks lose 2 more cells to "▍ ".
+      const block = child.render(rail === undefined ? inner : Math.max(1, width - 6));
+      if (!block.length) continue;
       lines.push("");
       if ((child as { surface?: boolean }).surface === true) {
         // User prompt: a full-width tinted band (Nuage), one line of padding each side.
@@ -45,10 +47,10 @@ export class ChatTranscript extends Container {
       for (const line of block) {
         const clean = withoutEmoji(line);
         if (rail === undefined) {
-          lines.push(truncateToWidth(`  ${clean}`, width));
+          lines.push(truncateToWidth(`  ${clean}`, width - 2));
         } else {
           const colored = rail === "red" ? ansi.red(railChar) : ansi.blue(railChar);
-          lines.push(truncateToWidth(`  ${colored} ${clean}`, width));
+          lines.push(truncateToWidth(`  ${colored} ${clean}`, width - 2));
         }
       }
     }
@@ -74,5 +76,20 @@ export class PlainGlyphEditor extends Editor {
       return [ansi.dim(`  › ${this.#ghost}`)];
     }
     return lines;
+  }
+}
+
+/** Same left and right margin (2 columns) around any bottom-area component. */
+export class Margin extends Container {
+  constructor(private inner: import("@earendil-works/pi-tui").Component, private cols = 2) {
+    super();
+  }
+  override render(width: number): string[] {
+    const w = Math.max(1, width - this.cols * 2);
+    const pad = " ".repeat(this.cols);
+    return this.inner.render(w).map((l) => `${pad}${l}`);
+  }
+  override invalidate(): void {
+    this.inner.invalidate();
   }
 }

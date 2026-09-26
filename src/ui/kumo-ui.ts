@@ -18,7 +18,7 @@ import {
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi, editorTheme, selectListTheme } from "./theme.js";
 import { colorDepth, gradientStops } from "./palette.js";
-import { ChatTranscript, PlainGlyphEditor } from "./chat-layout.js";
+import { ChatTranscript, Margin, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
 import { displayModel } from "./footer.js";
 import { QuestionForm } from "./questions.js";
@@ -277,8 +277,8 @@ export class KumoUi {
 
     this.tui.addChild(this.header);
     this.tui.addChild(this.chat);
-    this.tui.addChild(this.taskPanel);
-    this.tui.addChild(this.noticeBox);
+    this.tui.addChild(new Margin(this.taskPanel));
+    this.tui.addChild(new Margin(this.noticeBox));
     // Cockpit (Nuage + Cockpit mix): live speed/cache/context next to the editor on
     // wide color terminals; ctrl+b hides it. Basic/ASCII terminals keep the plain editor.
     this.dock = new DockRow(
@@ -298,8 +298,8 @@ export class KumoUi {
     );
     this.dock.visible = this.fancyHeader;
     this.footer.compact = (w) => this.dock.shown(w);
-    this.tui.addChild(this.dock);
-    this.tui.addChild(this.footer);
+    this.tui.addChild(new Margin(this.dock));
+    this.tui.addChild(new Margin(this.footer));
 
     // T30: the launcher ran the 24 h registry check in the background; the
     // session only reads its cached result — never any network here, never

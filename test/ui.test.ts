@@ -472,7 +472,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     ui.addChat(ok);
     ui.addChat(bad);
     const text = ui.tui.render(80).join("\n");
-    expect(text).toContain("│");
+    expect(text).toContain("▍");
     expect(text).toContain("\x1b[34m");
     expect(text).toContain("\x1b[31m");
   });

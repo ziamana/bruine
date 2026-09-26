@@ -28,7 +28,8 @@ const reasoning = (): Script => ({ chunks: [
   }),
   { delta: { content: "REASONING_DONE" }, delayMs: 150 },
 ] });
-const footer = (h: Harness) => [...h.screen()].reverse().find(line => line.includes("e2e-model")) ?? "";
+// The bottom area has a 2-column margin on both sides; tests read the text.
+const footer = (h: Harness) => ([...h.screen()].reverse().find(line => line.includes("e2e-model")) ?? "").trimStart();
 const footerCell = (h: Harness, label: string) => {
   const rows = h.screen().map((line, i) => ({ line, i })).filter(({ line }) => line.includes("e2e-model"));
   const row = rows.at(-1)!.i;
@@ -172,7 +173,7 @@ test("tool call: read note.txt and send the real tool result back", async () => 
     expect(h.screen().join("\n")).toContain("✓ read");
     expect(h.screen().join("\n")).toContain("note.txt");
     const header = h.screen().findIndex(line => line.includes("✓ read"));
-    expect(h.screen()[header]).toMatch(/^  │ ✓/);
+    expect(h.screen()[header]).toMatch(/^  ▍ ✓/);
     expect(h.screen()[header - 1]?.trim()).toBe("");
     expect(h.screen()[header + 1]).toContain("⎿");
     expect(h.screen().find(line => line.includes("READ_FINISHED"))).toMatch(/^  READ_FINISHED/);
@@ -452,7 +453,7 @@ test("grouping: 4 grep collapse to +2, failed grep stays, ctrl+o expands (T27.2+
     const collapsed = h.screen().join("\n");
     expect(collapsed).toContain("+2 files");
     expect(collapsed).toContain("✗ grep");
-    expect(collapsed).toContain("│");
+    expect(collapsed).toContain("▍");
     expect(collapsed).toContain("cache 97%");
     expect(collapsed).toMatch(/✓ 5 tools/);
     expect(collapsed).toContain("tokens");

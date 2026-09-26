@@ -8,7 +8,7 @@ import {
 } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
 import { kumoIcons, withoutEmoji, type KumoIcons } from "../render/chars.js";
-import { blendHex, bgEnabled, colorDepth, fillLine, paintHex } from "./palette.js";
+import { blendHex, bgEnabled, boxLine, colorDepth, fillLine, paintHex } from "./palette.js";
 import { ansi } from "./theme.js";
 
 /** Columns of empty space kept on each side of a bottom-area component. */
@@ -69,28 +69,18 @@ export class ChatTranscript extends Container {
     // A thicker rail (Aron, 2026-09-26: "la barre bleue est trop fine").
     const railChar = this.icons.think === "*" ? "|" : "▍";
     // Tool calls (bash, write, read…) sit on the same gray as the prompt band and the
-    // console band (Aron, 2026-09-26). A run of consecutive tools forms one card: one
-    // padding line on top, one at the bottom, and tinted spacers between the calls.
-    const card = (text: string): string => fillLine("surface", text);
-    let inCard = false;
+    // console band (Aron, 2026-09-26). Each call is its own card, separated from the
+    // next, and the gray starts at the rail: the 2-column page margins stay unpainted
+    // on both sides.
+    const cardCells = Math.max(1, width - 4);
+    const card = (text: string): string => `  ${boxLine("surface", text, cardCells)}`;
     for (const child of this.children) {
       const rail = (child as { rail?: RailState }).rail;
       // Same 2-column margin on both sides: railed blocks lose 2 more cells to "▍ ".
       const block = child.render(rail === undefined ? inner : Math.max(1, width - 6));
       if (!block.length) continue;
-      if (rail !== undefined) {
-        if (!inCard) {
-          lines.push("");
-          inCard = true;
-        }
-        lines.push(card(""));
-      } else {
-        if (inCard) {
-          lines.push(card(""));
-          inCard = false;
-        }
-        lines.push("");
-      }
+      lines.push("");
+      if (rail !== undefined) lines.push(card(""));
       if ((child as { surface?: boolean }).surface === true) {
         // User prompt: a full-width tinted band (Nuage), one line of padding each
         // side, opening on the same 1-column accent as the console band.
@@ -126,11 +116,12 @@ export class ChatTranscript extends Container {
           lines.push(truncateToWidth(`  ${clean}`, width - 2));
         } else {
           const colored = railPaint(rail, railChar, last === 0 ? 0 : i / last);
-          lines.push(card(truncateToWidth(`  ${colored} ${clean}`, width - 2)));
+          const body = `${colored} ${clean}`;
+          lines.push(card(visibleWidth(body) > cardCells ? truncateToWidth(body, cardCells) : body));
         }
       }
+      if (rail !== undefined) lines.push(card(""));
     }
-    if (inCard) lines.push(card(""));
     return lines;
   }
 }

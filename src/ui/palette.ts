@@ -1,3 +1,4 @@
+import { visibleWidth } from "@earendil-works/pi-tui";
 /**
  * kumo's palette ("Nuage"): soft sky blues and lavender. 24-bit color when the
  * terminal says so, a 256-color approximation otherwise, and the classic 16 ANSI
@@ -255,6 +256,23 @@ export function onBg(role: PaletteRole, s: string): string {
   if (!bgEnabled(d)) return s;
   return `${bgCode(role, d)}${s}\x1b[49m`;
 }
+
+/**
+ * Like fillLine, but the tint covers exactly `cells` columns instead of the whole row,
+ * so a card can keep the page margins on both sides (tool cards start at their rail).
+ */
+export function boxLine(role: PaletteRole, line: string, cells: number): string {
+  const d = colorDepth();
+  const pad = " ".repeat(Math.max(0, cells - visibleWidth(line)));
+  if (!bgEnabled(d)) return line + pad;
+  const bg = bgCode(role, d);
+  const rearmed = line
+    .replaceAll("\x1b[49m", `\x1b[49m${bg}`)
+    .replaceAll("\x1b[0m", `\x1b[0m${bg}`)
+    .replaceAll("\x1b[m", `\x1b[m${bg}`);
+  return `${bg}${rearmed}${pad}\x1b[49m`;
+}
+
 
 /**
  * Paint a whole line with `role`'s background, out to the right edge.

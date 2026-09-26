@@ -3,23 +3,31 @@ import { apply, Modes, PLAN_OFF_TEXT, PLAN_ON_TEXT } from "../src/plugins/modes.
 import { askJudge, judgePrompt } from "../src/gate/judge.js";
 import { fakeCtx } from "./fakes.js";
 
-function harness(services: Record<string, unknown> = {}) {
+function harness(services: Record<string, unknown> = {}, opts: { terminal?: boolean } = {}) {
   const fake = fakeCtx(services);
   const agent = { session: {}, inject: (m: unknown) => injected.push(m) };
   const injected: unknown[] = [];
   apply(fake.ctx as any);
-  fake.provided.set("kumoRepl", { agent });
+  // T42: `ui` is what makes a terminal exist. With one, this is an interactive
+  // session and `ask` stays `ask`. Without one it is a headless run: the gate is
+  // reached through `modes.govern(agent)` and `ask` has no answerer.
+  const terminal = opts.terminal !== false;
+  const repl: Record<string, unknown> = terminal
+    ? { agent, ui: { footer: { set: () => {} }, requestRender: () => {}, addChat: () => {} } }
+    : { agent };
+  fake.provided.set("kumoRepl", repl);
   for (const { services: deps, cb } of fake.injected) {
-    if (deps.includes("kumoRepl")) cb({ kumoRepl: { agent } });
+    if (deps.includes("kumoRepl")) cb({ kumoRepl: repl });
   }
   const modes: any = fake.provided.get("kumoModes");
+  if (!terminal) modes.govern(agent);
   const preExecute = (name: string, args: unknown, callId = "c1", execAgent: unknown = agent) =>
     fake.emit(
       "tools/pre-execute",
       { name, arguments: JSON.stringify(args), agent: execAgent, callId },
       async () => ({ kind: "delegate" }),
     ) as Promise<any>;
-  return { fake, modes, preExecute, injected, otherAgent: { session: {} } };
+  return { fake, modes, preExecute, injected, agent, otherAgent: { session: {} } };
 }
 
 const llmReturning = (text: string): any => ({
@@ -40,6 +48,67 @@ describe("kumo gate (T16.C)", () => {
   test("delegates other agents' calls to next()", async () => {
     const { preExecute, otherAgent } = harness();
     const d = await preExecute("bash", { command: "ls" }, "c9", otherAgent);
+    expect(d.kind).toBe("delegate");
+  });
+});
+
+describe("the gate without a terminal (T42)", () => {
+  /** A REPL-less run: `govern()` names the agent, and there is no `ui`. */
+  const headless = (services: Record<string, unknown> = {}) => harness(services, { terminal: false });
+
+  test("ask with nobody to ask DENIES, and the reason names the way out", async () => {
+    const h = headless();
+    h.modes.permission = "ask";
+    const d = await h.preExecute("bash", { command: "ls" });
+    // Failing open would make the gate decorative with the sandbox open.
+    expect(d.kind).toBe("deny");
+    expect(d.reason).toContain("no terminal to ask on");
+    expect(d.reason).toContain("--permission-mode full");
+    expect(h.modes.log.at(-1)).toMatchObject({ tool: "bash", decision: "deny", via: "no-terminal" });
+  });
+
+  test("the governed headless agent is gated, not delegated", async () => {
+    const h = headless();
+    h.modes.permission = "full";
+    // A bash outside the workspace is denied even with no terminal present.
+    const d = await h.preExecute("bash", { command: "rm -rf /etc" });
+    expect(d.kind).not.toBe("delegate");
+  });
+
+  test("read-only tools still run: no terminal does not mean no work", async () => {
+    const h = headless();
+    h.modes.permission = "ask";
+    expect((await h.preExecute("read", { path: "a" })).kind).toBe("allow");
+  });
+
+  test("plan mode still denies, and the reason is the plan, not the terminal", async () => {
+    const h = headless();
+    h.modes.permission = "full";
+    h.modes.plan = true;
+    const d = await h.preExecute("write", { path: "a", content: "x" });
+    expect(d.kind).toBe("deny");
+    expect(d.reason).not.toContain("no terminal");
+  });
+
+  test("no judge call: a second model call in a headless run buys nothing", async () => {
+    let asked = 0;
+    const h = headless({
+      llm: {
+        stream: async function* () {
+          asked += 1;
+          yield { type: "text-delta", text: "ALLOW" };
+        },
+      },
+    });
+    h.modes.permission = "auto";
+    await h.preExecute("bash", { command: "ls" });
+    expect(asked).toBe(0);
+  });
+
+  test("an agent nobody governs is still delegated, never decided", async () => {
+    const h = headless();
+    h.modes.permission = "full";
+    const d = await h.preExecute("bash", { command: "ls" }, "c9", { session: {} });
     expect(d.kind).toBe("delegate");
   });
 });

@@ -1,0 +1,95 @@
+/**
+ * T42 — the launcher's own flags, parsed before anything else.
+ *
+ * Pure, and it **claims nothing it does not own**: the first token it does not
+ * recognize ends kumo's parsing, because everything after it belongs to dsh or
+ * to the booted tree. A `-p` that is the value of another flag (`--model -p`)
+ * is not a print request.
+ */
+
+/** What the caller asked for, beyond "boot the interactive REPL". */
+export type OutputFormat = "text" | "json" | "stream-json";
+
+export interface HeadlessRequest {
+  /** One task per element, in argv order. A `-p -` element is read from stdin. */
+  prompts: string[];
+  format: OutputFormat;
+}
+
+export interface ParsedFlags {
+  headless: HeadlessRequest | undefined;
+  /** Strip kumo's own flags; the rest goes to dsh verbatim. */
+  passthrough: string[];
+  /** `--output-format` named a format that does not exist. */
+  error?: string;
+}
+
+const FORMATS: readonly string[] = ["text", "json", "stream-json"];
+
+/** `-p=task`, `-p task`, `--print=task`, `--print task`. */
+function valueOf(arg: string, inline: string | undefined): string | undefined {
+  if (inline !== undefined) return inline;
+  return undefined;
+}
+
+export function parseFlags(argv: readonly string[]): ParsedFlags {
+  const prompts: string[] = [];
+  let format: OutputFormat = "text";
+  const passthrough: string[] = [];
+
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i] as string;
+
+    // Everything after a bare `--` is the user's, verbatim.
+    if (arg === "--") {
+      passthrough.push(...argv.slice(i + 1));
+      break;
+    }
+
+    const eq = arg.indexOf("=");
+    const name = eq === -1 ? arg : arg.slice(0, eq);
+    const inline = eq === -1 ? undefined : arg.slice(eq + 1);
+
+    if (name === "-p" || name === "--print") {
+      const value = valueOf(arg, inline);
+      if (value === undefined) {
+        // The next token is the prompt, unless it is another flag: `-p -p` is
+        // not a prompt of "-p".
+        const next = argv[i + 1];
+        if (next === undefined || next.startsWith("-")) {
+          return { headless: undefined, passthrough, error: `${name} needs a task` };
+        }
+        prompts.push(next);
+        i += 1;
+      } else {
+        prompts.push(value);
+      }
+      continue;
+    }
+
+    if (name === "--output-format" || name === "-f") {
+      const value = inline ?? argv[i + 1];
+      if (inline === undefined) i += 1;
+      if (value === undefined || !FORMATS.includes(value)) {
+        return {
+          headless: undefined,
+          passthrough,
+          error: `--output-format must be one of: ${FORMATS.join(", ")}`,
+        };
+      }
+      format = value as OutputFormat;
+
+      continue;
+    }
+
+    passthrough.push(arg);
+  }
+
+  if (prompts.length === 0) {
+    // No task: kumo boots the REPL. `--output-format` on its own is not ours to
+    // interpret, so it stays in the passthrough for dsh.
+    return { headless: undefined, passthrough };
+  }
+  return { headless: { prompts, format }, passthrough };
+}

@@ -28,6 +28,14 @@ export const NOTICE_FULL = "Full access: kumo never asks. Shift+Tab to leave.";
 
 export const FULL_CONFIRM_TITLE = "Enable full access? kumo will run commands and edit files without asking.";
 
+/**
+ * T42: the reason a headless run gives when the rule table says `ask`. It names
+ * both ways out, because "denied" with no way forward is a dead end in a script.
+ */
+export const NO_TERMINAL_DENY =
+  "kumo has no terminal to ask on (headless run). Re-run with --permission-mode full, " +
+  "or --dangerously-skip-permissions, or narrow the task to what the gate allows.";
+
 export interface ModesLogEntry {
   tool: string;
   summary: string;
@@ -45,7 +53,15 @@ export interface KumoModesService {
   onChange(cb: () => void): () => void;
   describe(): { plan: boolean; permission: PermissionMode; badges: string[] };
   runCommand(line: string): string | undefined;
+  /**
+   * T42: the agent the gate governs when there is no REPL. Headless runs one
+   * task with no line editor, and the gate has to cover it too, otherwise
+   * `tools/pre-execute` falls through to `next()` and every tool runs
+   * undecided with the sandbox open.
+   */
+  govern(agent: unknown): void;
 }
+
 
 const PERMISSION_ORDER: PermissionMode[] = ["ask", "auto", "full"];
 
@@ -78,6 +94,11 @@ export class Modes implements KumoModesService {
   announce: ((text: string) => void) | undefined;
   /** UI feedback for slash commands. */
   notify: ((text: string) => void) | undefined;
+  /**
+   * T42: the agent to govern when no REPL published one (headless). Kept as a
+   * plain field because the gate reads it on every tool call.
+   */
+  governed: unknown;
   /** Transient notice above the editor (T24.4), not in chat history. */
   showNotice: ((text: string, opts?: { red?: boolean }) => void) | undefined;
 
@@ -95,6 +116,11 @@ export class Modes implements KumoModesService {
 
   notifyChange(): void {
     for (const cb of this.#listeners) cb();
+  }
+
+  /** T42: point the gate at a REPL-less agent. See KumoModesService.govern. */
+  govern(agent: unknown): void {
+    this.governed = agent;
   }
 
   togglePlan(): void {
@@ -277,8 +303,15 @@ export function apply(ctx: DshContext): void {
   };
 
   ctx.on("tools/pre-execute", async (exec: any, next: () => Promise<any>) => {
-    const current = repl;
-    if (current === undefined || exec.agent !== current.agent) return next();
+    // T42: the gate governs the REPL agent *and* whatever agent a headless run
+    // registered. It used to bail out when there was no REPL, which meant a
+    // REPL-less process ran every tool undecided with the sandbox open.
+    const governed = repl?.agent ?? modes.governed;
+    if (governed === undefined || exec.agent !== governed) return next();
+    // There is a terminal to ask on only when a REPL published a UI. Without
+    // one, `ask` has no answer, so it becomes `deny`: failing open would make
+    // the gate decorative.
+    const canAsk = repl?.ui !== undefined;
     const args = parseArgs(String(exec.arguments ?? "{}"));
     const summary = execSummary(exec.name, args);
     const rule = decide(exec.name, args, {
@@ -305,6 +338,14 @@ export function apply(ctx: DshContext): void {
         };
         break;
       case "judge": {
+        // T42: no judge in headless. Its only possible answers are ALLOW and
+        // ASK, and a terminal-less `ask` is already a deny, so a second model
+        // call would buy nothing but latency nobody asked for.
+        if (!canAsk) {
+          via = "no-terminal";
+          decision = { kind: "deny", reason: NO_TERMINAL_DENY };
+          break;
+        }
         const verdict = await judge(exec.name, summary);
         via = "fast-model";
         if (verdict.unavailable !== undefined) reportUnavailable(verdict.unavailable);
@@ -313,6 +354,11 @@ export function apply(ctx: DshContext): void {
       }
       case "ask":
       default: {
+        if (!canAsk) {
+          via = "no-terminal";
+          decision = { kind: "deny", reason: NO_TERMINAL_DENY };
+          break;
+        }
         decision = { kind: "ask", reason: summary };
         if (exec.callId !== undefined) modes.pendingKeys.set(String(exec.callId), ruleKey(exec.name, args));
         break;

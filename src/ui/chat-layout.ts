@@ -68,12 +68,29 @@ export class ChatTranscript extends Container {
     const lines: string[] = [];
     // A thicker rail (Aron, 2026-09-26: "la barre bleue est trop fine").
     const railChar = this.icons.think === "*" ? "|" : "▍";
+    // Tool calls (bash, write, read…) sit on the same gray as the prompt band and the
+    // console band (Aron, 2026-09-26). A run of consecutive tools forms one card: one
+    // padding line on top, one at the bottom, and tinted spacers between the calls.
+    const card = (text: string): string => fillLine("surface", text);
+    let inCard = false;
     for (const child of this.children) {
       const rail = (child as { rail?: RailState }).rail;
       // Same 2-column margin on both sides: railed blocks lose 2 more cells to "▍ ".
       const block = child.render(rail === undefined ? inner : Math.max(1, width - 6));
       if (!block.length) continue;
-      lines.push("");
+      if (rail !== undefined) {
+        if (!inCard) {
+          lines.push("");
+          inCard = true;
+        }
+        lines.push(card(""));
+      } else {
+        if (inCard) {
+          lines.push(card(""));
+          inCard = false;
+        }
+        lines.push("");
+      }
       if ((child as { surface?: boolean }).surface === true) {
         // User prompt: a full-width tinted band (Nuage), one line of padding each
         // side, opening on the same 1-column accent as the console band.
@@ -109,10 +126,11 @@ export class ChatTranscript extends Container {
           lines.push(truncateToWidth(`  ${clean}`, width - 2));
         } else {
           const colored = railPaint(rail, railChar, last === 0 ? 0 : i / last);
-          lines.push(truncateToWidth(`  ${colored} ${clean}`, width - 2));
+          lines.push(card(truncateToWidth(`  ${colored} ${clean}`, width - 2)));
         }
       }
     }
+    if (inCard) lines.push(card(""));
     return lines;
   }
 }

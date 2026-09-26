@@ -421,7 +421,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/skills  List the enabled skills",
           "/help  Show commands and keys",
           "/exit  Quit kumo (also ctrl+d)",
-          `Esc interrupt, ctrl+c clear, ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, ${TASKS_HELP}`,
+          `Esc interrupt, ctrl+c clear, ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, ctrl+b cockpit, ${TASKS_HELP}`,
         ].join("\n"),
       );
       return;

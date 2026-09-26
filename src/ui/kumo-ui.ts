@@ -17,12 +17,14 @@ import {
 } from "@earendil-works/pi-tui";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi, editorTheme, selectListTheme } from "./theme.js";
+import { colorDepth, gradientStops } from "./palette.js";
 import { ChatTranscript, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
 import { displayModel } from "./footer.js";
 import { QuestionForm } from "./questions.js";
 import { WorkingComponent } from "./working.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
+import { DashboardPanel, DockRow } from "./dock.js";
 import { CollapsedToolsComponent, groupRuns, turnSummary, type GroupedTool } from "./tool-group.js";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -86,6 +88,11 @@ export const STARTUP_FRAMES = [
   "⡿ kumo ⡿",
   "⣿ kumo ⣿",
 ];
+
+/** The kumo wordmark, two rows of half blocks (no emoji, no box art). */
+export const LOGO = ["█▄▀ █ █ █▀▄▀█ █▀█", "█ █ █▄█ █ ▀ █ █▄█"];
+/** Sky → lavender → pink → sky, so the shimmer loops without a seam. */
+export const LOGO_STOPS = ["#7dcfff", "#b4a7ff", "#ff9ed2", "#7dcfff"];
 
 export function shouldAnimateStartup(opts: {
   stdoutTTY?: boolean;
@@ -197,6 +204,7 @@ export class KumoUi {
   readonly icons: KumoIcons;
   readonly noticeBox: NoticeBox;
   readonly taskPanel: TaskPanel;
+  readonly dock: DockRow;
   readonly header: Text;
   readonly version: string;
   #lastCtrlC = 0;
@@ -271,7 +279,26 @@ export class KumoUi {
     this.tui.addChild(this.chat);
     this.tui.addChild(this.taskPanel);
     this.tui.addChild(this.noticeBox);
-    this.tui.addChild(this.editor);
+    // Cockpit (Nuage + Cockpit mix): live speed/cache/context next to the editor on
+    // wide color terminals; ctrl+b hides it. Basic/ASCII terminals keep the plain editor.
+    this.dock = new DockRow(
+      this.editor,
+      new DashboardPanel(
+        () => this.footer.state,
+        this.footer.speed,
+        () => {
+          const cur = this.taskPanel.tasks.find((t) => t.status === "in_progress");
+          return { done: this.taskPanel.done, total: this.taskPanel.tasks.length, ...(cur !== undefined ? { current: cur.content } : {}) };
+        },
+        () => {
+          this.headerFirstLine();
+          return this.#cachedHost ?? "";
+        },
+      ),
+    );
+    this.dock.visible = this.fancyHeader;
+    this.footer.compact = (w) => this.dock.shown(w);
+    this.tui.addChild(this.dock);
     this.tui.addChild(this.footer);
 
     // T30: the launcher ran the 24 h registry check in the background; the
@@ -289,6 +316,12 @@ export class KumoUi {
       if (matchesKey(data, "ctrl+t")) {
         if (this.#confirming) return { consume: true };
         this.taskPanel.toggleExpanded();
+        this.requestRender();
+        return { consume: true };
+      }
+      if (matchesKey(data, "ctrl+b")) {
+        if (this.#confirming) return { consume: true };
+        this.dock.visible = !this.dock.visible;
         this.requestRender();
         return { consume: true };
       }
@@ -371,11 +404,17 @@ export class KumoUi {
           this.#animTimer = undefined;
           return;
         }
-        if (i < STARTUP_FRAMES.length) {
-          const frame = STARTUP_FRAMES[i]!;
-          this.header.setText(
-            `${frame}\n${ansi.gray("escape interrupt · ctrl+c clear · ctrl+d exit · / commands")}`,
-          );
+        const frames = this.fancyHeader ? 12 : STARTUP_FRAMES.length;
+        if (i < frames) {
+          if (this.fancyHeader) {
+            // A light band sweeps across the wordmark once (~0.8 s).
+            this.header.setText(this.headerText(i / frames));
+          } else {
+            const frame = STARTUP_FRAMES[i]!;
+            this.header.setText(
+              `${frame}\n${ansi.gray("escape interrupt · ctrl+c clear · ctrl+d exit · / commands")}`,
+            );
+          }
           this.requestRender();
           i += 1;
         } else {
@@ -384,7 +423,7 @@ export class KumoUi {
           this.updateHeader();
           this.requestRender();
         }
-      }, 83);
+      }, 70);
       this.#animTimer.unref?.();
     }
   }
@@ -494,15 +533,31 @@ export class KumoUi {
     }
     const host = this.#cachedHost ?? "?";
     const sep = this.icons.think === "*" ? "-" : "·";
-    return `${ansi.bold("kumo")}  ${sep}  ${model}  ${sep}  ${host}  ${ansi.dim(`v${this.version}`)}`;
+    return `${ansi.bold("kumo")}  ${ansi.faint(sep)}  ${ansi.text(model)}  ${ansi.faint(sep)}  ${ansi.gray(host)}  ${ansi.faint(`v${this.version}`)}`;
+  }
+
+  /** The big gradient wordmark is for color terminals; basic/ASCII keep one line. */
+  get fancyHeader(): boolean {
+    const d = colorDepth();
+    return this.icons.think !== "*" && (d === "truecolor" || d === "256");
+  }
+
+  headerText(phase = 0): string {
+    const help = ansi.faint("escape interrupt · ctrl+c clear · ctrl+d exit · / commands");
+    if (!this.fancyHeader) return `${this.headerFirstLine()}\n${ansi.gray("escape interrupt · ctrl+c clear · ctrl+d exit · / commands")}`;
+    return [
+      "",
+      ` ${gradientStops(LOGO[0]!, LOGO_STOPS, phase)}`,
+      ` ${gradientStops(LOGO[1]!, LOGO_STOPS, phase)}   ${this.headerFirstLine()}`,
+      "",
+      ` ${help}`,
+    ].join("\n");
   }
 
   updateHeader(): void {
     if (this.#closed) return;
     if (this.#animTimer !== undefined) return;
-    this.header.setText(
-      `${this.headerFirstLine()}\n${ansi.gray("escape interrupt · ctrl+c clear · ctrl+d exit · / commands")}`,
-    );
+    this.header.setText(this.headerText());
   }
 
   get toolsCollapsed(): boolean {

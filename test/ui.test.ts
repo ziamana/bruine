@@ -1005,3 +1005,15 @@ describe("settings.yaml reader (real YAML, kumo's own list style)", () => {
     });
   });
 });
+
+describe("tool output display (Nuage polish)", () => {
+  test("read output hides dsh's <path>/<type>/<content> wrapper lines", () => {
+    const c = new ToolCallComponent("read", () => 0);
+    c.setArgs(JSON.stringify({ path: "src/a.ts" }));
+    c.result(true, "<path>/p/src/a.ts</path>\n<type>file</type>\n<content>\n1: const a = 1;\n</content>\n");
+    const text = c.render(80).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
+    expect(text).toContain("1: const a = 1;");
+    expect(text).not.toContain("<path>");
+    expect(text).not.toContain("<content>");
+  });
+});

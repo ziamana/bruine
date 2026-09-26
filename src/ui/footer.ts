@@ -1,6 +1,8 @@
 import { truncateToWidth, type Component } from "@earendil-works/pi-tui";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
+import { colorDepth, onBg, paint } from "./palette.js";
+import { SpeedHistory } from "./dock.js";
 
 export interface FooterState {
   contextUsed?: number;
@@ -50,8 +52,14 @@ export class FooterComponent implements Component {
     this.#icons = icons;
   }
 
+  /** Live tok/s samples for the cockpit sparkline. */
+  readonly speed = new SpeedHistory();
+  /** When the cockpit shows the metrics, the footer keeps only mode, model and effort. */
+  compact: (width: number) => boolean = () => false;
+
   set(next: FooterState): void {
     this.state = { ...this.state, ...next };
+    if (next.tps !== undefined) this.speed.push(next.tps);
   }
 
   render(width: number): string[] {
@@ -129,6 +137,21 @@ export class FooterComponent implements Component {
     }
     parts.push(model, effort);
     // Modes come first so a narrow window or long model name cannot hide them.
+    if (!plain && colorDepth() !== "basic" && colorDepth() !== "none") {
+      // Nuage: pills. The mode pill is filled, the metrics sit on a quiet chip.
+      const modePill =
+        modeName === "FULL ACCESS"
+          ? onBg("rose", paint("onSky", ` ${modeName} `))
+          : modeName === "ask"
+            ? onBg("chip", paint("muted", ` ${modeName} `))
+            : onBg("sky", paint("onSky", ` ${modeName} `));
+      const planPill = planOn ? onBg("lavender", paint("onSky", " plan ")) : "";
+      const pill = (text: string): string => onBg("chip", ` ${text} `);
+      const pills = this.compact(width) ? [] : parts.slice(0, -2).map(pill);
+      const tail = paint("faint", `  ${model}  ${sep}  `) + paint("muted", effort);
+      const line = [modePill, planPill, ...pills].filter((x) => x !== "").join(" ") + tail;
+      return [truncateToWidth(line, width)];
+    }
     const head = plan === undefined ? mode : `${mode}  ${plan}`;
     const detail = parts.join(`  ${sep}  `);
     return [truncateToWidth(`${head}  ${plain ? detail : ansi.gray(detail)}`, width)];

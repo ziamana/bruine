@@ -9,7 +9,11 @@ export default defineConfig({
     bail: 0,
     testTimeout: 45_000,
     hookTimeout: 60_000,
+    // Real kumo processes: basic colors keep screen assertions stable.
+    env: { KUMO_COLOR: "basic" },
   } : {
     exclude: [...configDefaults.exclude, "test/e2e/**"],
+    // Unit tests assert the 16-color codes; palette.test.ts covers 256 and 24-bit.
+    env: { KUMO_COLOR: "basic" },
   },
 });

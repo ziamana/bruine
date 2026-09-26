@@ -1,7 +1,6 @@
 import { Markdown, Text, type Component } from "@earendil-works/pi-tui";
 import { kumoIcons, withoutEmoji } from "../render/chars.js";
-import { dim } from "../render/reasoning.js";
-import { markdownTheme } from "./theme.js";
+import { ansi, markdownTheme } from "./theme.js";
 import { pasteChip } from "./chat-layout.js";
 
 /**
@@ -36,9 +35,12 @@ export class AssistantTextComponent implements Component {
   }
 }
 
-/** A finished user message, echoed dimmed into the transcript. */
+/** A finished user message: a tinted band in the transcript (Nuage). */
 export function userMessageComponent(text: string): Component {
   const chip = pasteChip(text);
-  if (chip !== undefined) return new Text(`${dim(kumoIcons().prompt)} ${chip}`, 0, 0);
-  return new Text(`${dim(kumoIcons().prompt)} ${withoutEmoji(text)}`, 0, 0);
+  const prompt = ansi.cyan(kumoIcons().prompt);
+  const body = chip ?? ansi.text(withoutEmoji(text));
+  const t = new Text(`${prompt} ${body}`, 0, 0) as Text & { surface?: boolean };
+  t.surface = true;
+  return t;
 }

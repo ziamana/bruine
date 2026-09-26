@@ -1,4 +1,4 @@
-import { Container, Editor, truncateToWidth } from "@earendil-works/pi-tui";
+import { Container, Editor, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { kumoIcons, withoutEmoji, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 
@@ -31,6 +31,17 @@ export class ChatTranscript extends Container {
       if (!block.length) continue;
       const rail = (child as { rail?: "blue" | "red" }).rail;
       lines.push("");
+      if ((child as { surface?: boolean }).surface === true) {
+        // User prompt: a full-width tinted band (Nuage), one line of padding each side.
+        const band = (text: string): string => {
+          const cut = truncateToWidth(text, width);
+          return ansi.surface(cut + " ".repeat(Math.max(0, width - visibleWidth(cut))));
+        };
+        lines.push(band(""));
+        for (const line of block) lines.push(band(`  ${withoutEmoji(line)}`));
+        lines.push(band(""));
+        continue;
+      }
       for (const line of block) {
         const clean = withoutEmoji(line);
         if (rail === undefined) {

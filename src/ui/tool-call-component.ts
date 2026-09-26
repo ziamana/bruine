@@ -43,7 +43,11 @@ export class ToolCallComponent implements Component {
   /** The durable event replaces streamed JSON, it must never be appended twice. */
   setArgs(json: string): void { this.#rawArgs = json; }
   result(ok: boolean, output: string): void {
-    const lines = sanitize(output).split("\n");
+    // dsh wraps file reads in <path>/<type>/<content> tags: the header already says
+    // which file, so show only the content lines.
+    const lines = sanitize(output)
+      .split("\n")
+      .filter((l) => !/^\s*(<(path|type)>.*<\/(path|type)>|<\/?content>)\s*$/.test(l));
     if (lines.at(-1) === "") lines.pop();
     this.#done = { ok, seconds: (this.now() - this.#startTime) / 1000, lines: lines.slice(0, MAX_OUTPUT_LINES), rest: Math.max(0, lines.length - MAX_OUTPUT_LINES) };
   }
@@ -64,7 +68,12 @@ export class ToolCallComponent implements Component {
     if (!this.#done) {
       const summary = this.summary(width);
       const detail = summary ? `  ${summary}` : "";
-      return [clipCells(`${spinnerFrame(this.now() - this.#startTime, this.icons)} ${toolPad}${detail}`, width)];
+      const plainLine = clipCells(`${spinnerFrame(this.now() - this.#startTime, this.icons)} ${toolPad}${detail}`, width);
+      const fr = spinnerFrame(this.now() - this.#startTime, this.icons);
+      if (stringWidth(plainLine) === stringWidth(`${fr} ${toolPad}${detail}`)) {
+        return [`${ansi.cyan(fr)} ${ansi.text(toolPad)}${ansi.gray(detail)}`];
+      }
+      return [plainLine];
     }
     const mark = this.#done.ok ? ansi.green(this.icons.ok) : ansi.red(this.icons.fail);
     const dur = `${this.#done.seconds.toFixed(1)}s`;
@@ -72,7 +81,14 @@ export class ToolCallComponent implements Component {
     const avail = Math.max(0, width - prefixCells - 2 - stringWidth(dur));
     const rawSummary = this.summary(Math.min(60, Math.max(0, avail)));
     const summaryPadded = padCells(rawSummary, avail);
-    const head = width > 0 ? mark + clipCells(` ${toolPad}  ${summaryPadded}  ${dur}`, Math.max(0, width - 1)) : "";
+    const plainHead = ` ${toolPad}  ${summaryPadded}  ${dur}`;
+    const fits = stringWidth(plainHead) <= Math.max(0, width - 1);
+    const head =
+      width <= 0
+        ? ""
+        : fits
+          ? `${mark} ${ansi.text(toolPad)}  ${ansi.gray(summaryPadded)}  ${ansi.faint(dur)}`
+          : mark + clipCells(plainHead, Math.max(0, width - 1));
     const out = [head];
     const branch = this.icons.think === "*" ? ">" : "⎿";
     this.#done.lines.forEach((line, i) => out.push(dim(clipCells(`${i === 0 ? `  ${branch} ` : "    "}${line}`, width))));

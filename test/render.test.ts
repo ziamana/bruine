@@ -17,6 +17,18 @@ function setup() {
 }
 
 describe("render plugin (T24.5 piped, no spinner, no CR)", () => {
+  test("todo/write prints one snapshot per change and hides the raw tool", () => {
+    const { screen, frame, event } = setup();
+    frame({ type: "tool-call-delta", id: "todo1", name: "todo_write", argumentsDelta: '{"todos":[]}' });
+    event("tool/call", { callId: "todo1", name: "todo_write", arguments: '{"todos":[]}' });
+    event("todo/write", { todos: [{ content: "Read files", status: "completed" }, { content: "Build panel", status: "in_progress" }] });
+    event("tool/result", { message: { content: [{ type: "tool-result", toolCallId: "todo1", content: [{ type: "text", text: "Updated todo list" }], isError: false }] } });
+    expect(strip(screen.all)).toBe("Tasks 1/2\n✓ Read files\n✻ Build panel\n");
+    event("todo/write", { todos: [{ content: "Read files", status: "completed" }, { content: "Build panel", status: "completed" }] });
+    expect(screen.writes).toHaveLength(2);
+    expect(strip(screen.last)).toBe("Tasks 2/2\n✓ Read files\n✓ Build panel\n");
+  });
+
   test("reasoning deltas produce no output until block-end", () => {
     const { screen, frame } = setup();
     frame({ type: "reasoning-delta", text: "Let me" });

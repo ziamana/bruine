@@ -21,6 +21,7 @@ import { FooterComponent } from "./footer.js";
 import { displayModel } from "./footer.js";
 import { QuestionForm } from "./questions.js";
 import { WorkingComponent } from "./working.js";
+import { TaskPanel, type TaskItem } from "./task-panel.js";
 import { CollapsedToolsComponent, groupRuns, turnSummary, type GroupedTool } from "./tool-group.js";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -263,6 +264,7 @@ export class KumoUi {
   readonly footer: FooterComponent;
   readonly icons: KumoIcons;
   readonly noticeBox: NoticeBox;
+  readonly taskPanel: TaskPanel;
   readonly header: Text;
   readonly version: string;
   #lastCtrlC = 0;
@@ -299,6 +301,7 @@ export class KumoUi {
       handlers.onSubmit(text);
     };
     this.footer = new FooterComponent(icons);
+    this.taskPanel = new TaskPanel(icons);
     this.noticeBox = new NoticeBox();
     try {
       // T28b.1: settings.yaml is the source of truth; kumo.json only a fallback.
@@ -333,6 +336,7 @@ export class KumoUi {
 
     this.tui.addChild(this.header);
     this.tui.addChild(this.chat);
+    this.tui.addChild(this.taskPanel);
     this.tui.addChild(this.noticeBox);
     this.tui.addChild(this.editor);
     this.tui.addChild(this.footer);
@@ -348,7 +352,14 @@ export class KumoUi {
         (!data.startsWith("\x1b") && [...data].some((ch) => (ch.codePointAt(0) ?? 0) >= 32))
       ) {
         handlers.onUserActivity?.();
-      }      if (matchesKey(data, "ctrl+o")) {
+      }
+      if (matchesKey(data, "ctrl+t")) {
+        if (this.#confirming) return { consume: true };
+        this.taskPanel.toggleExpanded();
+        this.requestRender();
+        return { consume: true };
+      }
+      if (matchesKey(data, "ctrl+o")) {
         if (this.#confirming) return { consume: true };
         this.#toolsCollapsed = !this.#toolsCollapsed;
         this.applyToolsCollapsed();
@@ -449,7 +460,7 @@ export class KumoUi {
     if (this.#closed) return;
     this.updateHeader();
     this.tui.requestRender();
-    const active = this.chat.children.some((c) => (c as Component & { active?: boolean }).active);
+    const active = this.taskPanel.active || this.chat.children.some((c) => (c as Component & { active?: boolean }).active);
     if (active && this.#animation === undefined) {
       this.#animation = setInterval(() => this.requestRender(), 100);
       this.#animation.unref();
@@ -466,6 +477,21 @@ export class KumoUi {
 
   removeChat(component: Component): void {
     this.chat.removeChild(component);
+    this.requestRender();
+  }
+
+  /** Replace the visible task list after a todo/write event. */
+  setTasks(tasks: TaskItem[]): void {
+    const completed = this.taskPanel.setTasks(tasks);
+    if (completed !== undefined) {
+      this.addChat(new Text(ansi.dim(`${this.icons.ok} ${completed} tasks done`), 1, 0));
+    }
+    this.requestRender();
+  }
+
+  /** For /new integration: clear the panel without adding a chat line. */
+  clearTasks(): void {
+    this.taskPanel.clearTasks();
     this.requestRender();
   }
 

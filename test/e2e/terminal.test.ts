@@ -38,10 +38,10 @@ const footerCell = (h: Harness, label: string) => {
 };
 const runningThought = (line: string) => /^\s*[·✢✺✶✻✽] Thinking/.test(line);
 
-async function scenario(name: string, scripts: Script[], run: (h: Harness) => Promise<void>, ascii = false) {
+async function scenario(name: string, scripts: Script[], run: (h: Harness) => Promise<void>, ascii = false, permissionMode = "ask") {
   let h: Harness | undefined;
   try {
-    h = await Harness.start(scripts, "ask", ascii);
+    h = await Harness.start(scripts, permissionMode, ascii);
     await h.waitFor("e2e-model", 30_000);
     await h.waitStable(150, 2000);
     await run(h);
@@ -115,6 +115,37 @@ test("escape: abort stream within one second and accept another turn", async () 
     await h.waitFor("SECOND_TURN_WORKS");
     await h.dump("escape-second-turn");
   });
+});
+
+test("todo_write uses the task panel and collapses to one completion line", async () => {
+  const active = [
+    { content: "Read the launcher", status: "completed" },
+    { content: "Find the footer", status: "completed" },
+    { content: "Add the panel", status: "in_progress" },
+    { content: "Update tests", status: "pending" },
+    { content: "Run e2e", status: "pending" },
+  ];
+  const done = active.map((item) => ({ ...item, status: "completed" }));
+  await scenario("tasks", [
+    toolScript("todo_write", { todos: active }, "todo_1"), textScript("TASKS_STARTED"),
+    toolScript("todo_write", { todos: done }, "todo_2"), textScript("TASKS_FINISHED"),
+  ], async (h) => {
+    await h.prompt("Make a task list");
+    await h.waitFor("TASKS_STARTED");
+    const shown = h.screen().join("\n");
+    expect(shown).toContain("Tasks  2/5");
+    expect(shown).toContain("Add the panel");
+    expect(shown).not.toContain("todo_write");
+    const taskRow = h.screen().findIndex((line) => line.includes("Tasks  2/5"));
+    const editorRow = h.screen().findIndex((line) => line.includes("› Make a task list"));
+    expect(taskRow).toBeGreaterThan(editorRow);
+    await h.prompt("Finish the tasks");
+    await h.waitFor("TASKS_FINISHED");
+    const completed = h.screen().join("\n");
+    expect(completed).toContain("✓ 5 tasks done");
+    expect(completed).not.toContain("Tasks  5/5");
+    expect(completed).not.toContain("todo_write");
+  }, false, "full");
 });
 
 test("tool call: read note.txt and send the real tool result back", async () => {

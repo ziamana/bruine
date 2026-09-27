@@ -699,7 +699,10 @@ describe("bench end to end (fake kumo)", () => {
     for (const dir of [results, home]) await rm(dir, { recursive: true, force: true });
   });
 
-  test("an interrupted run is recorded as nothing, so --resume redoes it", async () => {
+  // On Windows child.kill("SIGINT") ends the process without running its
+  // handler, so the interruption cannot be simulated here; a real Ctrl+C in a
+  // Windows console still reaches node's SIGINT handler.
+  test.skipIf(process.platform === "win32")("an interrupted run is recorded as nothing, so --resume redoes it", async () => {
     const results = await tempDir("kumo-bench-int-results-");
     const home = await tempDir("kumo-bench-int-home-");
     const settings = join(home, "settings.yaml");

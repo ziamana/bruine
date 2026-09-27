@@ -30,14 +30,20 @@ let spawnHelperChecked = false;
  * node-pty spawns through a prebuilt `spawn-helper` binary, and the executable
  * bit does not survive the trip through the package store on macOS: every
  * spawn then fails with "posix_spawnp failed". One chmod, once per process.
+ * `prebuilds/darwin-<arch>` is where a prebuilt copy lives; a source build
+ * puts one in `build/Release` instead.
  */
 function ensureSpawnHelper(): void {
   if (spawnHelperChecked || process.platform !== "darwin") return;
   spawnHelperChecked = true;
-  try {
-    chmodSync(join(dirname(require.resolve("node-pty")), "..", "build", "Release", "spawn-helper"), 0o755);
-  } catch {
-    // Built from source there is no helper to fix, and node-pty loads its own.
+  const pkg = dirname(require.resolve("node-pty/package.json"));
+  for (const dir of [join(pkg, "prebuilds", `darwin-${process.arch}`), join(pkg, "build", "Release")]) {
+    try {
+      chmodSync(join(dir, "spawn-helper"), 0o755);
+    } catch (error) {
+      // A missing helper is the source-build case; anything else is a real fault.
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
   }
 }
 

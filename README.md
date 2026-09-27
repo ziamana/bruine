@@ -29,6 +29,7 @@ sent anywhere you did not point it at.
 | Images | `ctrl+v` pastes a screenshot straight to a vision model |
 | Context and speed | A footer that shows context used, tok/s, prefill and cache hit rate |
 | Works on | Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal |
+| herdr | Works with herdr: shows up as `kumo` in `herdr agent list`. |
 
 ## Commands
 

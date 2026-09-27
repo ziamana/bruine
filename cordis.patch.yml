@@ -116,6 +116,10 @@
     - id: kumo-render
       name: 'kumo-code/render'
 
+    - id: kumo-herdr
+      name: 'kumo-code/herdr'
+      disabled: !!js process.env.KUMO_HEADLESS === '1'
+
     - id: kumo-approval
       name: 'kumo-code/approval'
 

@@ -33,6 +33,7 @@
     "./headless": "./dist/plugins/headless.js",
     "./render": "./dist/plugins/render.js",
     "./approval": "./dist/plugins/approval.js",
+    "./herdr": "./dist/plugins/herdr.js",
     "./modes": "./dist/plugins/modes.js",
     "./web-search": "./dist/plugins/web-search.js",
     "./cordis.patch.yml": "./cordis.patch.yml",

@@ -8,6 +8,7 @@ export default defineConfig({
     "plugins/headless": "src/plugins/headless.ts",
     "plugins/render": "src/plugins/render.ts",
     "plugins/approval": "src/plugins/approval.ts",
+    "plugins/herdr": "src/plugins/herdr.ts",
     "plugins/modes": "src/plugins/modes.ts",
     "plugins/web-search": "src/plugins/web-search.ts",
   },

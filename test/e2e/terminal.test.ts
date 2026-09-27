@@ -302,6 +302,7 @@ test("modes: Shift+Tab Plan/Build and /auto /ask /full change real permissions",
     await h.waitFor("Enable full access?");
     await h.waitFor("Cancel");
     await h.waitFor("Enable");
+    await h.waitStable(300, 2000);
     expect(footer(h)).toMatch(/^auto\b/); // Still Auto until confirmed.
     await h.dump("t23-after-full-confirmation");
     h.press("down"); await delay(50); h.press("enter");
@@ -725,6 +726,7 @@ test("/new: two turns, new conversation, next request has only new history (T31.
     expect(h.screen().join("\n")).not.toContain("First hello");
     // T55: the context is marked with its absolute cost. The window is no longer
     // printed, so the marking is checked for shape rather than for a literal.
+    await h.waitStable(300, 2000);
     expectContextMarking(footer(h));
   });
 });
@@ -831,7 +833,8 @@ test("effort: defaults medium; /effort off and ctrl+e high change request params
     const b3 = h.server.mainRequests().at(-1)!.body;
     expect(b3.chat_template_kwargs?.reasoning_effort).toBe("high");
     expect(b3.chat_template_kwargs?.enable_thinking).toBe(true);
-    expect(footer(h)).toContain("effort high");
+    // The bar comes back on the frame after the turn, as everywhere else here.
+    await h.until(() => footer(h).includes("effort high"), 2000, "effort high label");
 
     // Cache rule: system and tools stay byte-identical across effort changes.
     const sys = (b: (typeof b1)): string =>
@@ -1086,6 +1089,7 @@ test("/model <route> sets directly and /provider lists them all (T37, T39)", asy
       // T55: the footer marks the context, and the marking is well formed. The
       // window itself is no longer printed anywhere, so it cannot be read off the
       // screen; the e2e that used to check it checked a string that is now gone.
+      await h.waitStable(300, 2000);
       expectContextMarking(footer(h));
 
       // An unknown provider is refused, naming what is configured.

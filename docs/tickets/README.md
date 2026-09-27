@@ -80,3 +80,4 @@ You are implementing one ticket of the kumo project.
 | T59 | What the turn did to the files: a `changed` line under the receipt, measured with git | T55 |
 | T60 | Keys are keys, not bytes: `matchesKey` everywhere, releases dropped, a scan that forbids byte comparisons | T13a |
 | T61 | Browser control for everyone: shipped skill, opt-in setup step, gate rules for @playwright/cli | T35 |
+| T62 | herdr integration: kumo reports idle / working / blocked to herdr, released on exit | T35 |

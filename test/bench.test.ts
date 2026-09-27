@@ -659,7 +659,9 @@ describe("bench end to end (fake kumo)", () => {
     expect(existsSync(join(work, "run", "home", "demo-r1", "settings.yaml"))).toBe(true);
     expect(existsSync(join(task, "solved.txt"))).toBe(false);
     for (const dir of [results, work, home]) await rm(dir, { recursive: true, force: true });
-  });
+    // Three full bench runs, each spawning node and a shell for check.sh: well
+    // past vitest's 5s default on a Windows runner.
+  }, 60_000);
 
   test("a kumo that fails is recorded as a failure, with its own words", async () => {
     const results = await tempDir("kumo-bench-e2e-results-");

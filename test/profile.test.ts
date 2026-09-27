@@ -14,8 +14,13 @@ describe("profilePaths (T14.4)", () => {
   });
 
   test("posix home uses slash separators", () => {
-    const p = profilePaths("/home/x");
+    const p = profilePaths("/home/x", path.posix);
     expect(p.cordisYml).toBe("/home/x/profiles/kumo/cordis.yml");
+  });
+
+  test("the running platform's own module decides the separator", () => {
+    const p = profilePaths("/home/x");
+    expect(p.cordisYml).toBe(path.join("/home/x", "profiles", "kumo", "cordis.yml"));
   });
 });
 

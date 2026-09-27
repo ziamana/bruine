@@ -21,10 +21,10 @@ describe("flagMode (T11.2)", () => {
 });
 
 describe("buildLaunch", () => {
-  test("default home → DSH_HOME ends with /.kumo", () => {
+  test("default home → DSH_HOME is the .kumo dir under home", () => {
     const { env } = buildLaunch([], { PATH: "/usr/bin" }, "/home/tu44");
     expect(env.DSH_HOME).toBe(join("/home/tu44", ".kumo"));
-    expect(env.DSH_HOME.endsWith("/.kumo")).toBe(true);
+    expect(path.basename(env.DSH_HOME)).toBe(".kumo");
   });
 
   test("KUMO_HOME overrides DSH_HOME", () => {

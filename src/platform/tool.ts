@@ -12,6 +12,7 @@
 
 import { execFile } from "node:child_process";
 import { access } from "node:fs/promises";
+import { delimiter, isAbsolute, join } from "node:path";
 
 export interface ToolResult {
   /** Exit code, or 1 when the process could not be run at all. */
@@ -69,12 +70,27 @@ export const runTool: RunTool = (cmd, args, opts = {}) =>
 
 /** True when the binary exists on PATH, or is an absolute path that does. */
 export async function hasTool(cmd: string, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
-  if (cmd.includes("/")) return exists(cmd);
-  for (const dir of (env["PATH"] ?? "").split(":")) {
+  const names = executableNames(cmd, env);
+  if (isAbsolute(cmd) || cmd.includes("/") || cmd.includes("\\")) {
+    for (const name of names) if (await exists(name)) return true;
+    return false;
+  }
+  for (const dir of (env["PATH"] ?? "").split(delimiter)) {
     if (dir === "") continue;
-    if (await exists(`${dir}/${cmd}`)) return true;
+    for (const name of names) if (await exists(join(dir, name))) return true;
   }
   return false;
+}
+
+/**
+ * The command to look for, plus the suffixes Windows appends to a bare name:
+ * `clip` on PATH is `clip.exe`, and every caller here asks for the bare name.
+ * Read from PATHEXT so a machine that only resolves `.BAT` still works.
+ */
+function executableNames(cmd: string, env: NodeJS.ProcessEnv): string[] {
+  if (process.platform !== "win32") return [cmd];
+  const exts = (env["PATHEXT"] ?? ".COM;.EXE;.BAT;.CMD").split(";");
+  return [cmd, ...exts.filter((ext) => ext !== "").map((ext) => cmd + ext.toLowerCase())];
 }
 
 async function exists(path: string): Promise<boolean> {

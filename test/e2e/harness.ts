@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmodSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -22,6 +23,22 @@ export function build() {
   execFileSync(process.platform === "win32" ? "pnpm.cmd" : "pnpm", ["build"], {
     cwd: root, stdio: "inherit", shell: process.platform === "win32",
   });
+}
+
+let spawnHelperChecked = false;
+/**
+ * node-pty spawns through a prebuilt `spawn-helper` binary, and the executable
+ * bit does not survive the trip through the package store on macOS: every
+ * spawn then fails with "posix_spawnp failed". One chmod, once per process.
+ */
+function ensureSpawnHelper(): void {
+  if (spawnHelperChecked || process.platform !== "darwin") return;
+  spawnHelperChecked = true;
+  try {
+    chmodSync(join(dirname(require.resolve("node-pty")), "..", "build", "Release", "spawn-helper"), 0o755);
+  } catch {
+    // Built from source there is no helper to fix, and node-pty loads its own.
+  }
 }
 
 export class Harness {
@@ -112,6 +129,7 @@ export class Harness {
         if (value !== undefined && !/(API_KEY|TOKEN|SECRET|^DSH_|^KUMO_)/i.test(key)) env[key] = value;
       }
       Object.assign(env, { KUMO_HOME: home, DSH_HOME: home, DSH_TELEMETRY_DISABLED: "1", KUMO_LOCAL_API_KEY: "e2e", KUMO_ASCII: ascii ? "1" : "0", KUMO_NO_UPDATE_CHECK: "1", KUMO_COLOR: "basic", TERM: "xterm-256color", LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" });
+      ensureSpawnHelper();
       h.child = pty.spawn(process.execPath, [join(root, "dist", "bin.js")], { name: "xterm-256color", cols: 100, rows: 30, cwd: project, env });
       h.child.onData((data) => {
         h.pending = h.pending.then(() => new Promise<void>((done) => h.term.write(data, () => {

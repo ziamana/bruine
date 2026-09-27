@@ -259,7 +259,9 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
     }
     expect(await h.selectedLine()).toContain("Enter a server address");
     h.press("enter");
-    await h.waitFor("Server URL (e.g. http://192.168.1.64:8081): ");
+    // No trailing space: the blank cell after the colon is not painted on
+    // every terminal, and the prompt itself is what this step is about.
+    await h.waitFor("Server URL (e.g. http://192.168.1.64:8081):");
     h.type(server.url); // already http://host:port/v1
     h.press("enter");
     await h.until(

@@ -163,7 +163,10 @@ describe("off switches (T30)", () => {
     expect(readUpdateCheckChoice(doc)).toBe(false);
     await setUpdateCheck(home, true);
     expect(readUpdateCheckChoice(await readKumoJsonDoc(home))).toBe(true);
-    expect((await stat(join(home, "kumo.json"))).mode & 0o777).toBe(0o600);
+    // No POSIX mode bits on Windows: privacy there is an ACL, not a 0600.
+    if (process.platform !== "win32") {
+      expect((await stat(join(home, "kumo.json"))).mode & 0o777).toBe(0o600);
+    }
   });
 
   test("kumo.json missing → readUpdateCheckChoice undefined (default on)", async () => {

@@ -146,13 +146,16 @@ describe("renderSettingsYaml", () => {
 });
 
 describe("writeEnvVar", () => {
-  test("creates an owner-only file", async () => {
+  test("creates the file, owner-only where the platform has modes", async () => {
     const dir = await mkdtemp(join(tmpdir(), "kumo-env-"));
     const envPath = join(dir, ".env");
     await writeEnvVar(envPath, "DEEPSEEK_API_KEY", "sk-1");
     expect(await readFile(envPath, "utf8")).toBe("DEEPSEEK_API_KEY=sk-1\n");
-    const mode = (await stat(envPath)).mode & 0o777;
-    expect(mode).toBe(0o600);
+    // Windows has no POSIX mode bits — a secret is kept private by an ACL, so
+    // there is no 0600 there to assert.
+    if (process.platform !== "win32") {
+      expect((await stat(envPath)).mode & 0o777).toBe(0o600);
+    }
   });
 
   test("replaces an existing key and keeps others", async () => {

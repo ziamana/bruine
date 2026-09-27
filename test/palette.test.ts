@@ -17,6 +17,7 @@ import {
 } from "../src/ui/palette.js";
 import { ChatTranscript, ConsoleBand, pasteChip, railPaint } from "../src/ui/chat-layout.js";
 import { userMessageComponent } from "../src/ui/assistant-text.js";
+import { kumoIcons } from "../src/render/chars.js";
 import { DashboardPanel, DockRow, meter, SpeedHistory, sparkline } from "../src/ui/dock.js";
 import { NUAGE } from "../src/ui/palette.js";
 import type { Component } from "@earendil-works/pi-tui";
@@ -360,17 +361,20 @@ describe("prompt band keeps its columns (T40)", () => {
     resetColorDepth();
   });
   test("the prompt still starts in column 2, accent or not", () => {
+    // The glyph is the platform's own (ASCII where the terminal is not UTF-8);
+    // what this test is about is the two leading columns around it.
+    const prompt = `^ {2}${kumoIcons().prompt} Read note\\.txt`;
     const start = (): string => {
       const t = new ChatTranscript();
       t.addChild(userMessageComponent("Read note.txt"));
       const painted = t.render(40).find((l) => l.includes("Read note.txt"))!;
       return painted.replace(/\x1b\[[0-9;]*m/g, "");
     };
-    expect(start()).toMatch(/^ {2}› Read note\.txt/);
+    expect(start()).toMatch(new RegExp(prompt));
     process.env.KUMO_COLOR = "truecolor";
     resetColorDepth();
     // Painting the band must not push the prompt one column to the right.
-    expect(start()).toMatch(/^ {2}› Read note\.txt/);
+    expect(start()).toMatch(new RegExp(prompt));
   });
 });
 

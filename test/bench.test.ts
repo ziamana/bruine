@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
 import { parseOptions, parseRoute, routeSlug, usage } from "../bench/lib/options.js";
@@ -27,6 +27,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const tasksDir = join(root, "bench", "tasks");
 const variantsDir = join(root, "bench", "variants");
 const fakeKumo = join(root, "bench", "tools", "fake-kumo.mjs");
+/**
+ * `--import` takes a specifier, not a path: a bare `D:\...` is read as a URL
+ * with the scheme `d:` and node throws ERR_UNSUPPORTED_ESM_URL_SCHEME.
+ */
+const tsHooks = pathToFileURL(join(root, "bench", "ts-hooks.mjs")).href;
 
 const SETTINGS = [
   "llm-pi-ai:",
@@ -59,7 +64,7 @@ async function runBench(args: string[], env: Record<string, string> = {}): Promi
         "--experimental-strip-types",
         // The bench runs from source; this is the same hook `pnpm bench` uses.
         "--import",
-        join(root, "bench", "ts-hooks.mjs"),
+        tsHooks,
         join(root, "bench", "run.ts"),
         ...args,
       ],
@@ -388,7 +393,7 @@ describe("bench results", () => {
 
   test("the file name carries date, route and variant", () => {
     expect(resultsPath("/r", "2026-09-26", "local-ornith", "verify")).toBe(
-      "/r/2026-09-26-local-ornith-verify.jsonl",
+      join("/r", "2026-09-26-local-ornith-verify.jsonl"),
     );
   });
 
@@ -715,7 +720,7 @@ describe("bench end to end (fake kumo)", () => {
     ];
     const child = spawn(
       process.execPath,
-      ["--experimental-strip-types", "--import", join(root, "bench", "ts-hooks.mjs"), join(root, "bench", "run.ts"), ...args],
+      ["--experimental-strip-types", "--import", tsHooks, join(root, "bench", "run.ts"), ...args],
       { cwd: root, env: { ...process.env, FAKE_KUMO_HANG: "1" } },
     );
     let out = "";

@@ -294,7 +294,8 @@ test("modes: Shift+Tab Plan/Build and /auto /ask /full change real permissions",
     expect(readFileSync(join(h.project, "auto.txt"), "utf8")).toBe("AUTO_WORKS");
     await h.prompt("/permissions");
     await h.waitFor("Ask: confirm every command");
-    expect(footer(h)).toMatch(/^auto\b/);
+    // The bar comes back on the frame after the panel, as everywhere else here.
+    await h.until(() => /^auto\b/.test(footer(h)), 2000, "Auto label under the panel");
     h.press("escape");
     await delay(200);
     await h.prompt("/full");
@@ -432,7 +433,9 @@ test("approval: Down Down Enter rejects write without creating the file", async 
   });
 });
 
-test("approval: Auto runs bash ls without a select, while Ask still asks", async () => {
+// dsh registers a shell tool only where a POSIX shell is on PATH, so on
+// Windows there is no command for the approval prompt to be about.
+test.skipIf(process.platform === "win32")("approval: Auto runs bash ls without a select, while Ask still asks", async () => {
   await scenario("auto-bash-ls", [
     toolScript("bash", { command: "ls", description: "list project files" }, "auto_ls"), textScript("AUTO_LS_DONE"),
   ], async (h) => {
@@ -841,7 +844,9 @@ test("effort: defaults medium; /effort off and ctrl+e high change request params
   });
 }, 90_000);
 
-test("judge + ghost suggestion send enable_thinking false on a binary template (T28b)", async () => {
+// The judge is only consulted for a command, and dsh registers no shell tool
+// on Windows: there is nothing to ask it about.
+test.skipIf(process.platform === "win32")("judge + ghost suggestion send enable_thinking false on a binary template (T28b)", async () => {
   await templateScenario("effort-side-requests", [
     toolScript("bash", { command: "touch t34_probe.txt", description: "create the probe file" }), textScript("TOOLED"),
   ], "auto", BINARY_TEMPLATE, async (h) => {

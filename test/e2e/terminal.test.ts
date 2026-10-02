@@ -29,27 +29,52 @@ const reasoning = (): Script => ({ chunks: [
   }),
   { delta: { content: "REASONING_DONE" }, delayMs: 150 },
 ] });
-// The bottom area has a 2-column margin on both sides; tests read the text.
-const footer = (h: Harness) => ([...h.screen()].reverse().find(line => line.includes("e2e-model")) ?? "").trimStart();
+// The status bar is three rows: the place and the mode badges, the readings and
+// the route, and the throughput when it fitted. Tests read the row they mean.
+type BarRow = "place" | "turn" | "speed";
+const barText = (h: Harness, which: BarRow): string => {
+  const { place, turn, speed } = h.statusBarRows();
+  return h.screen()[which === "place" ? place : which === "turn" ? turn : speed] ?? "";
+};
+const turnRow = (h: Harness) => barText(h, "turn").trimStart();
+const placeRow = (h: Harness) => barText(h, "place").trimStart();
+/** The mode badges, at the other end of the place row, spacing normalized. */
+const badges = (h: Harness) => placeRow(h).trim().split(/\s+/).slice(1).join(" ");
+/** The effort slot: the last cell of the route, after the dot (`-` in ASCII). */
+const effortOf = (h: Harness) => turnRow(h).trim().match(/[•-] ?(\S+)$/)?.[1] ?? "";
 
-function expectContextMarking(footerText: string): void {
-  // T55: the bar sits between `ctx` and the number, with a width the line chose.
-  const mark = /ctx [█░]* ([\d.]+)([KM]?) \(([\d.]+)%\)/.exec(footerText);
-  expect(mark, `no context marking in ${JSON.stringify(footerText)}`).not.toBeNull();
-  // A session that has spent nothing says so, and never claims a window it does
-  // not have. `0 (0%)` is the honest idle reading.
-  const pct = Number(mark![3]);
-  const used = Number(mark![1]) * (mark![2] === "M" ? 1e6 : mark![2] === "K" ? 1e3 : 1);
-  if (pct === 0) expect(used).toBe(0);
-  else expect(used).toBeGreaterThan(0);
+function expectContextMarking(turnText: string): void {
+  // The bar reads `9.2%/100k`: the share of the window spent, and the window
+  // itself. The share is the honest part — a session that has spent nothing says
+  // `0%` rather than claiming a window it has not filled.
+  const mark = /([\d.]+)%\/([\d.]+)([kKmM]?)/.exec(turnText);
+  expect(mark, `no context reading in ${JSON.stringify(turnText)}`).not.toBeNull();
+  const window = Number(mark![2]) * (mark![3] === "M" ? 1e6 : mark![3] === "k" ? 1e3 : 1);
+  expect(window).toBeGreaterThan(0);
+  if (Number(mark![1]) === 0) expect(turnText).toContain("0%/");
+  // And it is a share of the window, not a number of tokens in a bar of blocks.
+  expect(Number(mark![1])).toBeLessThan(100);
 }
-const footerCell = (h: Harness, label: string) => {
-  const rows = h.screen().map((line, i) => ({ line, i })).filter(({ line }) => line.includes("e2e-model"));
-  const row = rows.at(-1)!.i;
+/**
+ * The cell a label is painted in, in the row given: the mode badge and the effort
+ * slot can say the same word (`auto` on a route that declares no levels), and
+ * only one of them is the badge.
+ */
+const barCell = (h: Harness, which: BarRow, label: string) => {
+  const { place, turn, speed } = h.statusBarRows();
+  const row = which === "place" ? place : which === "turn" ? turn : speed;
+  expect(row, `no ${which} row on screen`).toBeGreaterThanOrEqual(0);
   const col = h.screen()[row]!.indexOf(label);
-  expect(col).toBeGreaterThanOrEqual(0);
+  expect(col, `no ${JSON.stringify(label)} in ${JSON.stringify(barText(h, which))}`).toBeGreaterThanOrEqual(0);
   return h.term.buffer.active.getLine(h.term.buffer.active.viewportY + row)!.getCell(col)!;
 };
+/**
+ * Palette roles as a cell reports them. `getFgColor()` answers an index in the
+ * 256-colour palette, so the SGR the basic depth emits has to be translated:
+ * `muted` is SGR 90 (bright black) and lands on 8, `sky` is SGR 36 and lands
+ * on 6. Written out here because that translation is the easy mistake.
+ */
+const CELL = { muted: 8, sky: 6, lavender: 5, rose: 1 };
 const runningThought = (line: string) => /^\s*[·✢✺✶✻✽] Thinking/.test(line);
 
 test("headless -p writes only the answer and exits; json has a completed result", async () => {
@@ -238,8 +263,10 @@ test("tool call: read note.txt and send the real tool result back", async () => 
     expect(h.screen()[header + 1]).toContain("⎿");
     expect(h.screen().find(line => line.includes("READ_FINISHED"))).toMatch(/^  READ_FINISHED/);
     const prompt = h.screen().findIndex(line => line.includes("› Read note.txt"));
-    expect(h.screen()[prompt]).toMatch(/^  › /);
-    expect(h.screen()[prompt + 1]?.trim()).toBe("");
+    // The prompt is a block of the turn now, so it carries the rail like the tool
+    // card does — and the blank row after it does too.
+    expect(h.screen()[prompt]).toMatch(/^\s*▍ › /);
+    expect(h.screen()[prompt + 1]).toMatch(/^\s*(▍)?\s*$/);
     const answer = h.screen().findIndex(line => line.includes("READ_FINISHED"));
     expect(h.screen()[answer - 1]?.trim()).toBe("");
     expect(h.screen()[answer + 1]?.trim()).toBe("");
@@ -251,10 +278,15 @@ test("tool call: read note.txt and send the real tool result back", async () => 
   });
 });
 
-it("Ask footer label: always shows dim ask (fixed by T23)", async () => {
+it("Ask badge: always on screen, in the muted role (T23)", async () => {
   await scenario("ask-label", [], async (h) => {
-    expect(footer(h)).toMatch(/^ask\b/);
-    expect(footerCell(h, "ask").isDim()).toBeTruthy();
+    expect(badges(h)).toBe("ask");
+    // T23 said `ask` is always dim. The palette replaced the raw SGR with the
+    // `muted` role, which on a 16-colour terminal is bright black — the same
+    // quiet reading, reached through the swatch instead of the attribute. What
+    // T23 actually protects is that the mode is on screen and reads as inactive.
+    expect(barCell(h, "place", "ask").getFgColor()).toBe(CELL.muted);
+    expect(barCell(h, "place", "ask").isBold()).toBeFalsy();
     await h.dump("t23-after-footer-ask");
   });
 });
@@ -267,7 +299,7 @@ test("modes: Shift+Tab Plan/Build and /auto /ask /full change real permissions",
   ], async (h) => {
     const chatModeLines = () => h.screen().filter((line) => /^  ›/.test(line) && /mode|access/i.test(line));
     h.press("shiftTab");
-    await h.until(() => /^ask  plan\b/.test(footer(h)), 2000, "Plan label");
+    await h.until(() => badges(h) === "ask plan", 2000, "Plan label");
     await h.waitFor("Plan mode: kumo reads and plans");
     expect(chatModeLines()).toEqual([]);
     await h.dump("t23-after-footer-plan");
@@ -280,14 +312,17 @@ test("modes: Shift+Tab Plan/Build and /auto /ask /full change real permissions",
     expect(h.exit).toBeUndefined(); // Long denial must not crash the renderer.
     expect(chatModeLines()).toEqual([]);
     h.press("shiftTab");
-    await h.until(() => /^ask\b/.test(footer(h)), 2000, "Build");
+    await h.until(() => badges(h) === "ask", 2000, "Build");
     await h.waitFor("Build mode: kumo can change files again.");
     expect(chatModeLines()).toEqual([]);
     await h.prompt("/auto");
-    await h.until(() => /^auto\b/.test(footer(h)), 2000, "Auto");
+    await h.until(() => badges(h) === "auto", 2000, "Auto");
     await h.waitFor("Auto: kumo decides, risky actions still ask.");
     expect(chatModeLines()).toEqual([]);
-    expect(footerCell(h, "auto").getFgColor()).toBe(3);
+    // `auto` is the `sky` role now, not the raw yellow of T23: what has to survive
+    // is that it is a different colour from the `ask` badge it replaced.
+    expect(barCell(h, "place", "auto").getFgColor()).toBe(CELL.sky);
+    expect(barCell(h, "place", "auto").getFgColor()).not.toBe(CELL.muted);
     await h.dump("t23-after-footer-auto");
     await h.prompt("Write auto.txt");
     await h.waitFor("AUTO_DONE");
@@ -295,7 +330,7 @@ test("modes: Shift+Tab Plan/Build and /auto /ask /full change real permissions",
     await h.prompt("/permissions");
     await h.waitFor("Ask: confirm every command");
     // The bar comes back on the frame after the panel, as everywhere else here.
-    await h.until(() => /^auto\b/.test(footer(h)), 2000, "Auto label under the panel");
+    await h.until(() => badges(h) === "auto", 2000, "Auto label under the panel");
     h.press("escape");
     await delay(200);
     await h.prompt("/full");
@@ -303,20 +338,21 @@ test("modes: Shift+Tab Plan/Build and /auto /ask /full change real permissions",
     await h.waitFor("Cancel");
     await h.waitFor("Enable");
     await h.waitStable(300, 2000);
-    expect(footer(h)).toMatch(/^auto\b/); // Still Auto until confirmed.
+    expect(badges(h)).toBe("auto"); // Still Auto until confirmed.
     await h.dump("t23-after-full-confirmation");
     h.press("down"); await delay(50); h.press("enter");
-    await h.until(() => /^FULL ACCESS\b/.test(footer(h)), 2000, "Full access");
+    await h.until(() => badges(h) === "FULL ACCESS", 2000, "Full access");
     await h.waitFor("Full access: kumo never asks.");
     expect(chatModeLines()).toEqual([]);
-    expect(footerCell(h, "FULL ACCESS").getFgColor()).toBe(1);
-    expect(footerCell(h, "FULL ACCESS").isBold()).toBeTruthy();
+    // Full access is still the one badge that has to be noticed (T23): bold rose.
+    expect(barCell(h, "place", "FULL ACCESS").getFgColor()).toBe(CELL.rose);
+    expect(barCell(h, "place", "FULL ACCESS").isBold()).toBeTruthy();
     await h.dump("t23-after-footer-full");
     await h.prompt("Write full.txt");
     await h.waitFor("FULL_DONE");
     expect(readFileSync(join(h.project, "full.txt"), "utf8")).toBe("FULL_WORKS");
     await h.prompt("/ask");
-    await h.until(() => /^ask\b/.test(footer(h)) && !/^ask  plan/.test(footer(h)), 2000, "Ask again");
+    await h.until(() => badges(h) === "ask", 2000, "Ask again");
     await h.dump("t23-after-full-allows-write");
   });
 });
@@ -345,11 +381,11 @@ test("startup: header host and window known before first answer, pretty name (T2
     expect(head).not.toContain("Starting session");
     expect(head).toContain("127.0.0.1");
     expect(head).toContain("e2e-model Pretty");
-    // T55: the footer marks the context as `9.5K (9.5%)`, so the window is no
-    // longer printed and cannot be read off the screen. The `?` this line used to
-    // forbid is gone by construction: the marking has no unknown-window state.
-    expect(footer(h)).not.toContain("?");
-    expectContextMarking(footer(h));
+    // The turn row reads `0%/100k`: the share of the window spent, and the window.
+    // The `?` this line used to forbid is gone by construction — a reading with an
+    // unknown window is not one the bar can print.
+    expect(turnRow(h)).not.toContain("?");
+    expectContextMarking(turnRow(h));
   });
 });
 
@@ -362,10 +398,11 @@ test("cache-context: cached 9000/input 100 counts cached in ctx (T27b.2)", async
     await h.waitFor("CTX_DONE");
     await h.waitStable(400, 2000);
     // 100 + 9000 + 50 = 9150 / 100k ≈ 9.1-9.2% (old input+output only would show 0.1%)
-    // T55: the context bar sits between `ctx` and the number, and its width is
-    // whatever the line had room for.
-    expect(footer(h)).toMatch(/ctx [█░]* 9\./);
-    expect(footer(h)).toContain("cache");
+    // The turn row carries the cache hit and the context share, longest reading
+    // first: `CH98.9% 9.2%/100k`.
+    expect(turnRow(h)).toMatch(/CH9[0-9]\.\d%/);
+    expect(turnRow(h)).toMatch(/9\.\d%\/100k/);
+    expectContextMarking(turnRow(h));
   });
 });
 
@@ -582,20 +619,23 @@ test("PageUp reads the transcript and the composer stays on the last row", async
     // Long enough that the terminal has to scroll: the situation that used to cost
     // the user their composer.
     expect(live.join("\n")).not.toContain("ONE");
+    // The band is the bottom three rows, and it is the same band after the scroll.
+    const liveBand = live.slice(-3);
+    expect(liveBand.join("\n")).toContain("e2e-model");
     await h.dump("scroll-live");
 
     h.press("pageUp");
     await h.waitFor("lines below");
     const up = h.screen();
-    // The first turn is readable again, and the footer is still the last row.
+    // The first turn is readable again, and the composer stayed exactly where it was.
     expect(up.join("\n")).toContain("ONE");
-    expect(up.at(-1)).toContain("e2e-model");
-    expect(up.at(-1)).toBe(live.at(-1));
+    expect(up.slice(-3)).toEqual(liveBand);
+    expect(turnRow(h)).toContain("e2e-model");
     await h.dump("scroll-back");
 
     h.press("pageDown");
     await h.until(() => !h.screen().join("\n").includes("lines below"), 2000, "live edge");
-    expect(h.screen().at(-1)).toContain("e2e-model");
+    expect(h.screen().slice(-3)).toEqual(liveBand);
   });
 });
 
@@ -612,7 +652,7 @@ test("questions: Down Enter picks second option (T28A)", async () => {
     textScript("Q_DONE"),
   ], async (h) => {
     await h.prompt("Pick a database");
-    await h.waitFor("Enter choose");
+    await h.waitFor("enter select");
     h.press("down");
     await delay(100);
     h.press("enter");
@@ -629,7 +669,7 @@ test("questions: multi-select Space Space Enter (T28A)", async () => {
     textScript("Q_DONE"),
   ], async (h) => {
     await h.prompt("Pick");
-    await h.waitFor("Enter choose");
+    await h.waitFor("enter select");
     h.type(" ");
     await delay(100);
     h.press("down");
@@ -651,7 +691,7 @@ test("questions: Other free text (T28A)", async () => {
     textScript("Q_DONE"),
   ], async (h) => {
     await h.prompt("Pick");
-    await h.waitFor("Enter choose");
+    await h.waitFor("enter select");
     h.press("down");
     await delay(100);
     h.press("enter");
@@ -670,7 +710,7 @@ test("questions: Esc skips, turn goes on (T28A)", async () => {
     textScript("Q_DONE"),
   ], async (h) => {
     await h.prompt("Pick");
-    await h.waitFor("Enter choose");
+    await h.waitFor("enter select");
     h.press("escape");
     await h.waitFor("Q_DONE");
     const toolMsg = h.server.mainRequests()[1]!.body.messages.find((m) => m.role === "tool");
@@ -736,7 +776,7 @@ test("keys: Tab on empty editor changes nothing (T31.4)", async () => {
     await delay(400);
     await h.flush();
     expect(h.server.mainRequests()).toHaveLength(0);
-    expect(footer(h)).not.toContain("plan");
+    expect(badges(h)).not.toContain("plan");
   });
 });
 
@@ -757,10 +797,10 @@ test("/new: two turns, new conversation, next request has only new history (T31.
     expect(lastBody).not.toContain("First hello");
     expect(lastBody).not.toContain("Second hello");
     expect(h.screen().join("\n")).not.toContain("First hello");
-    // T55: the context is marked with its absolute cost. The window is no longer
-    // printed, so the marking is checked for shape rather than for a literal.
+    // A fresh conversation has spent nothing, and the bar says so: `0%/100k`,
+    // checked for shape because the share depends on the session.
     await h.waitStable(300, 2000);
-    expectContextMarking(footer(h));
+    expectContextMarking(turnRow(h));
   });
 });
 
@@ -839,7 +879,7 @@ test("effort: defaults medium; /effort off and ctrl+e high change request params
     textScript("TURN_ONE"), textScript("TURN_TWO"), textScript("TURN_THREE"),
   ], "ask", EFFORT_TEMPLATE, async (h) => {
     // Setup wrote the template → kumo defaults a local thinking model to medium.
-    await h.waitFor("effort medium", 15_000);
+    await h.until(() => effortOf(h) === "medium", 15_000, "effort medium");
     await h.prompt("one");
     await h.waitFor("TURN_ONE");
     const b1 = h.server.mainRequests()[0]!.body;
@@ -867,7 +907,7 @@ test("effort: defaults medium; /effort off and ctrl+e high change request params
     expect(b3.chat_template_kwargs?.reasoning_effort).toBe("high");
     expect(b3.chat_template_kwargs?.enable_thinking).toBe(true);
     // The bar comes back on the frame after the turn, as everywhere else here.
-    await h.until(() => footer(h).includes("effort high"), 2000, "effort high label");
+    await h.until(() => effortOf(h) === "high", 2000, "effort high label");
 
     // Cache rule: system and tools stay byte-identical across effort changes.
     const sys = (b: (typeof b1)): string =>
@@ -887,7 +927,7 @@ test.skipIf(process.platform === "win32")("judge + ghost suggestion send enable_
     toolScript("bash", { command: "touch t34_probe.txt", description: "create the probe file" }), textScript("TOOLED"),
   ], "auto", BINARY_TEMPLATE, async (h) => {
     // binary template → the default is "on"; footer tells the truth.
-    await h.waitFor("effort on", 15_000);
+    await h.until(() => effortOf(h) === "on", 15_000, "effort on");
     await h.prompt("create a file");
     await h.waitFor("TOOLED");
     await h.waitFor("✓ bash");
@@ -1058,7 +1098,7 @@ test("/model switches the wire model and keeps the prompt prefix byte-identical 
       await h.dump("t37-model-picker");
       h.press("down"); await delay(50); h.press("enter");
       await h.waitFor("Model: e2e-model-2 (local) · next message");
-      await h.until(() => /e2e-model-2/.test(footer(h)), 3000, "footer follows the route");
+      await h.until(() => /e2e-model-2/.test(turnRow(h)), 3000, "the bar follows the route");
 
       await h.prompt("two");
       await h.waitFor("TURN_TWO");
@@ -1119,11 +1159,11 @@ test("/model <route> sets directly and /provider lists them all (T37, T39)", asy
       await h.prompt("hi");
       await h.waitFor("TURN_DONE");
       expect(h.server.mainRequests().at(-1)!.body.model).toBe("e2e-model-2");
-      // T55: the footer marks the context, and the marking is well formed. The
-      // window itself is no longer printed anywhere, so it cannot be read off the
-      // screen; the e2e that used to check it checked a string that is now gone.
+      // The route changed, so the bar reprints the window of the model now in use
+      // (50k here, not the 100k of the first route); the reading is checked for
+      // shape, and the route cell is what names the model.
       await h.waitStable(300, 2000);
-      expectContextMarking(footer(h));
+      expectContextMarking(turnRow(h));
 
       // An unknown provider is refused, naming what is configured.
       await h.prompt("/model grok/x");

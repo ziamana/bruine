@@ -350,3 +350,52 @@ ask  ctx 12% of 131k  ·  52 tok/s  ·  pp 1.2k tok/s  ·  (local) Ornith 1.5 9B
 
 TPS is now per LLM call (n / (t1 - t0), live deltas / (now - t0)), never the server figure.
 Reasoning grows word by word, subtitle on overflow, `✢ Thinking` before the first word.
+
+## D8 (the status bar on three rows, the rail on the prompt, filterable questions)
+
+Thirteen scenarios read a rendering that no longer exists. Every fix is in the assertions and
+the harness; no product code changed.
+
+Bar before (one line, read as "the last line that mentions the model"):
+
+```text
+ask  ctx ██████░░░ 9.2% (37%)  ·  (local) e2e-model Pretty  ·  effort medium
+```
+
+Bar after (three rows; the badges moved to the place row, the effort is the last cell of the route):
+
+```text
+  /tmp/kumo-e2e-project-bCLPvk                                                       ask  plan
+  CH98.9% 9.2%/100k                                        (local) e2e-model Pretty • auto
+  ↯ TPS: 5.0 tok/s
+```
+
+What each assertion had to stop assuming:
+
+| Old assumption | New truth | Read by |
+| --- | --- | --- |
+| the footer is the last row with the model in it | three rows, found by what they say | `Harness.statusBarRows()` |
+| the mode label opens the footer line | the badges sit at the right end of the place row | `badges()` |
+| `ctx ███░ 9.2% (37%)` | `9.2%/100k`, the share and the window | `expectContextMarking()` |
+| `effort medium` spelled out | the effort is the last cell, `• medium` | `effortOf()` |
+| `cache 97%` in the footer | `CH98.9%` | the turn row directly |
+| `Enter choose` in the question pop-up | `enter select` | `waitFor` |
+| `^  › ` on a prompt | `▍ › ` — the prompt is a block of the turn and carries the rail | the tool-call scenario |
+| the band is the last row of the screen | the band is the last three rows, compared as a block | the PageUp scenario |
+
+`footerCell` searched every row for the label and took the last hit, which is wrong twice over
+now: the badge and the effort slot both say `auto` on a route that declares no reasoning levels.
+It is `barCell(row, label)` now, and the row is named.
+
+### Finding: T23's badge colours are superseded by the palette
+
+T23 §48 asks for `ask` dim, `auto` yellow, `FULL ACCESS` red bold. The footer now paints the
+badges through palette roles: `ask` is `muted` (bright black on 16 colours), `auto` is `sky`,
+`plan` is `lavender`, `FULL ACCESS` is bold `rose`. So `ask` is no longer the dim attribute and
+`auto` is no longer yellow.
+
+That is a deliberate change, not a fault: the mode is still always on screen, `FULL ACCESS` is
+still the loud one, and the three quieter badges stay distinguishable from each other at 16
+colours (90 / 36 / 35). The e2e assertions follow the intent rather than the letter — `ask` is
+present, muted and not bold; `auto` is `sky` and not the `ask` grey; `FULL ACCESS` is bold rose.
+Worth a line in the ticket either way, because T23 still says dim and yellow.

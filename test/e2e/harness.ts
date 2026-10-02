@@ -159,6 +159,28 @@ export class Harness {
     const buffer = this.term.buffer.active;
     return Array.from({ length: this.term.rows }, (_, row) => buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? "");
   }
+  /**
+   * The rows of the status bar, found by what they say rather than by counting
+   * from the bottom: the middle row carries the readings and the route, the row
+   * above it the place and the mode badges, the row below it the throughput when
+   * the row above had room for it. `-1` is a row the bar has not painted.
+   *
+   * The bar is three rows now, and a test that reads "the footer" as the last
+   * line reads the wrong one as soon as the throughput shows up.
+   */
+  statusBarRows(): { place: number; turn: number; speed: number } {
+    const rows = this.screen();
+    // The context reading is the one cell range the turn row always has when the
+    // window is known, and the cockpit never prints it in this shape. The window
+    // is written the way a person says one: `100k`, `1.0M`.
+    let turn = -1;
+    for (let row = rows.length - 1; row >= 0; row -= 1) {
+      if (/\d%\/[\d.]+[kKmM]?\b/.test(rows[row]!)) { turn = row; break; }
+    }
+    if (turn < 0) return { place: -1, turn: -1, speed: -1 };
+    const below = rows[turn + 1] ?? "";
+    return { place: turn - 1, turn, speed: /\bTPS\b|tok\/s/.test(below) ? turn + 1 : -1 };
+  }
   async until(predicate: () => boolean, ms = 15_000, label = "condition") {
     const deadline = Date.now() + ms;
     do {

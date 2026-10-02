@@ -8,7 +8,6 @@ import { KumoUi } from "../src/ui/kumo-ui.js";
 import { ReasoningComponent } from "../src/ui/reasoning-component.js";
 import { ToolCallComponent } from "../src/ui/tool-call-component.js";
 import { AssistantTextComponent, userMessageComponent } from "../src/ui/assistant-text.js";
-import { FooterComponent } from "../src/ui/footer.js";
 import { TpsMeter } from "../src/ui/tps.js";
 import { attachTui } from "../src/plugins/render.js";
 import { LineEmitter, Repl } from "../src/plugins/repl.js";
@@ -413,170 +412,6 @@ describe("TpsMeter (T25.1, honest per-call numbers)", () => {
   });
 });
 
-describe("FooterComponent (T25.2)", () => {
-  test("shows ctx, tok/s, model and effort without (auto)", () => {
-    const f = new FooterComponent(UNICODE_ICONS);
-    f.set({
-      contextUsed: 16_100,
-      contextWindow: 131_000,
-      model: "Ornith 1.5 9B",
-      provider: "local",
-      effort: "low",
-      tps: 52.3,
-      pp: 1200,
-    });
-    const lines = f.render(100).map(strip);
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain("ask");
-    expect(lines[0]).toMatch(/ctx [█░]+ 16\.1K \(12%\)/);
-    expect(lines[0]).toContain("52 tok/s");
-    expect(lines[0]).toContain("pp 1.2k tok/s");
-    expect(lines[0]).toContain("(local) Ornith 1.5 9B");
-    expect(lines[0]).toContain("effort low");
-    expect(lines[0]).not.toContain("(auto)");
-    expect(lines[0]).not.toContain("TPS:");
-  });
-
-  test("the context meter is always on screen, at any depth (T55)", () => {
-    // The defect: the only meter lived in the cockpit, behind ctrl+b AND at 116+
-    // columns, so a default session had no bar at all — only a number that
-    // changed once per turn.
-    const f = new FooterComponent(UNICODE_ICONS);
-    f.set({ model: "m", contextUsed: 25_000, contextWindow: 100_000 });
-    const line = f.render(120).map(strip)[0]!;
-    expect(line).toContain("░"); // a bar, at the very least
-    // It fills with the number, so the two can never disagree.
-    expect(line).toMatch(/█+░+/);
-    expect(line).toMatch(/ctx █+░* 25\.0K \(25%\)/);
-    // ASCII terminals get a bar too, never a colour-only cue.
-    const ascii = new FooterComponent(ASCII_ICONS);
-    ascii.set({ model: "m", contextUsed: 25_000, contextWindow: 100_000 });
-    const plain = ascii.render(120)[0]!;
-    expect(plain).toMatch(/█+░+/);
-  });
-
-  test("the bar spends the room that is left, and the route is never what gets cut (T55)", () => {
-    const f = new FooterComponent(UNICODE_ICONS);
-    f.set({
-      model: "Ornith-1.5-9B-Q4_K_M", provider: "local", contextUsed: 16_100, contextWindow: 131_000,
-      tps: 52, pp: 1.2, effort: "low",
-    });
-    // Room to spare: the long bar, and every metric kept.
-    const wide = f.render(120).map(strip)[0]!;
-    expect(wide).toMatch(/ctx [█░]{10} 16\.1K/);
-    expect(wide).toContain("pp ");
-    // Tighter: the bar shortens and the prefill rate, which is a diagnostic rather
-    // than a reading, gives up its room. The route and the effort are not
-    // negotiable, so they are what the bar is measured against.
-    const tight = f.render(100).map(strip)[0]!;
-    expect(tight).toMatch(/ctx [█░]+ /);
-    expect(tight).toContain("Ornith-1.5-9B-Q4_K_M");
-    expect(tight).toContain("effort low");
-    expect(tight.length).toBeLessThanOrEqual(100);
-    // Tightest there is: no bar rather than a cut route.
-    const tiny = f.render(46).map(strip)[0]!;
-    expect(tiny).toContain("FULL ACCESS".slice(0, 0) + "ask");
-    expect(tiny.length).toBeLessThanOrEqual(46);
-  });
-
-  test("the context is marked with what it actually costs, not only a percentage (T55)", async () => {
-    const { formatVolume } = await import("../src/ui/footer.js");
-    // A percentage alone is abstract: `ctx 25% of 1M` does not say whether that is
-    // 4k or 259k tokens, and the absolute number is what a cache and a bill care
-    // about. Marked as `259.0K (25%)` instead.
-    expect(formatVolume(259_000)).toBe("259.0K");
-    expect(formatVolume(9_500)).toBe("9.5K");
-    expect(formatVolume(1_036_000)).toBe("1.0M");
-    expect(formatVolume(999)).toBe("999");
-    expect(formatVolume(0)).toBe("0");
-
-    const f = new FooterComponent(UNICODE_ICONS);
-    f.set({ model: "m", contextUsed: 259_000, contextWindow: 1_036_000 });
-    expect(f.render(120).map(strip)[0]).toMatch(/ctx █+░* 259\.0K \(25%\)/);
-    // The window is not smuggled back in: the percentage already carries it.
-    expect(f.render(120).map(strip)[0]).not.toContain("of 1M");
-  });
-
-  test("an unknown window is admitted, never invented (T55)", () => {
-    const f = new FooterComponent(UNICODE_ICONS);
-    f.set({ model: "m" });
-    const line = f.render(120).map(strip)[0]!;
-    // No window means no honest percentage, so none is printed.
-    expect(line).toContain("ctx 0");
-    expect(line).not.toContain("NaN");
-    expect(line).not.toContain("Infinity");
-  });
-
-  test("percent below 10 shows one decimal, else integer; gguf basename", () => {
-    const f = new FooterComponent(UNICODE_ICONS);
-    f.set({ contextUsed: 9500, contextWindow: 100_000, model: "/etc/models/ornith-9b.Q4_K_M.gguf", provider: "local" });
-    expect(f.render(100).map(strip)[0]).toMatch(/ctx █+░* 9\.5K \(9\.5%\)/);
-    expect(f.render(100).map(strip)[0]).toContain("ornith-9b.Q4_K_M");
-    expect(f.render(100).map(strip)[0]).not.toContain("/etc");
-    f.set({ contextUsed: 12_300, contextWindow: 100_000 });
-    expect(f.render(100).map(strip)[0]).toMatch(/ctx █+░* 12\.3K \(12%\)/);
-  });
-
-  test("ctx includes cached: 9000 + 100 + 0 over 100k → 9.1% (T27b.2)", () => {
-    const f = new FooterComponent(UNICODE_ICONS);
-    f.set({ contextUsed: 9100, contextWindow: 100000, model: "m" });
-    expect(f.render(100).map(strip)[0]).toMatch(/ctx █+░* 9\.1K \(9\.1%\)/);
-  });
-
-  test("footer colors: tok/s 10/20/45 and ctx 40/70/78 (T31.5)", async () => {
-    const raw = (tps?: number, used?: number): string => {
-      const f = new FooterComponent(UNICODE_ICONS);
-      f.set({ model: "m", ...(tps !== undefined ? { tps } : {}), ...(used !== undefined ? { contextUsed: used, contextWindow: 100 } : {}) });
-      return f.render(120)[0]!;
-    };
-    expect(raw(10)).toContain("\x1b[31m10 tok/s");
-    expect(raw(20)).toContain("\x1b[33m20 tok/s");
-    expect(raw(45)).toContain("\x1b[32m45 tok/s");
-    expect(raw(undefined, 40)).toContain("\x1b[32mctx ████░░░░░░ 40 (40%)");
-    expect(raw(undefined, 70)).toContain("\x1b[33mctx ███████░░░ 70 (70%)");
-    expect(raw(undefined, 78)).toContain("\x1b[31mctx ████████░░ 78 (78%)");
-    const a = new FooterComponent(ASCII_ICONS);
-    a.set({ model: "m", tps: 45, contextUsed: 78, contextWindow: 100 });
-    expect(a.render(120)[0]).not.toMatch(/\x1b\[/);
-  });
-
-  test("renders placeholder state", () => {
-    const f = new FooterComponent(UNICODE_ICONS);
-    const line = f.render(80).map(strip)[0]!;
-    expect(line).toContain("ctx 0");
-    expect(line).not.toContain("(auto)");
-  });
-
-  test("cache colors and order: 97% green, first gray, unknown hidden (T27.1)", () => {
-    const f = new FooterComponent(UNICODE_ICONS);
-    f.set({ cachePct: 97, cacheFirst: false, tps: 52, model: "m", provider: "local" });
-    const line = f.render(120).map(strip)[0]!;
-    expect(line).toContain("cache 97%");
-    expect(line.indexOf("tok/s") < line.indexOf("cache")).toBe(true);
-    expect(line.indexOf("cache") < line.indexOf("(local)")).toBe(true);
-    const cell = ((): number => {
-      const row = f.render(120)[0]!;
-      return row.indexOf("cache 97%");
-    })();
-    expect(cell).toBeGreaterThanOrEqual(0);
-    const green = new FooterComponent(UNICODE_ICONS);
-    green.set({ cachePct: 97 });
-    expect(green.render(80)[0]).toContain("\x1b[32m");
-    const yellow = new FooterComponent(UNICODE_ICONS);
-    yellow.set({ cachePct: 50 });
-    expect(yellow.render(80)[0]).toContain("\x1b[33m");
-    const red = new FooterComponent(UNICODE_ICONS);
-    red.set({ cachePct: 10 });
-    expect(red.render(80)[0]).toContain("\x1b[31m");
-    const first = new FooterComponent(UNICODE_ICONS);
-    first.set({ cachePct: 97, cacheFirst: true });
-    expect(first.render(80)[0]).toContain("\x1b[90m");
-    const unknown = new FooterComponent(UNICODE_ICONS);
-    unknown.set({ model: "m" });
-    expect(unknown.render(80).map(strip)[0]).not.toContain("cache");
-  });
-});
-
 describe("LineEmitter + Repl over TUI events", () => {
   test("typed lines drive turns (no pause needed)", async () => {
     const emitter = new LineEmitter();
@@ -624,7 +459,10 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     expect(text).toContain("kumo");
     expect(text).toContain("v0.2.0");
     expect(text).toContain("escape interrupt");
-    expect(text).toContain("ctx 0");
+    // D3: the footer's three rows are the place, the turn and the route — a session
+    // with no turn yet says `no model` rather than a made-up reading.
+    expect(text).toContain("no model");
+    expect(text).toMatch(/~\/|\/home\/|ask/);
   });
 
   test("editor submit routes to the handler", () => {

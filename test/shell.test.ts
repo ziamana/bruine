@@ -160,7 +160,10 @@ describe("PageUp keeps the composer where the user left it", () => {
     // scrolls, and the composer is still on the last row where it was left.
     expect(scrolled).toHaveLength(terminal.rows);
     expect(scrolled.at(-1)).toBe(frame().at(-1));
-    expect(scrolled.at(-1)).toMatch(/ctx/);
+    // D3: the last row of the frame is the footer's route row — a context
+    // percentage and a model name, or an honest `no model` — so the band still
+    // holds the bottom of the screen while the transcript is read above.
+    expect(scrolled.at(-1)).toMatch(/%|no model/);
     // And the user can see how far back they are, so the window is not a mystery.
     expect(scrolled.join("\n")).toMatch(/lines below/);
 

@@ -36,8 +36,8 @@ describe("iconsFor (T14.5)", () => {
 describe("cross-platform source audit (T14.4)", () => {
   // The audit is about paths the app OPENS. A file that only ever prints a
   // location is not one of them, and has to be able to write the label a shell
-  // user expects to read.
-  const displayOnly = [join("gate", "rules.ts"), join("ui", "place.ts")];
+  // user expects to read: `place.ts` above the input, `footer.ts` on its last row.
+  const displayOnly = [join("gate", "rules.ts"), join("ui", "place.ts"), join("ui", "footer.ts")];
   test("no POSIX home paths or ~ strings in src/", () => {
     const offenders: string[] = [];
     for (const file of sourceFiles(join(__dirname, "..", "src"))) {

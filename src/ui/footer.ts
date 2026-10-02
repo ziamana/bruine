@@ -4,6 +4,7 @@ import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { clipStart } from "../render/reasoning.js";
 import { ansi } from "./theme.js";
 import { bgEnabled, onBg, paint, type PaletteRole } from "./palette.js";
+import { displayPlace } from "./place.js";
 import { SpeedHistory } from "./dock.js";
 
 /** The breathing room between the two ends of a row, in cells. */
@@ -81,23 +82,6 @@ export function displayModel(id?: string, name?: string): string {
   if (id === undefined || id === "") return "no model";
   const base = id.split(/[\\/]/).at(-1) ?? id;
   return base.replace(/\.gguf$/i, "");
-}
-
-/**
- * The working directory the way a person names it: home is a `~`.
- *
- * The same answer `displayPlace` gives for the row above the input, kept here so
- * the footer can say it without importing a component's rules from three files
- * away. A directory outside home keeps its full path, because shortening it would
- * name somewhere else.
- */
-export function displayCwd(cwd: string, home: string): string {
-  const root = home.replace(/[\\/]+$/, "");
-  const path = cwd === "" ? root : cwd;
-  if (root === "" || path === root) return "~";
-  if (!path.startsWith(root.endsWith("/") ? root : `${root}/`)) return path;
-  const rest = path.slice(root.length).replace(/^[\\/]/, "");
-  return rest === "" ? "~" : `~/${rest.split(/[\\/]/).join("/")}`;
 }
 
 /**
@@ -196,7 +180,8 @@ export class FooterComponent implements Component {
 
   /** `~/Bureau  ⎇ main`, with the mode badges at the other end of the row. */
   #placeRow(width: number): string {
-    const path = displayCwd(this.state.cwd ?? this.#cwd, this.#home);
+    // One rule for one answer: the place row above the input says it the same way.
+    const path = displayPlace(this.state.cwd ?? this.#cwd, this.#home);
     const badges = this.#badges();
     const glyph = this.#ascii ? "#" : "\u2387";
     const branch = (this.state.gitBranch ?? "").trim();

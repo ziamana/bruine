@@ -8,7 +8,7 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, test } from "vitest";
 import { ASCII_ICONS, UNICODE_ICONS } from "../src/render/chars.js";
-import { FooterComponent, displayCwd, displayModel, shortenHead } from "../src/ui/footer.js";
+import { FooterComponent, displayModel, shortenHead } from "../src/ui/footer.js";
 import { strip } from "./fakes.js";
 
 const HOME = "/home/tu44";
@@ -236,13 +236,12 @@ describe("widths, ASCII and no colour (D3)", () => {
 });
 
 describe("the paths it names (D3)", () => {
-  test("home is a `~`, anywhere else keeps its whole path", () => {
-    expect(displayCwd(`${HOME}/Bureau`, HOME)).toBe("~/Bureau");
-    expect(displayCwd(HOME, HOME)).toBe("~");
-    expect(displayCwd(`${HOME}`, `${HOME}/`)).toBe("~");
-    expect(displayCwd("/srv/kumo", HOME)).toBe("/srv/kumo");
-    expect(displayCwd("", HOME)).toBe("~");
-    expect(displayCwd(`${HOME}/Bureau/projets`, HOME)).toBe("~/Bureau/projets");
+  test("the place row says the place the way the row above the input says it", () => {
+    // One rule for one answer: `displayPlace` (place.ts, tested in shell.test.ts).
+    const f = new FooterComponent(UNICODE_ICONS, { cwd: `${HOME}/Bureau`, home: HOME });
+    expect(rows(f, 60)[0]).toContain("~/Bureau");
+    const outside = new FooterComponent(UNICODE_ICONS, { cwd: "/srv/kumo", home: HOME });
+    expect(rows(outside, 60)[0]).toContain("/srv/kumo");
   });
 
   test("a shortened name keeps the tail that names it", () => {

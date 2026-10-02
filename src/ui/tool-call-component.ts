@@ -1,7 +1,7 @@
 import type { Component } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
 import { isAbsolute, relative } from "node:path";
-import { clipCells, dim, sanitize, spinnerFrame } from "../render/reasoning.js";
+import { clipCells, sanitize, spinnerFrame } from "../render/reasoning.js";
 import { formatDuration } from "./tool-group.js";
 import type { RailState } from "./chat-layout.js";
 import { fileLink } from "./links.js";
@@ -121,21 +121,18 @@ export class ToolCallComponent implements Component {
       const plainLine = clipCells(`${spinnerFrame(this.now() - this.#startTime, this.icons)} ${toolPad}${detail}`, width);
       const fr = spinnerFrame(this.now() - this.#startTime, this.icons);
       if (stringWidth(plainLine) === stringWidth(`${fr} ${toolPad}${detail}`)) {
-        return [`${ansi.cyan(fr)} ${ansi.text(toolPad)}${ansi.gray(detail)}`];
+        return [`${ansi.cyan(fr)} ${ansi.text(toolPad)}${ansi.gray(detail)}`, ...(this.tool === "ask_user" ? [ansi.gray(clipCells(this.icons.think === "*" ? "Waiting for user input..." : "Waiting for user input…", width))] : [])];
       }
-      return [plainLine];
+      return [plainLine, ...(this.tool === "ask_user" ? [ansi.gray(clipCells(this.icons.think === "*" ? "Waiting for user input..." : "Waiting for user input…", width))] : [])];
     }
     const mark = this.#done.ok ? ansi.green(this.icons.ok) : ansi.red(this.icons.fail);
-    // T55 P1a: a duration that says nothing is not printed at all, and one past
-    // ten seconds loses its decimal.
-    const dur = formatDuration(this.#done.seconds);
+    const dur = formatDuration(this.#done.seconds) ?? (this.#done.ok ? "0.0s" : undefined);
     const counter = this.#diff === undefined ? "" : `  ${diffCounter(this.#diff)}`;
-    const counterCells = this.#diff === undefined ? 0 : 2 + `+${String(this.#diff.added)} -${String(this.#diff.removed)}`.length;
-    const durCells = (dur === undefined ? 0 : stringWidth(dur) + 2) + counterCells;
+    const durCells = this.#diff === undefined ? 0 : 2 + `+${String(this.#diff.added)} -${String(this.#diff.removed)}`.length;
     const prefixCells = 1 + 1 + 7 + 2;
     const avail = Math.max(0, width - prefixCells - durCells);
     const budget = Math.min(60, avail);
-    const durPart = counter + (dur === undefined ? "" : `  ${ansi.faint(dur)}`);
+    const durPart = counter;
     // Two renderings of the same summary: the linked one when the line fits, and
     // the plain one for the narrow fallback, because clipCells walks graphemes
     // and must never be handed an escape sequence to cut through.
@@ -153,11 +150,13 @@ export class ToolCallComponent implements Component {
     const out = [head];
     if (this.#diff !== undefined && this.#diff.lines.length > 0) {
       out.push(...renderDiff(this.#diff, Math.max(1, width - 2), this.icons.think === "*").map((l) => `  ${l}`));
+      if (dur !== undefined) out.push(ansi.gray(clipCells(`Took ${dur}`, width)));
       return out;
     }
     const branch = this.icons.think === "*" ? ">" : "⎿";
-    this.#done.lines.forEach((line, i) => out.push(dim(clipCells(`${i === 0 ? `  ${branch} ` : "    "}${line}`, width))));
-    if (this.#done.rest > 0) out.push(dim(clipCells(`    ${this.icons.think === "*" ? "..." : "…"} ${this.#done.rest} more lines`, width)));
+    this.#done.lines.forEach((line, i) => out.push(ansi.gray(clipCells(`${i === 0 ? `  ${branch} ` : "    "}${line}`, width))));
+    if (this.#done.rest > 0) out.push(ansi.gray(clipCells(`    ${this.icons.think === "*" ? "..." : "…"} ${this.#done.rest} more lines`, width)));
+    if (dur !== undefined) out.push(ansi.gray(clipCells(`Took ${dur}`, width)));
     return out;
   }
   invalidate(): void {}

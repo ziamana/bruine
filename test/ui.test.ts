@@ -134,7 +134,7 @@ describe("ToolCallComponent (T27.2 aligned + rail)", () => {
     const lines = t.render(60).map(strip);
     expect(lines[0].startsWith("✓ bash   ")).toBe(true);
     expect(lines[0]).toContain("ls -la");
-    expect(lines[0].endsWith("1.5s")).toBe(true);
+    expect(lines.at(-1)).toBe("Took 1.5s");
     expect(lines[1].trim()).toBe("⎿ a");
     expect(lines[2].trim()).toBe("b");
   });
@@ -204,7 +204,7 @@ describe("ToolCallComponent (T27.2 aligned + rail)", () => {
     // say "+2 files", which is a lie for a run of `grep` or `web_fetch`.
     expect(strip(c.render(60)[0])).toContain("+2 more");
     // And a group that took 0.2s keeps its duration.
-    expect(strip(c.render(60)[0])).toContain("0.2s");
+    expect(strip(c.render(60).at(-1)!)).toBe("Took 0.2s");
     const mixed = [
       { tool: "read", ok: true, seconds: 0.1 },
       { tool: "read", ok: false, seconds: 0.1 },
@@ -287,7 +287,7 @@ describe("ToolCallComponent (T27.2 aligned + rail)", () => {
     const t = new ToolCallComponent("bash", () => 0, UNICODE_ICONS);
     t.result(true, Array.from({ length: 12 }, (_, i) => `l${i + 1}`).join("\n"));
     const lines = t.render(60).map(strip);
-    expect(lines).toHaveLength(7);
+    expect(lines).toHaveLength(8);
     expect(lines[6].trim()).toBe("… 7 more lines");
   });
 
@@ -681,7 +681,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     slow.setArgs('{"command":"npm test"}');
     t = 4200;
     slow.result(true, "ok");
-    const line = strip(slow.render(80)[0]!);
+    const line = strip(slow.render(80).at(-1)!);
     expect(line).toContain("4.2s");
   });
 
@@ -709,11 +709,11 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     clock = 2200;
     slow.result(true, "ok");
     ui.addChat(slow);
-    const line = ui.tui.render(100).map(strip).find((l) => l.includes("pnpm test"))!;
+    const line = ui.tui.render(100).map(strip).find((l) => l.includes("Took 2.2s"))!;
     // The card reaches the right margin, so a line that ends in a measurement used
     // to end on the card border with nothing after it. Two cells of card now follow
     // the number: the same margin the page has on the other side.
-    expect(line.endsWith("2.2s  ")).toBe(true);
+    expect(line.trimEnd().endsWith("Took 2.2s")).toBe(true);
     expect(visibleWidth(line)).toBe(98);
   });
 

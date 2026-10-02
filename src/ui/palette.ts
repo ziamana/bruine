@@ -55,6 +55,14 @@ export const NUAGE = {
   // from the background the terminal reports.
   surface: { hex: "#1c2030", basic: 40 },
   chip: { hex: "#262c3f", basic: 40 },
+  // Transcript surfaces: muted text remains above 4.5:1 on every block.
+  userBlock: { hex: "#152a36", basic: 40 },
+  toolOk: { hex: "#152b1e", basic: 40 },
+  toolPending: { hex: "#252830", basic: 40 },
+  toolErr: { hex: "#3a1820", basic: 40 },
+  railActive: { hex: "#afe3ff", basic: 36 },
+  railActiveEnd: { hex: "#8fd4ff", basic: 36 },
+  railErrorEnd: { hex: "#c04a5e", basic: 31 },
   edge: { hex: "#4aa8e0", basic: 34 },
   onSky: { hex: "#0c2b3d", basic: 30 },
   // Diff backgrounds: a quiet green and red band behind added and removed lines.

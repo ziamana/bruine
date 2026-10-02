@@ -8,7 +8,8 @@ import {
 } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
 import { kumoIcons, withoutEmoji, type KumoIcons } from "../render/chars.js";
-import { blendHex, bgEnabled, boxLine, colorDepth, fillLine, paintHex } from "./palette.js";
+import { blendHex, bgEnabled, boxLine, colorDepth, fillLine, paintHex, NUAGE, type PaletteRole } from "./palette.js";
+import { reasoningStyle } from "../render/reasoning.js";
 import { ansi } from "./theme.js";
 
 /** Columns of empty space kept on each side of a bottom-area component. */
@@ -31,12 +32,12 @@ export function chipMarkers(line: string): string {
 
 /** The rail's top and bottom colors, so a tool call fades down its own height. */
 const RAIL_FADE = {
-  blue: ["#7dcfff", "#4aa8e0"],
-  red: ["#ff7a90", "#c04a5e"],
+  blue: [NUAGE.sky.hex, NUAGE.skyDeep.hex],
+  red: [NUAGE.rose.hex, NUAGE.railErrorEnd.hex],
   // T55 P1c: the live rail is the brightest mark in the transcript. A tool in
   // flight and a tool that finished ten seconds ago used to be the same blue, so
   // "where is kumo right now" meant reading every block.
-  active: ["#afe3ff", "#8fd4ff"],
+  active: [NUAGE.railActive.hex, NUAGE.railActiveEnd.hex],
 } as const;
 
 /** What the left rail is saying: live, settled, or failed. */
@@ -73,20 +74,22 @@ export class ChatTranscript extends Container {
     // next, and the gray starts at the rail: the 2-column page margins stay unpainted
     // on both sides.
     const cardCells = Math.max(1, width - 4);
-    const card = (text: string): string => `  ${boxLine("surface", text, cardCells)}`;
+    const card = (role: PaletteRole, text: string): string => `  ${boxLine(role, text, cardCells)}`;
     for (const child of this.children) {
       const rail = (child as { rail?: RailState }).rail;
       // Same 2-column margin on both sides: railed blocks lose 2 more cells to "▍ "
       // and 2 more to the right margin, so a line that ends in a measurement
       // (the duration, the diff counter) has 2 cells of gray after it instead of
       // finishing on the card border.
+      const role = rail === "active" ? "toolPending" : rail === "red" ? "toolErr" : "toolOk";
+      const showRail = !bgEnabled();
       const block = child.render(rail === undefined ? inner : Math.max(1, width - 8));
       if (!block.length) continue;
       lines.push("");
       // The rail runs the full height of the card, padding lines included (Aron: "la
       // barre bleue ne va pas jusqu'au bout"); its gradient spans all of them.
       const railSpan = block.length + 1;
-      if (rail !== undefined) lines.push(card(railPaint(rail, railChar, 0)));
+      if (rail !== undefined) lines.push(card(role, showRail ? railPaint(rail, railChar, 0) : ""));
       if ((child as { surface?: boolean }).surface === true) {
         // User prompt: a full-width tinted band (Nuage), one line of padding each
         // side, opening on the same 1-column accent as the console band.
@@ -99,7 +102,7 @@ export class ChatTranscript extends Container {
           // three characters replaced by "...".
           const cut = visibleWidth(text) > inner ? truncateToWidth(text, inner) : text;
           const body = painted ? cut + " ".repeat(Math.max(0, inner - visibleWidth(cut))) : cut;
-          return fillLine("surface", (painted ? ansi.edge(" ") : " ") + body);
+          return fillLine("userBlock", (painted ? " " : railPaint("blue", railChar, 0)) + body);
         };
         // T55 P1b: the turn number rides the band's own top line, right-aligned.
         // It costs no extra row (that line was already a blank pad), and it lands
@@ -119,16 +122,16 @@ export class ChatTranscript extends Container {
       }
       const last = block.length - 1;
       for (const [i, line] of block.entries()) {
-        const clean = withoutEmoji(line);
+        const clean = child.constructor.name === "ReasoningComponent" ? reasoningStyle(withoutEmoji(line)) : withoutEmoji(line);
         if (rail === undefined) {
           lines.push(truncateToWidth(`  ${clean}`, width - 2));
         } else {
           const colored = railPaint(rail, railChar, (i + 1) / railSpan);
-          const body = `${colored} ${clean}`;
-          lines.push(card(visibleWidth(body) > cardCells ? truncateToWidth(body, cardCells) : body));
+          const body = `${showRail ? colored : " "} ${clean}`;
+          lines.push(card(role, visibleWidth(body) > cardCells ? truncateToWidth(body, cardCells) : body));
         }
       }
-      if (rail !== undefined) lines.push(card(railPaint(rail, railChar, 1)));
+      if (rail !== undefined) lines.push(card(role, showRail ? railPaint(rail, railChar, 1) : ""));
     }
     return lines;
   }

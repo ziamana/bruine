@@ -1,7 +1,13 @@
+import { colorDepth, paint } from "../ui/palette.js";
 import stringWidth from "string-width";
 import { kumoIcons, withoutEmoji, type KumoIcons } from "./chars.js";
 
 export interface Screen { write(s: string): void; columns: number; }
+/** Readable, quiet reasoning; no terminal-specific dimming on body text. */
+export function reasoningStyle(text: string): string {
+  const plain = text.replace(/\x1b\[[0-9;]*m/g, "");
+  return colorDepth() === "none" ? plain : `\x1b[3m${paint("muted", plain)}\x1b[23m`;
+}
 export function dim(s: string): string { return `\x1b[2m${s}\x1b[22m`; }
 export function sanitize(s: string): string {
   return withoutEmoji(s).replace(/[\x00-\x09\x0b-\x1f\x7f\x80-\x9f]/g, " ");

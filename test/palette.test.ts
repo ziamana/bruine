@@ -249,7 +249,7 @@ describe("painted transcript (T40)", () => {
     process.env.KUMO_COLOR = "truecolor";
     resetColorDepth();
     const text = render("ship it");
-    expect(text).toContain("\x1b[48;2;74;168;224m \x1b[49m");
+    expect(text).toContain(bgCode("userBlock", "truecolor"));
     for (const line of text.split("\n").filter((l) => l !== "")) {
       // Every painted line ends by letting EL paint the last cell, never by
       // writing it (the empty spacer between blocks is the transcript's, unpainted).
@@ -363,7 +363,7 @@ describe("prompt band keeps its columns (T40)", () => {
   test("the prompt still starts in column 2, accent or not", () => {
     // The glyph is the platform's own (ASCII where the terminal is not UTF-8);
     // what this test is about is the two leading columns around it.
-    const prompt = `^ {2}${kumoIcons().prompt} Read note\\.txt`;
+    const prompt = `^[ ▍|] ${kumoIcons().prompt} Read note\\.txt`;
     const start = (): string => {
       const t = new ChatTranscript();
       t.addChild(userMessageComponent("Read note.txt"));

@@ -32,12 +32,12 @@ export class CollapsedToolsComponent implements Component {
     // dropped when it would only say 0.0s.
     const summary = `+${String(this.extra)} more`;
     const dur = formatDuration(this.seconds);
-    const durCells = dur === undefined ? 0 : stringWidth(dur) + 2;
+    const durCells = 0;
     const prefixCells = 1 + 1 + 7 + 2;
     const avail = Math.max(0, width - prefixCells - durCells);
     const padded = padCells(summary.slice(0, Math.max(0, avail)), avail);
-    const durPart = dur === undefined ? "" : `  ${ansi.faint(dur)}`;
-    return [mark + clipCells(` ${toolPad}  ${padded}${durPart}`, Math.max(0, width - 1))];
+    const durPart = "";
+    return [mark + clipCells(` ${toolPad}  ${padded}${durPart}`, Math.max(0, width - 1)), ...(dur === undefined ? [] : [ansi.gray(clipCells(`Took ${dur}`, width))])];
   }
   invalidate(): void {}
 }

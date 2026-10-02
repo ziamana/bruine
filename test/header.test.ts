@@ -156,6 +156,21 @@ describe("the header inside the screen", () => {
   });
 });
 
+describe("air above the wordmark", () => {
+  afterEach(() => resetColorDepth());
+
+  test("the screen opens on a blank row, and the wordmark is the second", () => {
+    process.env.KUMO_COLOR = "truecolor";
+    resetColorDepth();
+    const ui = new KumoUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
+    ui.updateHeader();
+    const rows = ui.tui.render(100).map(strip);
+    expect(rows[0]).toBe("");
+    expect(rows[1]).toMatch(/[\u2588\u2584\u2580]/);
+    delete process.env.KUMO_COLOR;
+  });
+});
+
 describe("a launch takes the whole terminal", () => {
   const saved = { tty: process.stdout.isTTY, ci: process.env.CI, keep: process.env.KUMO_NO_CLEAR };
   afterEach(() => {

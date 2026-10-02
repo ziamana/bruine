@@ -5,6 +5,7 @@ import {
   matchesKey,
   ProcessTerminal,
   SelectList,
+  Spacer,
   Text,
   TuiMainScreen,
   CombinedAutocompleteProvider,
@@ -512,7 +513,9 @@ export class KumoUi {
     bottomZones.addChild(this.promptFrame);
     bottomZones.addChild(this.footer);
     this.shell = new Shell(
-      [this.header],
+      // One blank row above the wordmark: the screen opens with air over the mark
+      // instead of the mark against the top edge of the terminal.
+      [new Spacer(1), this.header],
       this.chat,
       [new Margin(new Gap(this.taskPanel)), new Margin(this.noticeBox), new Margin(bottomZones)],
       () => this.terminal.rows,

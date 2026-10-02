@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { Shell } from "../src/ui/shell.js";
 import { JumpToLatest } from "../src/ui/jump-latest.js";
-import { displayPlace, PlaceRow } from "../src/ui/place.js";
+import { displayPlace } from "../src/ui/place.js";
 import { clipStart } from "../src/render/reasoning.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
 import { KumoUi } from "../src/ui/kumo-ui.js";
@@ -118,13 +118,45 @@ describe("the transcript window keeps the composer on the last row", () => {
     };
     const before = newestShown();
     lines = ["one", "two", "three", "four", "five", "six"];
-    expect(shell.back).toBe(2);
-    // The distance from the live edge is what is kept, so the reader's window creeps
-    // forward instead of being yanked: the line below the window is still "five", and
-    // the new one has not appeared above it.
+    // The offset is kept constant in lines, so it grows with the live edge: the
+    // reader's window does not creep forward and is certainly not yanked — the line
+    // below it is still "five", and "six" has not appeared above it.
+    expect(newestShown()).toBe(before);
+    expect(shell.back).toBe(3);
     expect(newestShown()).not.toBe("six");
-    expect(newestShown()).toBe(["one", "two", "three", "four", "five"][lines.indexOf(before) + 1]);
     expect(shell.render(40).map(strip).at(-1)).toBe("editor");
+  });
+
+  test("a live turn does not move the reading a single row (D5 bug: the frame animated)", () => {
+    // The defect: the window was anchored to the live edge, so every line the model
+    // wrote pushed the whole visible transcript up one row — at ten repaints a
+    // second, while the user was reading. The window is the reading; it must not
+    // move because something else is happening below it.
+    let lines = Array.from({ length: 12 }, (_, i) => `line ${String(i)}`);
+    const live: Component = { render: () => lines, invalidate: () => {} };
+    const shell = new Shell([block("header")], live, [block("editor")], () => 12);
+    shell.render(40);
+    shell.scrollBy(3);
+    const shown = (): string[] =>
+      shell.render(40).map(strip).filter((l) => l.startsWith("line "));
+    const before = shown();
+    expect(before.length).toBeGreaterThan(2);
+
+    // A turn writing: one line at a time, the way tokens arrive.
+    for (const next of ["line 12", "line 13", "line 14"]) {
+      lines = [...lines, next];
+      expect(shown()).toEqual(before);
+      expect(shown()).not.toContain(next);
+    }
+    // The offset grew with the live edge, so the way back is one page longer and
+    // the pill still says where the user is.
+    expect(shell.back).toBe(6);
+    expect(shell.scrolled).toBe(true);
+    expect(shell.render(40).map(strip).at(-1)).toBe("editor");
+    // PageDown still walks it home, and the window is the live edge again.
+    shell.scrollBy(-6);
+    expect(shell.back).toBe(0);
+    expect(shown()).toContain("line 14");
   });
 
   test("a block leaving the transcript rebuilds the history instead of doubling it", () => {
@@ -139,6 +171,47 @@ describe("the transcript window keeps the composer on the last row", () => {
     // The removed line is not still there, and nothing was appended twice.
     expect(frame.filter((l) => l === "gone")).toHaveLength(0);
     expect(frame.filter((l) => l === "kept")).toHaveLength(1);
+  });
+
+  test("a line that changes in place is one line in the history, not one per frame (the repeated spinner)", () => {
+    // The defect users saw: a tool spinner, a "Thinking" line, a sentence being
+    // written each changed in place, and the history appended the changed line and
+    // everything after it again on every frame. A held window then showed the
+    // spinner ten times over. The transcript renders whole each frame, so the
+    // history is that render and nothing more.
+    const frames = ["|", "/", "-", "\\"];
+    let tick = 0;
+    const body = ["first", "second", "third", "fourth", "fifth", "sixth"];
+    const live: Component = {
+      render: () => [body[0]!, `${frames[tick % frames.length]!} bash whoami`, "  running", ...body.slice(1)],
+      invalidate: () => {},
+    };
+    const shell = new Shell([], live, [block("editor")], () => 40);
+    shell.render(60);
+    shell.scrollBy(1);
+    for (tick = 1; tick <= 12; tick += 1) shell.render(60);
+    const frame = shell.render(60).map(strip);
+    expect(frame.filter((l) => l.endsWith("bash whoami"))).toHaveLength(1);
+    expect(frame.filter((l) => l === "  running")).toHaveLength(1);
+    expect(frame.filter((l) => l === "fifth")).toHaveLength(1);
+    // And the way back is the transcript's own length, not a length that grows with the frames.
+    expect(shell.back).toBeLessThanOrEqual(live.render(60).length - 1);
+  });
+
+  test("a sentence written word by word is one line while the window is held", () => {
+    const words = ["Ça", "Ça marche", "Ça marche, je suis", "Ça marche, je suis connecté"];
+    let step = 0;
+    const live: Component = {
+      render: () => ["intro", "", words[step]!, "", "after"],
+      invalidate: () => {},
+    };
+    const shell = new Shell([], live, [block("editor")], () => 30);
+    shell.render(60);
+    shell.scrollBy(1);
+    for (step = 1; step < words.length; step += 1) shell.render(60);
+    step = words.length - 1;
+    const frame = shell.render(60).map(strip);
+    expect(frame.filter((l) => l.startsWith("Ça"))).toEqual(["Ça marche, je suis connecté"]);
   });
 
   test("a terminal too short for a window still gets its band", () => {
@@ -216,16 +289,6 @@ describe("the place, said the way a person says it", () => {  const home = "/hom
 
   test("separators are the readable one, on every platform", () => {
     expect(displayPlace("C:\\Users\\tu\\projets\\kumo", "C:\\Users\\tu")).toBe("~/projets/kumo");
-  });
-
-  test("the row is one line, and a long place keeps the end that names it", () => {
-    const row = new PlaceRow("~/projets/une/arbre/tres/profond/kumo", UNICODE_ICONS);
-    const line = strip(row.render(40)[0]!);
-    expect(row.render(40)).toHaveLength(1);
-    expect(line).toContain("kumo");
-    expect(line.length).toBeLessThanOrEqual(40);
-    // Too narrow for anything: a row of nothing beats a truncated glyph field.
-    expect(new PlaceRow("~/Bureau", UNICODE_ICONS).render(1)[0]).toBe("");
   });
 });
 

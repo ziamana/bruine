@@ -46,7 +46,7 @@ export interface WindowHint extends Component {
 export class Shell extends Container {
   /** Index of the transcript among `children`; everything after it is pinned. */
   readonly #split: number;
-  /** Every transcript line rendered so far, so the window has something above it. */
+  /** The last transcript render, which is what a held window reads from. */
   #history: string[] = [];
   #previous: string[] = [];
   /** Lines the window is held above the live end. 0 is the live edge. */
@@ -130,29 +130,37 @@ export class Shell extends Container {
   }
 
   /**
-   * Fold a fresh transcript render into the history.
+   * Take a fresh transcript render as the history.
    *
-   * The transcript re-renders from scratch every frame, so the history grows by the
-   * common prefix: what the new render adds past it is what the user saw for the
-   * first time. A render that got SHORTER means a block left the transcript (the
-   * question form, the working row), and there the common prefix is a coincidence
-   * rather than an identity — so the history is rebuilt from what is really on
-   * screen instead of keeping lines that are already gone.
+   * The transcript re-renders from scratch every frame, whole, so the history is that
+   * render and nothing more. It used to grow by the common prefix and append whatever
+   * came after the first line that differed, which is right for a transcript that only
+   * ever gains lines at its end and wrong for one that rewrites lines in place: a tool
+   * spinner, a "Thinking" line, a sentence being written each changed one line, and
+   * that line plus everything below it was appended again on every frame while the old
+   * copies stayed. A held window then showed the spinner ten times over. One render is
+   * one version of each line, the current one.
    */
   #ingest(live: string[]): void {
     if (live.length === this.#previous.length && live.every((line, i) => line === this.#previous[i])) {
       this.#previous = live;
       return;
     }
-    let shared = 0;
-    if (live.length >= this.#previous.length) {
-      while (shared < live.length && shared < this.#previous.length && live[shared] === this.#previous[shared]) shared += 1;
-    }
-    this.#history = live.length < this.#previous.length ? [] : this.#history;
-    this.#history.push(...live.slice(shared));
-    if (this.#history.length > HISTORY_LINES) this.#history = this.#history.slice(-HISTORY_LINES);
+    const grew = live.length - this.#previous.length;
+    this.#history = live.length > HISTORY_LINES ? live.slice(-HISTORY_LINES) : live;
     this.#previous = live;
-    // The history can shrink under a held window, so the offset may be past its end.
+    // A held window does not move because the model is still writing.
+    //
+    // The offset is kept constant in *lines*, so it has to grow with the live edge:
+    // every line the transcript gains moves that edge one row further away, and a
+    // window that stays `back` lines from it would shove the reading up a row for
+    // every line that arrives. On a live turn that is a token at a time, so the
+    // whole visible transcript creeps upward at ten frames a second while the user
+    // is trying to read it. Growing the offset with the transcript freezes both ends
+    // of the window: the lines the user chose stay on the same rows, and the new ones
+    // land below it.
+    if (grew > 0 && this.#back > 0) this.#back += grew;
+    // The transcript can shrink under a held window, so the offset may be past its end.
     this.#back = Math.min(this.#back, Math.max(0, this.#history.length - 1));
   }
 }

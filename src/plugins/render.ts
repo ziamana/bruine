@@ -312,20 +312,21 @@ export function attachTui(
     }
     const chunk = f.chunk;
     if (chunk === undefined) return;
-    const trackDelta = (): void => {
+    const trackDelta = (content: unknown): void => {
+      if (typeof content !== "string" || content.length === 0) return;
       tps.delta(now);
       ui.footer.set({ tps: tps.measuredTps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
     };
     switch (chunk.type) {
       case "reasoning-delta":
         hideWorking();
-        trackDelta();
+        trackDelta(chunk.text);
         ensureReasoning().push(chunk.text);
         ui.requestRender();
         return;
       case "text-delta":
         hideWorking();
-        trackDelta();
+        trackDelta(chunk.text);
         needBreak = true;
         currentAnswer += String(chunk.text ?? "");
         ensureText().push(chunk.text);
@@ -346,7 +347,7 @@ export function attachTui(
         return;
       case "tool-call-delta": {
         hideWorking();
-        trackDelta();
+        trackDelta(chunk.argumentsDelta || chunk.name);
         const id = String(chunk.id);
         if (chunk.name === "todo_write") todoToolIds.add(id);
         if (todoToolIds.has(id)) return;

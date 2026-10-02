@@ -74,8 +74,9 @@ export class TpsMeter {
     const out = Number(usage.outputTokens ?? NaN);
     const n = Number.isFinite(out) ? Math.max(0, out) : this.#deltas;
     const decodeMs = this.#t0 !== undefined && this.#t1 !== undefined ? this.#t1 - this.#t0 : 0;
-    this.#measuredTps = Number.isFinite(out) && out > 0 && Number.isFinite(decodeMs) && decodeMs >= MIN_DECODE_MS
-      ? out * 1000 / decodeMs : 0;
+    const measured = Number.isFinite(out) && out > 0 && Number.isFinite(decodeMs) && decodeMs >= MIN_DECODE_MS
+      ? out / (decodeMs / 1000) : 0;
+    this.#measuredTps = Number.isFinite(measured) ? measured : 0;
     if (this.#t0 !== undefined && this.#t1 !== undefined) {
       const dt = (this.#t1 - this.#t0) / 1000;
       this.#tps = dt > 0 ? n / dt : 0;

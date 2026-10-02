@@ -36,37 +36,39 @@ export function wordmarkFrame(phase: number): string[] {
   return rows.map((row) => row.join(""));
 }
 
-export const ASSEMBLY_STEPS = 6;
+/** The unlit half of the mark: the same block material, at a fifth of the ink. */
+const GHOST = "░";
+/** The cell just behind the head, so the wave has a shoulder and not an edge. */
+const SHOULDER = "▓";
 
-/** Fragments converge on their final cells; the letters resolve together. */
-export function condensationFrame(step: number): [string, string] {
-  const phase = Math.max(0, Math.min(ASSEMBLY_STEPS - 1, Math.floor(step)));
-  if (phase === ASSEMBLY_STEPS - 1) return [...LOGO];
-  const width = LOGO[0].length;
-  const cells = [Array<string>(width).fill(" "), Array<string>(width).fill(" ")];
+/**
+ * How far the lit head has travelled, in cells. An exponential ease-out from a
+ * seed that is already lit, and deliberately short of the end: while the
+ * session is still unknown the tail stays ghosted, because a loading mark that
+ * reaches 100% on a clock is telling the user a thing nobody has established.
+ */
+export function litCells(phase: number): number {
+  const time = Number.isFinite(phase) ? Math.max(0, Math.min(1, phase)) : 0;
+  return Math.round((0.1 + 0.82 * (1 - Math.exp(-3.4 * time))) * LOGO[0].length);
+}
 
-  for (let row = 0; row < 2; row += 1) {
-    for (let column = 0; column < width; column += 1) {
-      if (LOGO[row]![column] === " ") continue;
-      const birth = 2 + ((column * 7 + row * 11) % 4);
-      if (phase >= birth || (column + row + phase) % 3 === 0) continue;
-      const direction = column < width / 2 ? -1 : 1;
-      const drift = Math.max(1, birth - phase - 1);
-      const source = Math.max(0, Math.min(width - 1, column + direction * drift));
-      cells[row]![source] = phase >= birth - 1 ? "▒" : "░";
-    }
-  }
-
-  for (let row = 0; row < 2; row += 1) {
-    for (let column = 0; column < width; column += 1) {
-      const glyph = LOGO[row]![column]!;
-      if (glyph === " ") continue;
-      const birth = 2 + ((column * 7 + row * 11) % 4);
-      if (phase >= birth) cells[row]![column] = glyph;
-    }
-  }
-
-  return [cells[0]!.join(""), cells[1]!.join("")];
+/**
+ * The mark being written: the whole wordmark stays legible from the first frame
+ * as a ghost, and light travels left to right through it. Two rows, no extra
+ * furniture, and the frame a user watches is already the frame the session
+ * header keeps once the boot is over.
+ */
+export function ignitionFrame(phase: number): string[] {
+  const head = litCells(phase) - 1;
+  return LOGO.map((line) =>
+    [...line]
+      .map((glyph, column) => {
+        if (glyph === " ") return glyph;
+        if (column > head + 1) return GHOST;
+        return column === head + 1 ? SHOULDER : glyph;
+      })
+      .join(""),
+  );
 }
 
 /** A small echo of the same material while the model has not replied yet. */

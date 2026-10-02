@@ -1,11 +1,12 @@
 import { gradientStops } from "./palette.js";
+import { ansi } from "./theme.js";
 import { readSettingsRoute } from "./kumo-ui.js";
 import {
-  ASSEMBLY_STEPS,
-  condensationFrame,
+  ignitionFrame,
+  litCells,
+  LOGO,
   LOGO_STOPS,
   terminalMotionAllowed,
-  wordmarkFrame,
 } from "./logo-motion.js";
 
 interface BootOutput {
@@ -21,7 +22,12 @@ export interface BootRoute {
 }
 
 const DURATION_MS = 900;
-const DELAY_MS = 250;
+/**
+ * Long enough that a fast boot never flashes a mark it did not need, short
+ * enough that a cold one is not a blank terminal. The mark is the brand; a
+ * quarter second of nothing before it is just latency.
+ */
+const DELAY_MS = 90;
 const FRAME_MS = 32;
 const SYNC_START = "\x1b[?2026h";
 const SYNC_END = "\x1b[?2026l";
@@ -151,13 +157,25 @@ export class BootLoader {
       this.#stopTick();
       return;
     }
+    // Ready is the only event that may light the whole mark: the tail stays
+    // ghosted until the route is actually known, and then the frame the user
+    // hands over to the session is the finished one. A key asks for the same
+    // thing faster, so it lands the finished mark too.
     const phase = this.#phase();
-    const frame = (this.output.rows ?? 24) < 8
-      ? condensationFrame(Math.round(phase * (ASSEMBLY_STEPS - 1)))
-      : wordmarkFrame(phase);
-    const left = " ".repeat(Math.max(0, Math.floor((columns - 17) / 2)));
+    const finished = this.#ready || this.#skipped;
+    const frame = finished ? [...LOGO] : ignitionFrame(phase);
+    const head = finished ? LOGO[0].length : litCells(phase);
+    const left = " ".repeat(Math.max(0, Math.floor((columns - LOGO[0].length) / 2)));
     const lines = frame.map((line, row) => {
-      const colored = gradientStops(line, [...LOGO_STOPS], phase < 0.75 ? phase * 0.3 : 0);
+      const colored = [...line]
+        .map((glyph, column) => {
+          if (glyph === " ") return glyph;
+          if (column < head) return gradientStops(glyph, [...LOGO_STOPS], phase < 0.75 ? phase * 0.3 : 0);
+          // The ghost keeps the wordmark's silhouette without spending a stop
+          // on it, so the lit part is the only bright thing on the row.
+          return ansi.faint(glyph);
+        })
+        .join("");
       const suffix = row === frame.length - 1 && status !== undefined && left.length + 20 + status.length <= columns
         ? `   ${status}` : "";
       return `${left}${colored}${suffix}`;

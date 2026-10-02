@@ -977,12 +977,15 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     expect(text).toContain("Ornith 1.5 9B");
     expect(strip(ui.headerFirstLine(false))).not.toContain("kumo");
     const { headerHost } = await import("../src/ui/kumo-ui.js");
-    const { LOGO, ASSEMBLY_STEPS, condensationFrame, terminalMotionAllowed } = await import("../src/ui/logo-motion.js");
-    const frames = Array.from({ length: ASSEMBLY_STEPS }, (_, step) => condensationFrame(step));
-    expect(frames.at(-1)).toEqual(LOGO);
-    expect(frames[0]).not.toEqual(LOGO);
-    expect(frames.every((frame) => frame.every((line) => line.length === LOGO[0].length))).toBe(true);
+    const { LOGO, ignitionFrame, litCells, terminalMotionAllowed } = await import("../src/ui/logo-motion.js");
+    const frames = Array.from({ length: 8 }, (_, step) => ignitionFrame(step / 7));
+    expect(frames.every((frame) => frame.length === 2 && frame.every((line) => [...line].length === LOGO[0].length))).toBe(true);
     expect(frames.flat().join("")).not.toMatch(/\p{Extended_Pictographic}/u);
+    // The wordmark is legible from the first frame — light travels through it,
+    // and the head stops short of the end while the session is still unknown.
+    expect(litCells(0)).toBeGreaterThan(0);
+    expect(litCells(1)).toBeLessThan(LOGO[0].length);
+    expect(frames[0]!.join("")).not.toEqual(frames.at(-1)!.join(""));
     expect(terminalMotionAllowed({ stdoutTTY: false })).toBe(false);
     expect(terminalMotionAllowed({ stdoutTTY: true, env: { CI: "1" } })).toBe(false);
     expect(terminalMotionAllowed({ stdoutTTY: true, env: { KUMO_NO_ANIMATION: "1" } })).toBe(false);

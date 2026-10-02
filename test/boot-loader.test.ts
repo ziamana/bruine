@@ -15,32 +15,52 @@ describe("boot loader handoff", () => {
     const boot = new BootLoader({ isTTY: true, columns: 80, rows: 24, write: (text) => writes.push(text) }, {});
     boot.start();
     boot.processSpawned();
-    vi.advanceTimersByTime(249);
+    vi.advanceTimersByTime(89);
     boot.stop();
     vi.advanceTimersByTime(1000);
     expect(writes).toEqual([]);
   });
 
-  test("slow startup draws synchronized deltas, then clears the folded two-row mark", () => {
+  test("slow startup draws synchronized deltas, then clears the two-row mark", () => {
     vi.useFakeTimers();
     const writes: string[] = [];
     const boot = new BootLoader({ isTTY: true, columns: 100, rows: 24, write: (text) => writes.push(text) }, {});
     boot.start();
     boot.processSpawned();
-    vi.advanceTimersByTime(250);
+    vi.advanceTimersByTime(90);
     expect(writes[0]).toContain("starting the session");
     expect(writes[0]).toContain("\x1b[?2026h");
     expect(writes[0]).toContain("\x1b[?2026l");
     expect(writes[0]).toContain("\x1b[?25l");
     vi.advanceTimersByTime(700);
     expect(writes.length).toBeLessThanOrEqual(32);
-    expect(writes.some((write) => write.includes("\x1b[3A"))).toBe(true);
+    expect(writes.some((write) => write.includes("\x1b[1A"))).toBe(true);
     const beforeStop = writes.length;
     boot.stop();
     expect(writes.at(-1)).toContain("\x1b[1A");
     expect(writes.at(-1)).toContain("\x1b[?25h");
     vi.advanceTimersByTime(1000);
     expect(writes).toHaveLength(beforeStop + 1);
+  });
+
+  test("the mark lights from its first frame, and the tail waits for the route", () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    const boot = new BootLoader({ isTTY: true, columns: 100, rows: 24, write: (text) => writes.push(text) }, {});
+    boot.start();
+    boot.processSpawned();
+    vi.advanceTimersByTime(90);
+    // The wordmark is whole on the first frame: lit cells, a shoulder, a ghost
+    // tail. Nothing waits for the clock to spell the word out.
+    expect(writes.join("")).toContain("█");
+    expect(writes.join("")).toContain("░");
+    vi.advanceTimersByTime(2000);
+    expect(writes.join("")).toContain("░");
+    boot.processReady({ model: "Ornith 1.5 9B", host: "192.168.1.64" });
+    const settled = writes.at(-1)!;
+    expect(settled).not.toContain("░");
+    expect(settled).toContain("Ornith 1.5 9B (192.168.1.64)");
+    boot.stop();
   });
 
   test("motion opt-out keeps a single readable status", () => {
@@ -93,27 +113,39 @@ describe("boot loader handoff", () => {
     const boot = new BootLoader(output, {});
     boot.start();
     boot.processSpawned();
-    vi.advanceTimersByTime(280);
+    vi.advanceTimersByTime(120);
     output.columns = 40;
     process.emit("SIGWINCH");
     vi.advanceTimersByTime(33);
-    expect(writes.at(-1)).toContain("\x1b[3A");
+    expect(writes.at(-1)).toContain("\x1b[1A");
     expect(writes.at(-1)).toContain("kumo");
     boot.stop();
   });
 
-  test("unchanged resize writes nothing and short terminals keep two rows", () => {
+  test("a short terminal keeps the same two rows", () => {
     vi.useFakeTimers();
     const writes: string[] = [];
     const boot = new BootLoader({ isTTY: true, columns: 80, rows: 7, write: (text) => writes.push(text) }, {});
     boot.start();
     boot.processSpawned();
-    vi.advanceTimersByTime(250);
+    vi.advanceTimersByTime(90);
     expect(writes).toHaveLength(1);
     expect(writes[0]).toContain("\r\n");
     expect(writes[0]!.split("\r\n")).toHaveLength(2);
+    boot.stop();
+  });
+
+  test("an unchanged resize writes nothing", () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    const boot = new BootLoader({ isTTY: true, columns: 80, rows: 24, write: (text) => writes.push(text) }, {});
+    boot.start();
+    boot.processSpawned();
+    vi.advanceTimersByTime(120);
+    boot.skip(); // the frame is settled, so only a real change may write
+    const settled = writes.length;
     process.emit("SIGWINCH");
-    expect(writes).toHaveLength(1);
+    expect(writes).toHaveLength(settled);
     boot.stop();
   });
 

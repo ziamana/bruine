@@ -14,6 +14,8 @@
  * - **the gesture**, including the invariant that a drag without a press is not
  *   a selection, which belongs next to the thing that counts;
  * - **the copy**, injected, because a test must never spawn `wl-copy`;
+ * - **the controls**, asked before any gesture starts, because a press on a pill is
+ *   a command and not the first half of a selection (D5);
  * - **the notices**, both of which name what the choice costs.
  *
  * It does not own the frame. The shell composes the layout and hands over the
@@ -59,6 +61,23 @@ export interface MouseRead extends ParsedChunk {
   handled: boolean;
 }
 
+/**
+ * A control the mouse owns instead of the selection.
+ *
+ * D5: a press on the jump-to-latest pill is a command, not the first half of a
+ * drag. The gesture must not begin there, and nothing must be copied when it ends:
+ * a pill is not text anybody meant to select, and a selection that starts on it and
+ * drags across a paragraph is the one gesture that copies by accident.
+ *
+ * The control answers for itself (`hit`) and says what the press means (`activate`),
+ * because the frame it lives in is the shell's to compose — the same reason
+ * `readText` is injected rather than guessed here.
+ */
+export interface MouseControl {
+  hit(row: number, col: number): boolean;
+  activate(): void;
+}
+
 export interface MouseFeatureOptions {
   tui: TUI;
   terminal: Terminal;
@@ -77,6 +96,8 @@ export interface MouseFeatureOptions {
    * now that kumo owns the window rather than the terminal.
    */
   scroll?: (rows: number) => void;
+  /** A press on a control rather than on text (D5: the jump-to-latest pill). */
+  control?: MouseControl;
   copy?: CopyClipboard;
   env?: NodeJS.ProcessEnv;
 }
@@ -90,6 +111,7 @@ export class MouseFeature {
   readonly #notify: (text: string, opts?: { red?: boolean }) => void;
   readonly #readText: (span: SelectionSpan) => string;
   readonly #scroll: ((rows: number) => void) | undefined;
+  readonly #control: MouseControl | undefined;
   readonly #copy: CopyClipboard;
   readonly #trace: string | undefined;
   #wanted: boolean;
@@ -105,6 +127,7 @@ export class MouseFeature {
     this.#notify = opts.notify;
     this.#readText = opts.readText;
     this.#scroll = opts.scroll;
+    this.#control = opts.control;
     this.#toast = new ToastHost(opts.tui);
     const env = opts.env ?? process.env;
     this.#wanted = mouseSelectionAllowed(env);
@@ -189,6 +212,14 @@ export class MouseFeature {
         continue;
       }
       if (sample.phase === "press") {
+        // D5: a control owns its own press. No gesture starts on it, so no
+        // selection is painted, and a release that follows the press finds nothing
+        // to copy — the press was a command, and it has already been run.
+        if (this.#control?.hit(sample.row, sample.col) === true) {
+          this.#control.activate();
+          this.#repaint();
+          continue;
+        }
         this.#selection.press(sample.row, sample.col);
         this.#repaint();
         continue;

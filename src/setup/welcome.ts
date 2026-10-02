@@ -1,4 +1,6 @@
-import { isKeyRelease, matchesKey, visibleWidth, truncateToWidth, wrapTextWithAnsi, type Component, type SelectItem } from "@earendil-works/pi-tui";
+import { isKeyRelease, matchesKey, visibleWidth, wrapTextWithAnsi, type Component, type SelectItem } from "@earendil-works/pi-tui";
+import { Box } from "../ui/box.js";
+import { isAscii } from "../render/chars.js";
 import { fillLine, gradientStops } from "../ui/palette.js";
 import { ansi } from "../ui/theme.js";
 import { LOGO_STOPS, terminalMotionAllowed, wordmarkFrame } from "../ui/logo-motion.js";
@@ -37,7 +39,7 @@ export class SetupWelcome implements Component {
 
   render(width: number): string[] {
     const phase = this.#animated ? Math.min(1, (Date.now() - this.#startedAt) / MOTION_MS) : 1;
-    const ascii = useAscii();
+    const ascii = isAscii();
     const narrow = width < 18;
     const frame = ascii || narrow ? ["KUMO"] : wordmarkFrame(phase);
     const art = frame.map((line) => center(ascii || narrow ? ansi.cyan(line) : gradientStops(line, [...LOGO_STOPS]), line, width));
@@ -79,10 +81,8 @@ export class SetupCardPicker implements Component {
   constructor(private readonly items: SetupCardOption[], private readonly rows: () => number) {}
 
   render(width: number): string[] {
-    const ascii = useAscii();
-    const glyph = ascii
-      ? { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|", arrow: ">" }
-      : { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│", arrow: "›" };
+    const ascii = isAscii();
+    const glyph = new Box(width, { ascii }).glyphs;
     if (width < 40) {
       const limit = Math.max(1, Math.min(this.items.length, Math.floor((this.#height ?? this.rows() - 8) / 3)));
       if (this.#selected < this.#top) this.#top = this.#selected;
@@ -111,20 +111,18 @@ export class SetupCardPicker implements Component {
       const selected = i === this.#selected;
       const marker = selected ? `${ansi.cyan(glyph.arrow)} ` : "  ";
       const badge = item.recommended === true ? " Recommended " : "";
-      const left = glyph.tl;
-      const right = glyph.tr;
-      const topFill = cardWidth - visibleWidth(badge) - 3;
-      const top = `${left}${glyph.h}${badge}${glyph.h.repeat(Math.max(0, topFill))}${right}`;
-      const bottom = `${glyph.bl}${glyph.h.repeat(cardWidth - 2)}${glyph.br}`;
+      const box = new Box(cardWidth, { ascii, ink: text => chrome(text, selected) });
+      const top = box.edge(badge, false, 1);
+      const bottom = box.edge("", true);
       const title = fitPlain(item.label, contentWidth);
       const description = wrapTextWithAnsi(item.description ?? "", contentWidth).slice(0, 2);
-      lines.push(`${" ".repeat(pad)}${marker}${chrome(top, selected)}`);
-      lines.push(`${" ".repeat(pad)}  ${chrome(glyph.v, selected)} ${selected ? ansi.bold(ansi.text(title)) : title}${" ".repeat(Math.max(0, contentWidth - visibleWidth(title)))} ${chrome(glyph.v, selected)}`);
+      lines.push(`${" ".repeat(pad)}${marker}${top}`);
+      lines.push(`${" ".repeat(pad)}  ${box.row(selected ? ansi.bold(ansi.text(title)) : title)}`);
       for (let row = 0; row < 2; row++) {
         const text = description[row] ?? "";
-        lines.push(`${" ".repeat(pad)}  ${chrome(glyph.v, selected)} ${ansi.gray(text)}${" ".repeat(Math.max(0, contentWidth - visibleWidth(text)))} ${chrome(glyph.v, selected)}`);
+        lines.push(`${" ".repeat(pad)}  ${box.row(ansi.gray(text))}`);
       }
-      lines.push(`${" ".repeat(pad)}  ${chrome(bottom, selected)}`);
+      lines.push(`${" ".repeat(pad)}  ${bottom}`);
       lines.push("");
     }
     if (this.items.length > visible) {
@@ -161,7 +159,7 @@ export class SetupThemePicker implements Component {
   }
 
   render(width: number): string[] {
-    const ascii = useAscii();
+    const ascii = isAscii();
     const title = fitPlain("Select your preferred theme", width);
     const names = this.themes.map((theme, index) => {
       const text = index === this.#selected ? `${ascii ? "> " : "› "}${theme}${ascii ? " <" : " ‹"}` : theme;
@@ -172,10 +170,11 @@ export class SetupThemePicker implements Component {
     const hints = center(ansi.gray(visibleHints), visibleHints, width);
     const cardWidth = Math.max(4, Math.min(72, width - 4));
     const cardPad = Math.max(0, Math.floor((width - cardWidth) / 2));
+    const box = new Box(cardWidth, { ascii });
     const line = (s: string): string => fitPlain(s, Math.max(1, cardWidth - 4));
-    const frame = (s: string): string => `${" ".repeat(cardPad)}${ascii ? `| ${s}${" ".repeat(Math.max(0, cardWidth - 4 - visibleWidth(s)))} |` : `│ ${s}${" ".repeat(Math.max(0, cardWidth - 4 - visibleWidth(s)))} │`}`;
-    const border = ascii ? `+${"-".repeat(cardWidth - 2)}+` : `╭${"─".repeat(cardWidth - 2)}╮`;
-    const lower = ascii ? `+${"-".repeat(cardWidth - 2)}+` : `╰${"─".repeat(cardWidth - 2)}╯`;
+    const frame = (s: string): string => `${" ".repeat(cardPad)}${box.row(s)}`;
+    const border = box.edge();
+    const lower = box.edge("", true);
     const preview = this.#previewLines();
     const middle = Math.floor((width - cardWidth) / 2);
     return [
@@ -209,7 +208,7 @@ export class SetupThemePicker implements Component {
   #previewLines(): string[] {
     const theme = this.themes[this.#selected];
     if (theme === "light") {
-      const ascii = useAscii();
+      const ascii = isAscii();
       return [
         ansi.bold("Heading"),
         "Bold, italic, and inline code.",
@@ -219,7 +218,7 @@ export class SetupThemePicker implements Component {
       ];
     }
     if (theme === "high-contrast") {
-      const ascii = useAscii();
+      const ascii = isAscii();
       return [
         ansi.bold(ansi.text("HEADING")),
         ansi.bold("Bold text  ·  inline code"),
@@ -228,7 +227,7 @@ export class SetupThemePicker implements Component {
         ansi.bold("The preview updates as you browse themes."),
       ];
     }
-    const ascii = useAscii();
+    const ascii = isAscii();
     return [
       ansi.bold(ansi.cyan("Heading")),
       `${ansi.bold("Bold")}, ${ansi.italic("italic")}, and ${ansi.yellow("inline code")}.`,
@@ -245,9 +244,5 @@ function center(styled: string, plain: string, width: number): string {
 
 function fitPlain(value: string, width: number): string {
   if (width <= 0) return "";
-  return visibleWidth(value) <= width ? value : truncateToWidth(value, width, useAscii() ? "..." : "…");
-}
-
-function useAscii(): boolean {
-  return process.env.KUMO_ASCII === "1" || !/utf-?8/i.test(`${process.env.LC_ALL ?? ""}${process.env.LC_CTYPE ?? ""}${process.env.LANG ?? ""}`);
+  return new Box(width).fit(value, width);
 }

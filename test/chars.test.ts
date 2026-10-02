@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import { describe, expect, test } from "vitest";
-import { ASCII_ICONS, UNICODE_ICONS, iconsFor, withoutEmoji } from "../src/render/chars.js";
+import { ASCII_ICONS, UNICODE_ICONS, iconsFor, isAscii, asciiText, withoutEmoji } from "../src/render/chars.js";
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -57,4 +57,14 @@ describe("withoutEmoji (T24.2)", () => {
     expect(withoutEmoji("User 🙂 prompt")).toBe("User prompt");
     expect(withoutEmoji("🙂 Answer")).toBe("Answer");
   });
+});
+
+test("the ASCII policy follows the chosen icon set and existing display substitutions", () => {
+  expect(isAscii(ASCII_ICONS)).toBe(true);
+  expect(isAscii(UNICODE_ICONS)).toBe(false);
+  expect(isAscii(iconsFor({ LANG: "C" }, "linux"))).toBe(true);
+  expect(isAscii(iconsFor({ WT_SESSION: "terminal" }, "win32"))).toBe(false);
+  expect(asciiText("↑/↓ ← → … · ★", true)).toBe("up/down < > ... / *");
+  expect(asciiText("──↑──↓", true, "editor")).toBe("--^--v");
+  expect(asciiText("──↑──↓", false, "editor")).toBe("──↑──↓");
 });

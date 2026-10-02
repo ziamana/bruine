@@ -1,9 +1,9 @@
-import { isKeyRelease, matchesKey, truncateToWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
-import pkg from "../../package.json" with { type: "json" };
+import { isKeyRelease, matchesKey, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
-import { kumoIcons, type KumoIcons } from "../render/chars.js";
+import { kumoIcons, isAscii, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 import { boxLine } from "./palette.js";
+import { Box } from "./box.js";
 import { dropLastChar, typedText } from "./keys.js";
 
 export interface QuestionOption {
@@ -33,7 +33,7 @@ const OTHER_LABEL = "Other…";
  * selection state was the only one not drawn in the product's own vocabulary.
  */
 export function checkMarks(icons: KumoIcons): { on: string; off: string } {
-  return icons.think === "*" ? { on: "[x]", off: "[ ]" } : { on: "◉", off: "○" };
+  return isAscii(icons) ? { on: "[x]", off: "[ ]" } : { on: "◉", off: "○" };
 }
 
 /** Chat echo line: `? Which database should I use? → SQLite` (chat clips to width). */
@@ -68,13 +68,14 @@ export class QuestionForm implements Component {
   constructor(
     readonly questions: QuestionInput[],
     private icons: KumoIcons = kumoIcons(),
+    private version = "",
   ) {
     this.#filters = questions.map(() => "");
     this.#cursor = questions.map(() => 0);
     this.#checked = questions.map(() => new Set<number>());
     this.#otherMode = questions.map((q) => !q.options?.length);
     this.#otherText = questions.map(() => "");
-    this.#optionsWithOther = questions.map((q) => [...(q.options ?? []), { label: this.icons.think === "*" ? "Other..." : OTHER_LABEL }]);
+    this.#optionsWithOther = questions.map((q) => [...(q.options ?? []), { label: isAscii(this.icons) ? "Other..." : OTHER_LABEL }]);
   }
 
   get index(): number {
@@ -102,17 +103,13 @@ export class QuestionForm implements Component {
   render(width: number): string[] {
     if (!this.questions.length || width <= 0) return [];
     const q = this.questions[this.#index]!;
-    const ascii = this.icons.think === "*";
-    const inner = Math.max(1, width - 4);
-    const border = ascii ? "|" : "│";
-    const rule = ascii ? "-" : "─";
-    const fit = (text: string, cells = inner): string => stringWidth(text) > cells ? truncateToWidth(text, cells, ascii ? "..." : "…") : text;
-    const row = (text: string): string => fit(`${ansi.violet(border)} ${padCells(fit(text), inner)} ${ansi.violet(border)}`, width);
-    const edge = (label: string, bottom = false): string => {
-      const shown = fit(` ${label} `, Math.max(1, width - 2));
-      const line = bottom ? rule.repeat(Math.max(0, width - 2 - stringWidth(shown))) + shown : shown + rule.repeat(Math.max(0, width - 2 - stringWidth(shown)));
-      return fit(ansi.violet(`${ascii ? "+" : bottom ? "╰" : "╭"}${line}${ascii ? "+" : bottom ? "╯" : "╮"}`), width);
-    };
+    const ascii = isAscii(this.icons);
+    const box = new Box(width, { ascii, ink: ansi.violet });
+    const inner = box.innerWidth;
+    const border = box.glyphs.v;
+    const fit = (text: string, cells = inner): string => box.fit(text, cells);
+    const row = (text: string): string => box.row(text);
+    const edge = (label: string, bottom = false): string => box.edge(` ${label} `, bottom);
     const rows = [edge(`${q.header ?? "Question"}  ${this.#index + 1}/${this.questions.length}`)];
     if (this.questions.length > 1) {
       rows.push(row(this.questions.map((question, i) => {
@@ -162,7 +159,7 @@ export class QuestionForm implements Component {
       ...(q.multiSelect ? ["Space toggle"] : []), "esc clear/cancel",
     ].join(ascii ? " / " : " • ");
     rows.push(...wrapTextWithAnsi(ansi.gray(hints), inner).map(row));
-    rows.push(edge(`kumo v${pkg.version}`, true));
+    rows.push(edge(`kumo v${this.version}`, true));
     return rows;
   }
 

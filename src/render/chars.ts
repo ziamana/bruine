@@ -48,6 +48,20 @@ export function iconsFor(
   return ASCII_ICONS;
 }
 
+/** Canonical ASCII policy, using the caller's icon set or the current environment. */
+export function isAscii(icons: KumoIcons = iconsFor()): boolean {
+  return icons.think === "*";
+}
+
+/** Display-only substitutions, preserving the editor's compact scroll arrows. */
+export function asciiText(text: string, ascii = isAscii(), style: "labels" | "editor" = "labels"): string {
+  if (!ascii) return text;
+  const replacements: Record<string, string> = style === "editor"
+    ? { "─": "-", "↑": "^", "↓": "v" }
+    : { "↑": "up", "↓": "down", "←": "<", "→": ">", "…": "...", "·": "/", "★": "*" };
+  return text.replace(/[─↑↓←→…·★]/g, glyph => replacements[glyph] ?? glyph);
+}
+
 let cached: KumoIcons | undefined;
 
 /** Icons for the current process, computed once. */

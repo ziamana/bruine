@@ -22,7 +22,8 @@ import {
   syncSkills,
   type FoundSkill,
 } from "../src/setup/skills.js";
-import { initialSkillChecks, savedSkillsList, type CheckItem } from "../src/setup/full.js";
+import { initialSkillChecks, savedSkillsList } from "../src/setup/full.js";
+import type { CheckItem } from "../src/setup/widgets.js";
 import { createAutocomplete } from "../src/ui/file-complete.js";
 import { formatAvailableSkills, skillCommand } from "../src/plugins/repl.js";
 

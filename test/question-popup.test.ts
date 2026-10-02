@@ -34,3 +34,6 @@ test("ASCII popup uses ASCII structure and marks", () => {
   const form = new QuestionForm(questions, ASCII_ICONS);
   expect(form.render(30).join("\n").replace(/\x1b\[[0-9;]*m/g, "")).not.toMatch(/[^\x00-\x7f]/);
 });
+test("the question footer displays the version supplied by its host", () => {
+  expect(new QuestionForm(questions, ASCII_ICONS, "9.8.7").render(60).join("\n")).toContain("kumo v9.8.7");
+});

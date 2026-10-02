@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { CheckList, SetupFilterList, SetupSummary } from "../src/setup/full.js";
+import { CheckList, SetupFilterList, SetupSummary } from "../src/setup/widgets.js";
 import { SetupCardPicker, SetupThemePicker } from "../src/setup/welcome.js";
 import { SetupFrame } from "../src/setup/frame.js";
 

@@ -1,7 +1,8 @@
-import { truncateToWidth, visibleWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
-import { kumoIcons } from "../render/chars.js";
+import { visibleWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
+import { isAscii, asciiText } from "../render/chars.js";
 import { paint, onBg, colorDepth } from "../ui/palette.js";
 import { ansi } from "../ui/theme.js";
+import { Box } from "../ui/box.js";
 
 export interface SetupFrameOptions {
   step?: number;
@@ -18,16 +19,11 @@ export class SetupFrame implements Component {
 
   render(width: number): string[] {
     if (width <= 0) return [];
-    const ascii = process.env.KUMO_ASCII === "1" || kumoIcons().think === "*";
-    const glyph = ascii ? { top: "+", bottom: "+", right: "+", lower: "+", bar: "|", line: "-" } : { top: "╭", bottom: "╰", right: "╮", lower: "╯", bar: "│", line: "─" };
-    const w = Math.max(1, width - 4);
-    const plainGlyphs = (text: string): string => ascii ? text.replaceAll("↑", "up").replaceAll("↓", "down").replaceAll("←", "<").replaceAll("→", ">").replaceAll("…", "...").replaceAll("·", "/").replaceAll("★", "*") : text;
-    const fit = (text: string, cells: number): string => visibleWidth(text) > cells ? truncateToWidth(text, cells, ascii ? "..." : "…") : text;
-    const row = (text: string): string => {
-      const body = fit(plainGlyphs(text), w);
-      return fit(`${paint("lavender", glyph.bar)} ${body}${" ".repeat(Math.max(0, w - visibleWidth(body)))} ${paint("lavender", glyph.bar)}`, width);
-    };
-    const edge = (left: string, right: string): string => paint("lavender", fit(`${left}${glyph.line.repeat(Math.max(0, width - 2))}${right}`, width));
+    const ascii = isAscii();
+    const box = new Box(width, { ascii, ink: text => paint("lavender", text) });
+    const w = box.innerWidth;
+    const plainGlyphs = (text: string): string => asciiText(text, ascii);
+    const row = (text: string): string => box.row(plainGlyphs(text));
     const heading = wrapTextWithAnsi(ansi.bold(ansi.text(plainGlyphs(this.title))), w);
     const badgeText = this.options.step === undefined ? "" : ` Step ${this.options.step}/${this.options.total ?? 9} `;
     const badge = onBg("chip", paint("lavender", badgeText));
@@ -40,9 +36,9 @@ export class SetupFrame implements Component {
     const budget = Math.max(1, this.options.rows() - header.length - foot.length - 4);
     this.options.onContentHeight?.(budget, w);
     const body = this.content.render(w);
-    const rendered = [edge(glyph.top, glyph.right), ...header, row(""), ...body.slice(0, budget).map(row), row(""), ...foot, edge(glyph.bottom, glyph.lower)];
+    const rendered = [box.edge(), ...header, row(""), ...body.slice(0, budget).map(row), row(""), ...foot, box.edge("", true)];
     return colorDepth() === "none" ? rendered.map(line => line.replace(/\x1b\[[0-9;]*m/g, "")) : rendered;
   }
-  handleInput(data: string): void { (this.content as Component & { handleInput?: (data: string) => void }).handleInput?.(data); }
+  handleInput(data: string): void { this.content.handleInput?.(data); }
   invalidate(): void { this.content.invalidate(); }
 }

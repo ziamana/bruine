@@ -9,14 +9,13 @@ import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { kumoIcons } from "../render/chars.js";
 import { KumoUi, readSettingsRoute } from "../ui/kumo-ui.js";
-import { awaitBootHandoff } from "../ui/boot-loader.js";
 import { fetchProps, isPrivateIPv4 } from "../setup/discover.js";
 import { KUMO_MODES_SERVICE, NOTICE_ASK, NOTICE_AUTO, NOTICE_FULL } from "./modes.js";
 import kumoEffort, { KUMO_EFFORT_SERVICE } from "./effort.js";
 import kumoModel, { KUMO_MODEL_SERVICE } from "./model.js";
 import { KUMO_RENDER_SERVICE } from "./render.js";
 import { readAvailableSkills, type AvailableSkill } from "../setup/skills.js";
-import { recentSessions, restoredDialogue, sessionChoice } from "./session-history.js";
+import { recentSessions, replaySession, sessionChoice } from "./session-history.js";
 import { formatVerification, runVerification } from "./verify.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -585,7 +584,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "!cmd  Run a shell command yourself (output not sent to the model)",
           "@file  Attach a file (a list opens as you type)",
           "/exit  Quit kumo (also ctrl+d)",
-          `Esc interrupt, ctrl+c clear, ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, ctrl+b cockpit, f2 next model, PageUp/PageDown read back (the input bar stays), ${TASKS_HELP}`,
+          `Esc interrupt, ctrl+c clear (quits when empty), ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, f2 next model, PageUp/PageDown read back (the input bar stays), ${TASKS_HELP}`,
         ].join("\n"),
       );
       return;
@@ -708,10 +707,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     ctx.provide(KUMO_REPL_SERVICE, service);
 
     const showSavedDialogue = (saved: typeof agent): void => {
-      for (const message of restoredDialogue(saved.session)) {
-        if (message.role === "user") ui?.addUserPrompt(message.text);
-        else ui?.addChat(new Text(message.text, 1, 0));
-      }
+      if (ui !== undefined) replaySession(saved.session, ui as never);
     };
     if (latest !== undefined && resumeNotice.startsWith("Resumed:")) showSavedDialogue(agent);
     if (resumeNotice !== "") ui.showNotice(resumeNotice);
@@ -824,7 +820,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       }
     })();
 
-    await awaitBootHandoff();
+    // C7: nothing waits on a boot drawing any more, so the session paints at once.
     ui.start();
     await repl.run(startup?.initialPrompt);
     return;

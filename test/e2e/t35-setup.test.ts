@@ -1,12 +1,12 @@
 /**
  * T35 E2E — `kumo setup` in a real pty (isolated KUMO_HOME temp dir, never
  * the real ~/.kumo):
- * - existing install → change-one-thing menu → Theme → light → Save and exit
+ * - existing install → change-one-thing menu → Theme → light → Save changes and exit
  *   → only `theme` changed.
  * - first install → `s` on Web search, Skills, Theme, Telemetry → saved with
  *   defaults.
  */
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
@@ -151,6 +151,14 @@ class SetupPty {
 
   /** Wait until the change-one-thing menu is on screen (cursor on Models). */
   async waitMenu(label = "menu"): Promise<void> {
+    // The review screen only comes before the menu on the way in; after a step
+    // the menu is already on its way back, so decide once one of the two shows.
+    await this.until(
+      () => this.text().includes("Choose a setting to edit.") || this.text().includes("Review your setup"),
+      20_000,
+      `${label}: the menu or the review before it`,
+    );
+    if (this.text().includes("Review your setup")) this.press("enter");
     await this.until(
       () => this.screen().some((l) => l.trimStart().startsWith("→ Models")),
       20_000,
@@ -187,32 +195,36 @@ test("T35: existing install → menu → Theme → light → Save and exit (only
   const before = parseYaml(await readFile(join(home, "settings.yaml"), "utf8")) as Record<string, any>;
   const h = await SetupPty.start(home);
   try {
-    // T35 §2: an existing install opens the menu, not the linear wizard.
+    // Returning users see the branded welcome before their settings menu.
     await h.waitMenu("the change-one-thing menu");
-    expect(h.text()).toContain("kumo setup: what do you want to change?");
+    expect(h.text()).toContain("Kumo setup");
+    expect(h.text()).toContain("Choose a setting to edit.");
+    expect(h.text()).toContain("↑/↓ move");
     expect(h.text()).toContain("Ornith 1.5 9B · 127.0.0.1");
-    expect(h.text()).not.toContain("Welcome to kumo");
+    expect(h.text()).not.toContain("Welcome to Kumo");
     await h.dump("t35-menu");
 
     // Theme is the 5th line: Models, Default mode, Web search, Skills, Theme.
     await h.pressN("down", 4);
     expect(await h.selectedLine()).toContain("Theme");
     h.press("enter");
-    await h.waitFor("Theme (s skips)");
+    await h.waitFor("Select your preferred theme");
     expect(h.text()).toContain("high-contrast");
     await h.pressN("down", 1); // light
-    expect(await h.selectedLine()).toContain("light");
+    expect(h.text()).toContain("› light ‹");
     h.press("enter");
 
-    // Back at the menu with the new value shown.
+    // Back at the menu, which reopens on Models; the pending value is read off
+    // the row you are standing on.
     await h.waitMenu("the menu after the Theme step");
-    const themeRow = h.screen().find((l) => /^ {2}Theme\s/.test(l)) ?? "";
-    expect(themeRow).toContain("light");
+    await h.pressN("down", 4);
+    expect(h.text()).toContain("Current Theme: light");
     await h.dump("t35-menu-after-theme");
+    await h.pressN("up", 4); // back to Models
 
     // Save and exit (the menu restarts on Models each time).
     await h.pressN("down", 6);
-    expect(await h.selectedLine()).toContain("Save and exit");
+    expect(await h.selectedLine()).toContain("Save changes and exit");
     h.press("enter");
     await h.waitFor("kumo: configuration saved.");
 
@@ -242,14 +254,70 @@ test("T35: existing install → menu → Theme → light → Save and exit (only
   }
 });
 
+test("existing setup menu explains navigation and keeps exit without saving visible", async () => {
+  const home = await mkdtemp(join(tmpdir(), "kumo-setup-menu-"));
+  const settings = [
+    "agent-default-model:",
+    "  provider: deepseek-official",
+    "  model: deepseek-chat",
+    "",
+  ].join("\n");
+  await writeFile(join(home, "settings.yaml"), settings);
+  const h = await SetupPty.start(home);
+  try {
+    await h.waitMenu("existing setup menu");
+    expect(h.text()).toContain("Choose a setting to edit.");
+    expect(h.text()).toContain("Changes stay pending until you save.");
+    expect(h.text()).toContain("↑/↓ move");
+    expect(h.text()).toContain("Enter open");
+    expect(h.text()).toContain("Esc back");
+    expect(h.text()).toContain("Current Models: deepseek-official · deepseek-chat");
+
+    // Escape walks back through setup rather than terminating the process.
+    h.press("escape");
+    await h.waitFor("Review your setup");
+    expect(h.exit).toBeUndefined();
+    h.press("escape");
+    await h.waitFor("Review your setup");
+    expect(h.exit).toBeUndefined();
+    h.press("enter");
+    await h.waitFor("Review your setup");
+    h.press("enter");
+    await h.waitFor("Choose a setting to edit.");
+
+    // Theme preview follows the selection, and Escape returns to the menu
+    // without applying the unconfirmed preview.
+    await h.pressN("down", 4);
+    h.press("enter");
+    await h.waitFor("Select your preferred theme");
+    expect(h.text()).toContain("› dark ‹");
+    await h.pressN("down", 1);
+    expect(h.text()).toContain("› light ‹");
+    h.press("escape");
+    await h.waitFor("Choose a setting to edit.");
+    await h.pressN("down", 4);
+    expect(h.text()).toContain("Current Theme: dark");
+
+    await h.pressN("down", 3);
+    expect(await h.selectedLine()).toContain("Exit without saving");
+    h.press("enter");
+    await h.waitFor("configuration postponed");
+    expect(h.exit?.exitCode).toBe(0);
+    expect(await readFile(join(home, "settings.yaml"), "utf8")).toBe(settings);
+  } finally {
+    await h.close();
+  }
+});
+
 test("T35: first install → s on Web search, Skills, Theme, Telemetry → defaults saved", async () => {
   const server = await startServer([]);
   const home = await mkdtemp(join(tmpdir(), "kumo-t35-home-"));
   const h = await SetupPty.start(home);
   try {
-    await h.waitFor("Welcome to kumo. How should we set it up?");
+    await h.waitFor("Choose your setup");
+    await h.waitFor("Quick setup");
     await h.pressN("down", 1); // Full setup
-    expect(await h.selectedLine()).toContain("Full setup");
+    expect(h.text()).toContain("Customize setup");
     h.press("enter");
 
     // Models: enter the fake server address (whatever the local scan found).
@@ -299,7 +367,7 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
     h.type("s");
     await h.until(() => h.text().includes("Skills: Space toggles"), 20_000, "skills step");
     h.type("s");
-    await h.until(() => h.text().includes("Theme (s skips)"), 20_000, "theme step");
+    await h.until(() => h.text().includes("Select your preferred theme"), 20_000, "theme step");
     h.type("s");
     await h.until(() => h.text().includes("Share anonymous usage data"), 20_000, "telemetry step");
     h.type("s");
@@ -327,5 +395,23 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
     await h.dump("t35-first-install-failure");
     await h.close();
     await server.close();
+  }
+});
+
+test("fresh setup offers Set up later and exits without writing configuration", async () => {
+  const home = await mkdtemp(join(tmpdir(), "kumo-setup-later-"));
+  const h = await SetupPty.start(home);
+  try {
+    await h.waitFor("Choose your setup");
+    await h.waitFor("Set up later");
+    expect(h.text()).toContain("Set up later");
+    await h.pressN("down", 2);
+    expect(h.text()).toMatch(/›\s+╭/);
+    h.press("enter");
+    await h.waitFor("configuration postponed");
+    expect(h.exit?.exitCode).toBe(0);
+    expect(await readdir(home)).toEqual([]);
+  } finally {
+    await h.close();
   }
 });

@@ -15,6 +15,8 @@ import {
   type SelectItem,
   type Terminal,
   type TUI,
+  type SelectListLayoutOptions,
+  visibleWidth,
 } from "@earendil-works/pi-tui";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
@@ -57,6 +59,7 @@ import {
 } from "./simple.js";
 import { readKumoJsonDoc, readUpdateCheckChoice, setUpdateCheck } from "../update.js";
 import { parse as parseYaml } from "yaml";
+import { SetupCardPicker, SetupThemePicker, SetupWelcome, type SetupCardOption } from "./welcome.js";
 
 const BACK = Symbol("back");
 const CANCEL = Symbol("cancel");
@@ -577,14 +580,20 @@ export function initialSkillChecks(
 export async function runFullSetup(
   dshHome: string,
   opts: WizardOptions = {},
-): Promise<"saved" | "simple" | "quit"> {
+): Promise<"saved" | "simple" | "later" | "quit"> {
   const terminal = opts.terminal ?? new ProcessTerminal();
   const tui: TUI = new TuiMainScreen(terminal);
   const root = new Container();
   const flow = new SetupFlow(opts.prefill ?? defaultAnswers());
   let status = "kumo setup";
+  let keyHelp = "↑/↓ move  ·  Enter choose or continue  ·  Esc back  ·  Ctrl+C quit";
+  let escapeStaysOnWelcome = false;
+  let welcomeShowing = false;
   const statusWidget: Component = {
-    render: (width: number) => [ansi.gray(status.slice(0, Math.max(0, width - 2)))],
+    render: (width: number) => welcomeShowing ? [] : [
+        ansi.gray(status.slice(0, Math.max(0, width - 2))),
+        ansi.faint(fitPlain(keyHelp, width)),
+      ],
     invalidate: () => {},
   };
   tui.addChild(root);
@@ -602,12 +611,14 @@ export async function runFullSetup(
   // T28B: same ride for the ghost-suggestion toggle (default true).
   let suggestionsChoice = true;
   let suggestionsLoaded = false;
+  let welcome: SetupWelcome | undefined;
   tui.addInputListener((data: string) => {
     if (matchesKey(data, "ctrl+c")) {
       activeResolve?.(CANCEL);
       return { consume: true };
     }
     if (matchesKey(data, "escape")) {
+      if (escapeStaysOnWelcome) return { consume: true };
       activeResolve?.(BACK);
       return { consume: true };
     }
@@ -653,10 +664,13 @@ export async function runFullSetup(
       livePreview?: (index: number) => Component;
       initial?: number;
       above?: Component;
+      layout?: SelectListLayoutOptions;
+      help?: string;
     } = {},
-  ): Promise<Outcome<T>> =>
-    interactive<T>(title, (finish) => {
-      const list = new SelectList(items, Math.min(items.length, 10), selectListTheme);
+  ): Promise<Outcome<T>> => {
+    keyHelp = opts.help ?? "↑/↓ move  ·  Enter select  ·  Esc back  ·  Ctrl+C quit";
+    return interactive<T>(title, (finish) => {
+      const list = new SelectList(items, Math.min(items.length, 10), selectListTheme, opts.layout);
       // Honor a previous answer when re-entering the step (Esc/back).
       if (opts.initial !== undefined) list.setSelectedIndex(opts.initial);
       const previewHolder: { current: Component | null } = {
@@ -692,27 +706,47 @@ export async function runFullSetup(
         below: opts.livePreview !== undefined ? [previewWidget] : undefined,
       };
     });
+  };
 
-  const lineStep = (prompt: string, secret = false): Promise<Outcome<string>> =>
-    interactive<string>("", (finish) => {
+  const cardStep = <T>(
+    title: string,
+    items: SetupCardOption[],
+    map: (index: number) => T,
+  ): Promise<Outcome<T>> =>
+    interactive<T>(title, (finish) => {
+      const picker = new SetupCardPicker(items, () => terminal.rows);
+      picker.onSelect = (index) => finish(map(index));
+      return { widget: picker, focus: picker };
+    });
+
+  const lineStep = (prompt: string, secret = false): Promise<Outcome<string>> => {
+    keyHelp = "Enter continue  ·  Backspace edit  ·  Esc back  ·  Ctrl+C quit";
+    return interactive<string>("", (finish) => {
       const input = new LineInput(prompt, secret);
       input.onSubmit = (v) => finish(v);
       return { widget: input, focus: input };
     });
+  };
 
   const checkStep = (
     title: string,
     items: CheckItem[],
     checked: Set<number>,
   ): Promise<Skippable<number[]>> =>
-    interactive<number[] | typeof SKIP>(title, (finish) => {
+    (() => {
+      keyHelp = "↑/↓ move  ·  Space toggle  ·  Enter continue  ·  S skip  ·  Esc back";
+      return interactive<number[] | typeof SKIP>(title, (finish) => {
       const cl = new CheckList(items, checked);
       cl.onDone = (idx) => finish(idx);
       // T35: `s` skips (keep current) — same as the Skip path in select steps.
       cl.onSkip = () => finish(SKIP);
       return { widget: cl, focus: cl };
-    });
+      });
+    })();
 
+  // The setup wizard owns the terminal from the first frame. Clear any shell
+  // output above it so the animated welcome is the only visible content.
+  terminal.clearScreen();
   tui.start();
   try {
     return await drive();
@@ -722,77 +756,129 @@ export async function runFullSetup(
     } catch {
       // best effort
     }
+    welcome?.stop();
     tui.stop();
   }
 
-  async function drive(): Promise<"saved" | "simple" | "quit"> {
+  async function drive(): Promise<"saved" | "simple" | "later" | "quit"> {
     const bundledRoot = opts.bundledSkillsRoot ?? bundledSkillsRoot();
     const bundled: SkillMeta[] = await readBundledSkills(bundledRoot);
 
-    // T35: existing install → change-one-thing menu, not the linear wizard.
-    if (isExistingInstall(opts.prefill)) {
-      return await driveMenu(bundledRoot, bundled);
-    }
-
-    const entry = await selectStep<"full" | "simple">(
-      "Welcome to kumo. How should we set it up?",
-      [
-        { value: "simple", label: "Simple setup (recommended)" },
-        { value: "full", label: "Full setup" },
-      ],
-      (i) => (i === 0 ? "simple" : "full"),
-    );
-    if (entry === BACK || entry === CANCEL) return "quit";
-    if (entry === "simple") {
-      tui.stop();
-      await simpleSetup(dshHome, setupIO());
-      return "simple";
-    }
-
-    while (!flow.canceled) {
-      const step = flow.step;
-      let result: StepResult;
+    const showWelcome = async (): Promise<Outcome<true>> => {
+      keyHelp = "Enter continue  ·  Ctrl+C quit";
+      status = "Kumo setup";
+      escapeStaysOnWelcome = true;
+      welcomeShowing = true;
+      welcome = new SetupWelcome(() => terminal.rows);
       try {
-        result = await (async (): Promise<StepResult> => {
-          switch (step) {
-            case "models": return await stepModels();
-            case "roles": return await stepRoles();
-            case "keys": return await stepKeys();
-            case "mode": return await stepMode();
-            case "search": return await stepSearch();
-            case "skills": return await stepSkills(bundled);
-            case "theme": return await stepTheme();
-            case "telemetry": return await stepTelemetry();
-            case "summary": return await stepSummary(bundledRoot, bundled);
-          }
-        })();
-      } catch (err) {
-        setStatus(`! ${(err as Error).message}. Try again`);
-        await sleep(1400);
-        setStatus(stepTitle(step));
-        continue; // same step again, answers kept
+        return await interactive<true>("", (finish) => {
+          welcome!.onContinue = () => finish(true);
+          welcome!.start(() => tui.requestRender());
+          return { widget: welcome!, focus: welcome! };
+        });
+      } finally {
+        escapeStaysOnWelcome = false;
+        welcomeShowing = false;
+        welcome?.stop();
       }
-      if (result === "saved") return "saved";
-      if (result === CANCEL) {
-        flow.cancel();
-        return "quit";
+    };
+
+    // Returning users start at the same branded entry point, then land in the
+    // change-one-setting menu. Escape walks back through those screens.
+    if (isExistingInstall(opts.prefill)) {
+      for (;;) {
+        const intro = await showWelcome();
+        if (intro === CANCEL) return "quit";
+        for (;;) {
+          keyHelp = "↑/↓ move  ·  Enter select  ·  Esc back  ·  Ctrl+C quit";
+          const choice = await cardStep<"settings" | "later">(
+            "Welcome back",
+            [
+              { value: "settings", label: "Review your setup", description: "Update models, tools, permissions, or appearance.", recommended: true },
+              { value: "later", label: "Set up later", description: "Return to the terminal without changing anything." },
+            ],
+            (i) => i === 0 ? "settings" : "later",
+          );
+          if (choice === BACK) break;
+          if (choice === CANCEL) return "quit";
+          if (choice === "later") return "later";
+          const result = await driveMenu(bundledRoot, bundled);
+          if (result === "back") continue;
+          return result;
+        }
       }
-      if (result === BACK) {
-        if (!flow.back()) {
+    }
+
+    // Esc at the first model step returns to the setup choice screen instead
+    // of silently closing the wizard.
+    for (;;) {
+      const intro = await showWelcome();
+      if (intro === CANCEL) return "quit";
+      keyHelp = "↑/↓ move  ·  Enter select  ·  Esc back  ·  Ctrl+C quit";
+      const entry = await cardStep<"simple" | "full" | "later">(
+        "Choose your setup",
+        [
+          { value: "simple", label: "Quick setup", description: "Recommended · get started with a few guided choices.", recommended: true },
+          { value: "full", label: "Customize setup", description: "Choose models, access, search, tools, and appearance." },
+          { value: "later", label: "Set up later", description: "Leave everything unchanged. Run kumo setup when you’re ready." },
+        ],
+        (i) => i === 0 ? "simple" : i === 1 ? "full" : "later",
+      );
+      if (entry === BACK) continue;
+      if (entry === CANCEL) return "quit";
+      if (entry === "later") return "later";
+      if (entry === "simple") {
+        tui.stop();
+        await simpleSetup(dshHome, setupIO());
+        return "simple";
+      }
+
+      let returnToEntry = false;
+      while (!flow.canceled) {
+        const step = flow.step;
+        let result: StepResult;
+        try {
+          result = await (async (): Promise<StepResult> => {
+            switch (step) {
+              case "models": return await stepModels();
+              case "roles": return await stepRoles();
+              case "keys": return await stepKeys();
+              case "mode": return await stepMode();
+              case "search": return await stepSearch();
+              case "skills": return await stepSkills(bundled);
+              case "theme": return await stepTheme();
+              case "telemetry": return await stepTelemetry();
+              case "summary": return await stepSummary(bundledRoot, bundled);
+            }
+          })();
+        } catch (err) {
+          setStatus(`! ${(err as Error).message}. Try again`);
+          await sleep(1400);
+          setStatus(stepTitle(step));
+          continue;
+        }
+        if (result === "saved") return "saved";
+        if (result === CANCEL) {
           flow.cancel();
           return "quit";
         }
+        if (result === BACK) {
+          if (!flow.back()) {
+            returnToEntry = true;
+            break;
+          }
+          status = stepTitle(flow.step);
+          continue;
+        }
+        flow.submit(result as Partial<SetupAnswers>);
         status = stepTitle(flow.step);
-        continue;
       }
-      flow.submit(result as Partial<SetupAnswers>);
-      status = stepTitle(flow.step);
+      if (!returnToEntry) return "quit";
     }
-    return "quit";
   }
 
   /** T35 existing-install menu: change one thing, Save writes once. */
-  async function driveMenu(bundledRoot: string, bundled: SkillMeta[]): Promise<"saved" | "simple" | "quit"> {
+  async function driveMenu(bundledRoot: string, bundled: SkillMeta[]): Promise<"saved" | "simple" | "later" | "quit" | "back"> {
     // Load the T30/T28B toggles once for the Telemetry value line.
     if (!updateCheckLoaded) {
       updateCheckLoaded = true;
@@ -811,23 +897,49 @@ export async function runFullSetup(
         suggestionsChoice = true;
       }
     }
-    status = "kumo setup: what do you want to change?  ·  Esc quit";
+    status = "Kumo setup";
+    keyHelp = "↑/↓ move  ·  Enter open  ·  Esc back  ·  Ctrl+C quit";
     for (;;) {
       const pick = await selectStep(
-        "kumo setup: what do you want to change?",
+        "Kumo setup",
         [
-          { value: "models", label: "Models", description: modelsMenuValue() },
-          { value: "mode", label: "Default mode", description: modeMenuValue() },
-          { value: "search", label: "Web search", description: flow.answers.search.provider },
-          { value: "skills", label: "Skills", description: skillsMenuValue() },
-          { value: "theme", label: "Theme", description: flow.answers.theme },
-          { value: "telemetry", label: "Telemetry", description: telemetryMenuValue() },
-          { value: "save", label: "Save and exit" },
-          { value: "quit", label: "Quit without saving" },
+          { value: "models", label: "Models" },
+          { value: "mode", label: "Access mode" },
+          { value: "search", label: "Web search" },
+          { value: "skills", label: "Skills" },
+          { value: "theme", label: "Theme" },
+          { value: "telemetry", label: "Usage and privacy" },
+          { value: "save", label: "Save changes and exit" },
+          { value: "quit", label: "Exit without saving" },
         ],
         (i) => i,
+        {
+          above: {
+            render: (width) => [ansi.gray(fitPlain("Choose a setting to edit. Changes stay pending until you save.", width))],
+            invalidate: () => {},
+          },
+          livePreview: (index) => {
+            const names = ["Models", "Access mode", "Web search", "Skills", "Theme", "Usage and privacy"];
+            const values = [
+              modelsMenuValue(),
+              modeMenuValue(),
+              flow.answers.search.provider,
+              skillsMenuValue(),
+              flow.answers.theme,
+              telemetryMenuValue(),
+            ];
+            const value = index < 6 ? `Current ${names[index]}: ${values[index]}` : "";
+            return {
+              render: (width) => value === "" ? [] : [ansi.gray(fitPlain(value, width))],
+              invalidate: () => {},
+            };
+          },
+          layout: { minPrimaryColumnWidth: 24, maxPrimaryColumnWidth: 24 },
+          help: "↑/↓ move  ·  Enter open  ·  Esc back  ·  Ctrl+C quit",
+        },
       );
-      if (pick === BACK || pick === CANCEL) {
+      if (pick === BACK) return "back";
+      if (pick === CANCEL) {
         flow.cancel();
         return "quit";
       }
@@ -840,13 +952,14 @@ export async function runFullSetup(
         } catch (err) {
           setStatus(`! ${(err as Error).message}`);
           await sleep(1600);
-          status = "kumo setup: what do you want to change?  ·  Esc quit";
+          status = "Kumo setup";
+          keyHelp = "↑/↓ move  ·  Enter open  ·  Esc back  ·  Ctrl+C quit";
           continue;
         }
       }
       if (pick === 7) {
         flow.cancel();
-        return "quit";
+        return "later";
       }
       try {
         const done = await runMenuStep(pick as number, bundled);
@@ -856,11 +969,12 @@ export async function runFullSetup(
         }
         // BACK from a single step = back to menu, discarding nothing (apply
         // already merged only on success; BACK merges nothing).
-        status = "kumo setup: what do you want to change?  ·  Esc quit";
+        status = "Kumo setup";
+        keyHelp = "↑/↓ move  ·  Enter open  ·  Esc back  ·  Ctrl+C quit";
       } catch (err) {
         setStatus(`! ${(err as Error).message}. Try again`);
         await sleep(1400);
-        status = "kumo setup: what do you want to change?  ·  Esc quit";
+        status = "Kumo setup";
       }
     }
   }
@@ -929,6 +1043,20 @@ export async function runFullSetup(
   function setStatus(s: string): void {
     status = s;
     tui.requestRender();
+  }
+
+  function fitPlain(value: string, width: number): string {
+    if (visibleWidth(value) <= width) return value;
+    if (width <= 0) return "";
+    let result = "";
+    let cells = 0;
+    for (const char of value) {
+      const size = visibleWidth(char);
+      if (cells + size > width - 1) break;
+      result += char;
+      cells += size;
+    }
+    return `${result}…`;
   }
 
   /** ── steps ─────────────────────────────────────────────────────── */
@@ -1269,26 +1397,16 @@ export async function runFullSetup(
   }
 
   async function stepTheme(): Promise<StepResult> {
-    const themes: Theme[] = ["dark", "light", "high-contrast"];
-    const curTheme = flow.answers.theme;
-    const preview = (index: number): Component => {
-      const theme = (index < 3 ? themes[index] : curTheme) as Theme;
-      const style = theme === "high-contrast" ? ansi.bold : theme === "light" ? (s: string) => `\x1b[30m${s}\x1b[39m` : ansi.gray;
-      return new Text(
-        style("  💭 thinking about the fix…\n  ● bash  pnpm test\n  12.3%/131k (auto)      (local) my-model • low"),
-        1,
-        0,
-      );
-    };
-    const sel = await selectStep(
-      "Theme (s skips)",
-      [...themes.map((t) => ({ value: t, label: t })), { value: "skip", label: `Skip (keep: ${curTheme})` }],
-      (i) => i,
-      { livePreview: preview, initial: themes.indexOf(flow.answers.theme) },
-    );
+    keyHelp = "↑/↓ preview  ·  Enter use theme  ·  S keep current  ·  Esc back";
+    const sel = await interactive<Theme | "skip">("", (finish) => {
+      const picker = new SetupThemePicker(flow.answers.theme);
+      picker.onSelect = (theme) => finish(theme);
+      picker.onSkip = () => finish("skip");
+      return { widget: picker, focus: picker };
+    });
     if (sel === BACK || sel === CANCEL) return sel;
-    if (sel === 3) return {};
-    return { theme: themes[sel] as Theme };
+    if (sel === "skip") return {};
+    return { theme: sel };
   }
 
   async function stepTelemetry(): Promise<StepResult> {

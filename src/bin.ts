@@ -317,7 +317,9 @@ async function main(): Promise<void> {
         ? "kumo: configuration saved."
         : out === "simple"
           ? "kumo: simple setup completed."
-          : "kumo setup canceled.",
+          : out === "later"
+            ? "kumo: configuration postponed. Run `kumo setup` when you’re ready."
+            : "kumo setup canceled.",
     );
     process.exit(out === "quit" ? 1 : 0);
   }
@@ -348,6 +350,10 @@ async function main(): Promise<void> {
       // simple or full). Files are written once, from its Save step.
       const { runFullSetup } = await import("./setup/full.js");
       const out = await runFullSetup(dshHome, {});
+      if (out === "later") {
+        console.log("Setup postponed. Run `kumo setup` whenever you’re ready.");
+        process.exit(0);
+      }
       if (out === "quit") {
         console.log("Setup canceled. Run `kumo setup` when ready.");
         process.exit(0);

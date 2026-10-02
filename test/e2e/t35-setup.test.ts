@@ -146,7 +146,7 @@ class SetupPty {
   /** The line the cursor is on (SelectList marks it with `→`). */
   async selectedLine(): Promise<string> {
     await this.flush();
-    return this.screen().find((l) => l.trim().startsWith("→")) ?? "";
+    return this.screen().map((l) => l.replace(/^[ │|]+/, "")).find((l) => l.startsWith("→")) ?? "";
   }
 
   /** Wait until the change-one-thing menu is on screen (cursor on Models). */
@@ -160,7 +160,7 @@ class SetupPty {
     );
     if (this.text().includes("Review your setup")) this.press("enter");
     await this.until(
-      () => this.screen().some((l) => l.trimStart().startsWith("→ Models")),
+      () => this.screen().some((l) => l.replace(/^[ │|]+/, "").startsWith("→ Models")),
       20_000,
       label,
     );

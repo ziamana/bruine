@@ -17,6 +17,8 @@ import {
   type TUI,
   type SelectListLayoutOptions,
   visibleWidth,
+  truncateToWidth,
+  wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
@@ -27,6 +29,8 @@ import { ansi, selectListTheme } from "../ui/theme.js";
 import { dropLastChar, typedText } from "../ui/keys.js";
 import {
   SetupFlow,
+  STEPS,
+  type StepId,
   defaultAnswers,
   requiredKeyEnvs,
   roleFromModelRef,
@@ -59,6 +63,7 @@ import {
 } from "./simple.js";
 import { readKumoJsonDoc, readUpdateCheckChoice, setUpdateCheck } from "../update.js";
 import { parse as parseYaml } from "yaml";
+import { SetupFrame } from "./frame.js";
 import { SetupCardPicker, SetupThemePicker, SetupWelcome, type SetupCardOption } from "./welcome.js";
 
 const BACK = Symbol("back");
@@ -103,7 +108,7 @@ class LineInput implements Component {
   render(width: number): string[] {
     const shown = this.secret ? "*".repeat([...this.#value].length) : this.#value;
     const line = `${ansi.yellow(this.prompt)}${shown}`;
-    return [line.length > width ? line.slice(0, width - 1) + "…" : line];
+    return wrapTextWithAnsi(line, Math.max(1, width));
   }
   invalidate(): void {}
   handleInput(data: string): void {
@@ -166,12 +171,12 @@ class CheckList implements Component {
           ? `${item.label}  ·  ${item.description}`
           : item.label;
       if (item.disabled === true) {
-        lines.push(ansi.bold(`  ${text}`.slice(0, Math.max(1, width))));
+        lines.push(truncateToWidth(ansi.bold(`  ${text}`), Math.max(1, width)));
         continue;
       }
       const mark = this.checked.has(i) ? "[x] " : "[ ] ";
       const prefix = i === this.#cursor ? ansi.cyan("❯ ") : "  ";
-      lines.push(`${prefix}${mark}${text}`.slice(0, Math.max(1, width)));
+      lines.push(truncateToWidth(`${prefix}${mark}${text}`, Math.max(1, width)));
     }
     return lines;
   }
@@ -589,8 +594,10 @@ export async function runFullSetup(
   let keyHelp = "↑/↓ move  ·  Enter choose or continue  ·  Esc back  ·  Ctrl+C quit";
   let escapeStaysOnWelcome = false;
   let welcomeShowing = false;
+  let frameShowing = false;
+  let displayStep: StepId | undefined;
   const statusWidget: Component = {
-    render: (width: number) => welcomeShowing ? [] : [
+    render: (width: number) => welcomeShowing || frameShowing ? [] : [
         ansi.gray(status.slice(0, Math.max(0, width - 2))),
         ansi.faint(fitPlain(keyHelp, width)),
       ],
@@ -639,7 +646,7 @@ export async function runFullSetup(
     new Promise((resolveP) => {
       root.clear();
       const box = new Container();
-      if (title !== "") box.addChild(new Text(ansi.bold(title), 1, 0));
+
       const built = build((v) => {
         activeResolve = null;
         resolveP(v);
@@ -647,7 +654,15 @@ export async function runFullSetup(
       for (const c of built.above ?? []) box.addChild(c);
       box.addChild(built.widget);
       for (const c of built.below ?? []) box.addChild(c);
-      root.addChild(box);
+      frameShowing = !welcomeShowing;
+      if (frameShowing) {
+        root.addChild(new SetupFrame(title || (displayStep === undefined ? "Kumo setup" : stepTitle(displayStep).split("  (step")[0]!), box, {
+          ...(displayStep === undefined ? {} : { step: STEPS.indexOf(displayStep) + 1 }),
+          help: keyHelp,
+          rows: () => terminal.rows,
+          status: () => status === "kumo setup" || status === "Kumo setup" || (displayStep !== undefined && status === stepTitle(displayStep)) ? "" : status,
+        }));
+      } else root.addChild(box);
       tui.setFocus(built.focus);
       tui.requestRender();
       activeResolve = (o) => {
@@ -769,6 +784,7 @@ export async function runFullSetup(
       status = "Kumo setup";
       escapeStaysOnWelcome = true;
       welcomeShowing = true;
+      displayStep = undefined;
       welcome = new SetupWelcome(() => terminal.rows);
       try {
         return await interactive<true>("", (finish) => {
@@ -900,6 +916,7 @@ export async function runFullSetup(
     status = "Kumo setup";
     keyHelp = "↑/↓ move  ·  Enter open  ·  Esc back  ·  Ctrl+C quit";
     for (;;) {
+      displayStep = undefined;
       const pick = await selectStep(
         "Kumo setup",
         [
@@ -1062,6 +1079,7 @@ export async function runFullSetup(
   /** ── steps ─────────────────────────────────────────────────────── */
 
   async function stepModels(): Promise<StepResult> {
+    displayStep = "models";
     const discoveries: Discovered[] = [...flow.answers.discoveries];
     setStatus("scanning localhost…");
     const found = await scanLocalhosts({ fetchImpl: opts.fetchImpl, ports: LOCAL_PORTS });
@@ -1152,6 +1170,7 @@ export async function runFullSetup(
   }
 
   async function stepRoles(): Promise<StepResult> {
+    displayStep = "roles";
     const roles: SetupAnswers["roles"] = {};
     const main = await askRole("main", { required: true });
     if (main === BACK || main === CANCEL) return main;
@@ -1268,6 +1287,7 @@ export async function runFullSetup(
   }
 
   async function stepKeys(): Promise<StepResult> {
+    displayStep = "keys";
     const reqs = requiredKeyEnvs(flow.answers);
     if (reqs.length === 0) {
       const r = await selectStep("No API keys needed for your choices.", [
@@ -1294,6 +1314,7 @@ export async function runFullSetup(
   }
 
   async function stepMode(): Promise<StepResult> {
+    displayStep = "mode";
     const cur = flow.answers.permissionMode;
     const m = await selectStep(
       "Default access mode (s skips)",
@@ -1318,6 +1339,7 @@ export async function runFullSetup(
   }
 
   async function stepSearch(): Promise<StepResult> {
+    displayStep = "search";
     setStatus("checking for a local SearXNG…");
     const detected = await detectSearxng(opts.fetchImpl !== undefined ? { fetchImpl: opts.fetchImpl } : {});
     setStatus(stepTitle("search"));
@@ -1359,6 +1381,7 @@ export async function runFullSetup(
   }
 
   async function stepSkills(bundled: SkillMeta[]): Promise<StepResult> {
+    displayStep = "skills";
     // T26: three groups — shipped with kumo, found on this computer, and
     // (read-only) skills in this project, which kumo never manages. A name
     // both shipped and found keeps ONE row: the shipped one wins.
@@ -1397,6 +1420,7 @@ export async function runFullSetup(
   }
 
   async function stepTheme(): Promise<StepResult> {
+    displayStep = "theme";
     keyHelp = "↑/↓ preview  ·  Enter use theme  ·  S keep current  ·  Esc back";
     const sel = await interactive<Theme | "skip">("", (finish) => {
       const picker = new SetupThemePicker(flow.answers.theme);
@@ -1410,6 +1434,7 @@ export async function runFullSetup(
   }
 
   async function stepTelemetry(): Promise<StepResult> {
+    displayStep = "telemetry";
     if (!updateCheckLoaded) {
       updateCheckLoaded = true;
       updateCheckChoice = readUpdateCheckChoice(await readKumoJsonDoc(dshHome)) ?? true;
@@ -1457,6 +1482,7 @@ export async function runFullSetup(
   }
 
   async function stepSummary(bundledRoot: string, bundled: SkillMeta[]): Promise<StepResult> {
+    displayStep = "summary";
     const plan = flow.buildPlan({ dshHome, bundledSkillsRoot: bundledRoot, bundledSkills: bundled });
     const a = flow.answers;
     const ref = (r: RolePick | undefined): string =>

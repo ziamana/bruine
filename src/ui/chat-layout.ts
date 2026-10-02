@@ -122,7 +122,7 @@ export class ChatTranscript extends Container {
       }
       const last = block.length - 1;
       for (const [i, line] of block.entries()) {
-        const clean = child.constructor.name === "ReasoningComponent" ? reasoningStyle(withoutEmoji(line)) : withoutEmoji(line);
+        const clean = (child as Component & { transcriptStyle?: string }).transcriptStyle === "reasoning" ? reasoningStyle(withoutEmoji(line)) : withoutEmoji(line);
         if (rail === undefined) {
           lines.push(truncateToWidth(`  ${clean}`, width - 2));
         } else {

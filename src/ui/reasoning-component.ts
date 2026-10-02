@@ -5,6 +5,7 @@ import { ansi } from "./theme.js";
 
 /** Current sentence growing word by word (T25.3), subtitle on overflow. */
 export class ReasoningComponent implements Component {
+  readonly transcriptStyle = "reasoning";
   #current = "";
   #lastFinished = "";
   #startTime = 0;

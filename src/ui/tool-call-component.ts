@@ -119,11 +119,14 @@ export class ToolCallComponent implements Component {
       const summary = this.summary(width);
       const detail = summary ? `  ${summary}` : "";
       const plainLine = clipCells(`${spinnerFrame(this.now() - this.#startTime, this.icons)} ${toolPad}${detail}`, width);
+      const pending = this.tool === "ask_user"
+        ? [ansi.gray(clipCells(this.icons.think === "*" ? "Waiting for user input..." : "Waiting for user input…", width))]
+        : [];
       const fr = spinnerFrame(this.now() - this.#startTime, this.icons);
       if (stringWidth(plainLine) === stringWidth(`${fr} ${toolPad}${detail}`)) {
-        return [`${ansi.cyan(fr)} ${ansi.text(toolPad)}${ansi.gray(detail)}`, ...(this.tool === "ask_user" ? [ansi.gray(clipCells(this.icons.think === "*" ? "Waiting for user input..." : "Waiting for user input…", width))] : [])];
+        return [`${ansi.cyan(fr)} ${ansi.text(toolPad)}${ansi.gray(detail)}`, ...pending];
       }
-      return [plainLine, ...(this.tool === "ask_user" ? [ansi.gray(clipCells(this.icons.think === "*" ? "Waiting for user input..." : "Waiting for user input…", width))] : [])];
+      return [plainLine, ...pending];
     }
     const mark = this.#done.ok ? ansi.green(this.icons.ok) : ansi.red(this.icons.fail);
     const dur = formatDuration(this.#done.seconds) ?? (this.#done.ok ? "0.0s" : undefined);

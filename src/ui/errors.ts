@@ -6,6 +6,10 @@
  */
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { truncateToWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
+import { displayModel } from "./footer.js";
+import { ansi } from "./theme.js";
+import { colorDepth, paint } from "./palette.js";
 
 export interface LlmFailure {
   code?: unknown;
@@ -26,6 +30,15 @@ export interface ErrorLines {
   hint: string;
   /** True when the caller should fetch /v1/models ids for the hint. */
   wantAvailableModels?: boolean;
+}
+
+/**
+ * Bold is an attribute, not a colour, so `KUMO_COLOR=none` has to take it as well:
+ * "no colour" means no SGR at all, and a lone `\x1b[1m` is still something to read
+ * past on a screen where nothing else is decorated.
+ */
+function strong(text: string): string {
+  return colorDepth() === "none" ? text : ansi.bold(text);
 }
 
 function firstLine(text: string): string {
@@ -99,11 +112,89 @@ export function describeLlmError(failure: LlmFailure, route: ErrorRoute): ErrorL
       hint: firstLine(message) === "" ? "Try again" : firstLine(message),
     };
   }
+  // A retry loop that gave up because the user pressed Esc arrives here, and the
+  // generic hint below ("if it repeats: kumo setup") is the wrong thing to say to
+  // somebody who just stopped the turn on purpose. The provider's own wording is
+  // kept — it knows how many attempts it made — and the hint says what to do next.
+  if (code === "ABORTED" || code === "CANCELLED" || /\b(cancell?ed|aborted|interrupted)\b/i.test(message)) {
+    const said = firstLine(message);
+    return {
+      message: said === "" ? "The turn was cancelled" : said,
+      hint: "You stopped this turn. Ask again, or /new to start clean",
+    };
+  }
   // Anything else: say the first line, never a stack, and point at the log.
   return {
     message: firstLine(message) === "" ? `${route.provider}: unknown model error` : firstLine(message),
     hint: "Details in logs/kumo.log; if it repeats: kumo setup",
   };
+}
+
+/**
+ * D7 — the error as the user meets it: what happened, on which model, and what to
+ * do about it.
+ *
+ * The defect: the failure was two loose lines in the transcript, and neither said
+ * which model had just refused. On a route that names a file (`/etc/ajean/models/
+ * Ornith-1.5-9B-Q4_K_M.gguf`) a user who has three models on disk has no way to
+ * tell which one gave up, and the answer was a path they have to shorten by hand.
+ *
+ *     Error: Retry failed after 2 attempts: Retry cancelled
+ *     Model: Ornith-1.5-9B-Q4_K_M
+ *     You stopped this turn. Ask again, or /new to start clean
+ *
+ * It carries D1's `rail: "red"`, so the transcript paints it exactly like a tool
+ * call that failed — the same tint, the same red rail, the same plain rail where
+ * there is no background to tint. An error is not a new kind of thing on screen.
+ *
+ * Every row is wrapped rather than cut: a failure message truncated at the width is
+ * a failure message that lost the part that says why.
+ */
+export class ErrorBlock implements Component {
+  /** D1: a turn that failed is the same kind of red as a tool call that failed. */
+  readonly rail = "red" as const;
+  #lines: ErrorLines;
+  #model: string;
+
+  constructor(lines: ErrorLines, opts: { model?: string; modelName?: string } = {}) {
+    this.#lines = lines;
+    // `displayModel`, never the id: the row names the model, it does not print the
+    // path of the weights behind it.
+    this.#model = displayModel(opts.model, opts.modelName);
+  }
+
+  /**
+   * The hint, filled in place once the server answers.
+   *
+   * T55 writes the error straight away and lets the `/v1/models` list arrive a
+   * moment later: waiting on a network call before printing anything delayed the
+   * line the user actually needed.
+   */
+  setHint(hint: string): void {
+    this.#lines = { ...this.#lines, hint };
+  }
+
+  render(width: number): string[] {
+    const cells = Math.max(8, width);
+    const rows: string[] = [];
+    const label = "Error:";
+    const wrapped = wrapTextWithAnsi(this.#lines.message, Math.max(8, cells - label.length - 1));
+    rows.push(`${strong(paint("rose", label))} ${paint("rose", wrapped[0] ?? "")}`);
+    for (const line of wrapped.slice(1)) rows.push(paint("rose", line));
+    // No model, no row: `Model: no model` is a sentence about the UI, not about
+    // the user's session.
+    if (this.#model !== "no model") {
+      for (const line of wrapTextWithAnsi(`Model: ${this.#model}`, cells)) rows.push(paint("muted", line));
+    }
+    if (this.#lines.hint.trim() !== "") {
+      for (const line of wrapTextWithAnsi(this.#lines.hint, cells)) rows.push(paint("muted", line));
+    }
+    return rows.map((row) => truncateToWidth(row, cells));
+  }
+
+  invalidate(): void {
+    // Stateless render.
+  }
 }
 
 /** Best-effort /v1/models ids for the 404 hint (1 s timeout, first 3). */

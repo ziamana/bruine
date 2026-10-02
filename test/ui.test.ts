@@ -1414,13 +1414,16 @@ describe("a question form survives the turn it interrupts", () => {
     await ui.shutdown();
   });
 
-  test("typing answers the question, no Other… detour needed", async () => {
+  test("Other opens the custom answer in the question popup", async () => {
     const terminal = new FakeTerminal();
     const ui = new KumoUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, terminal, UNICODE_ICONS);
     await ui.start();
     const answers = ui.askQuestions([
       { id: "q1", question: "Quelle base ?", options: [{ label: "SQLite" }, { label: "Redis" }] },
     ]);
+    terminal.onInput?.("\x1b[B");
+    terminal.onInput?.("\x1b[B");
+    terminal.onInput?.("\r");
     for (const ch of "utilise postgres") terminal.onInput?.(ch);
     expect(ui.tui.render(80).map(strip).join("\n")).toContain("utilise postgres");
     terminal.onInput?.("\r");

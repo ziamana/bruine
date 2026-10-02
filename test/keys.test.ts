@@ -75,14 +75,14 @@ describe("the question form reads keys, not bytes (T60)", () => {
     form.handleInput("a");
     form.handleInput("b");
     form.handleInput("\x7f");
-    expect(frame(form)).toContain("ab");
+    expect(frame(form)).toContain("Filter: a");
     form.handleInput("\x1b[127;1:3u");
-    expect(frame(form)).toContain("ab");
+    expect(frame(form)).toContain("Filter: a");
     form.handleInput("\x1b[127;5u");
     expect(frame(form)).toContain("a");
   });
 
-  test("typing is an answer, in either encoding", () => {
+  test("typing filters options, in either encoding", () => {
     const form = new QuestionForm(question());
     form.handleInput("\x1b[115;1u");
     expect(frame(form)).toContain("s");

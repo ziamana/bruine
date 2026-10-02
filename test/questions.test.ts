@@ -27,13 +27,15 @@ describe("QuestionForm (T28A)", () => {
     expect(out).toEqual([{ id: "q1", selected: ["A", "B"] }]);
   });
 
-  test("typing a letter is an answer, with no Other… detour", () => {
+  test("typing filters options and Other accepts the custom answer", () => {
     const f = new QuestionForm([
       { id: "q1", question: "Which?", options: [{ label: "A" }, { label: "B" }] },
     ]);
     let out: any;
     f.onDone = (a) => (out = a);
-    // The cursor is still on the first option: type, and it becomes the answer.
+    f.handleInput("\x1b[B");
+    f.handleInput("\x1b[B");
+    f.handleInput("\r");
     f.handleInput("u");
     f.handleInput("t");
     f.handleInput("ilise");
@@ -56,15 +58,15 @@ describe("QuestionForm (T28A)", () => {
       // The defect: a `›` and nothing else. The option you are about to confirm
       // looked exactly like the ones you are not.
       const first = f.render(60);
-      const a = first.find((l) => l.includes("A"));
-      const b = first.find((l) => l.includes("B"));
+      const a = first.find((l) => l.includes("1. A"));
+      const b = first.find((l) => l.includes("2. B"));
       expect(a).toContain(bgCode("surface", "truecolor"));
       expect(b).not.toContain(bgCode("surface", "truecolor"));
       // Moving the cursor moves the selection, not just a character.
       f.handleInput("\x1b[B");
       const moved = f.render(60);
-      expect(moved.find((l) => l.includes("B"))).toContain(bgCode("surface", "truecolor"));
-      expect(moved.find((l) => l.includes("A"))).not.toContain(bgCode("surface", "truecolor"));
+      expect(moved.find((l) => l.includes("2. B"))).toContain(bgCode("surface", "truecolor"));
+      expect(moved.find((l) => l.includes("1. A"))).not.toContain(bgCode("surface", "truecolor"));
     } finally {
       if (saved === undefined) delete process.env.KUMO_COLOR;
       else process.env.KUMO_COLOR = saved;
@@ -85,8 +87,8 @@ describe("QuestionForm (T28A)", () => {
       // A 16-color terminal paints no background, so the marker has to carry it.
       const selected = rows.find((l) => l.includes("AAA"))!;
       const other = rows.find((l) => l.includes("BBB"))!;
-      expect(selected.trimStart().startsWith("›")).toBe(true);
-      expect(other.trimStart().startsWith("›")).toBe(false);
+      expect(selected.includes("→ 1.")).toBe(true);
+      expect(other.includes("→ 2.")).toBe(false);
     } finally {
       if (saved === undefined) delete process.env.KUMO_COLOR;
       else process.env.KUMO_COLOR = saved;
@@ -100,7 +102,7 @@ describe("QuestionForm (T28A)", () => {
     ]).render(100).join("\n");
     // Space does nothing in a single-select question, so advertising it was a lie.
     expect(single).not.toContain("Space toggle");
-    expect(single).toContain("type to answer");
+    expect(single).toContain("type filter");
     const multi = new QuestionForm([
       { id: "q1", question: "Which?", multiSelect: true, options: [{ label: "A" }] },
     ]).render(100).join("\n");
@@ -131,7 +133,7 @@ describe("QuestionForm (T28A)", () => {
       const question = rows.find((l) => l.includes("Which one?"))!;
       // The header was cyan and the question plain: the decoration was louder
       // than the thing being asked.
-      expect(header).toContain(fgCode("faint", "truecolor"));
+      expect(header).toContain(fgCode("lavender", "truecolor"));
       expect(question).toContain(fgCode("text", "truecolor"));
       expect(contrastRatio(NUAGE.text.hex, NUAGE.surface.hex)).toBeGreaterThan(
         contrastRatio(NUAGE.faint.hex, NUAGE.surface.hex),
@@ -165,7 +167,7 @@ describe("QuestionForm (T28A)", () => {
 
   test("the hint says typing is allowed, because it now is", () => {
     const f = new QuestionForm([{ id: "q1", question: "Which?", options: [{ label: "A" }] }]);
-    expect(f.render(80).join("\n")).toContain("type to answer");
+    expect(f.render(80).join("\n")).toContain("type filter");
   });
 
   test("Other… free text becomes custom", () => {
@@ -238,7 +240,7 @@ describe("QuestionForm (T28A)", () => {
     ]);
     const text = f.render(20).join("\n");
     expect(text).toContain("SQL");
-    expect(text).toContain("...");
+    expect(text).toContain("Other");
   });
 
   test("echoLine uses the full width with arrow", () => {

@@ -72,6 +72,6 @@ export interface KumoRepl {
     resetRouteCache?(): void;
     footer: { set(next: Record<string, unknown>): void; tpsReset?(): void };
     requestRender(): void;
-    icons: { think: string; prompt: string; ok: string; fail: string; bullet: string; spark: string };
+    icons: { think: string; prompt: string; ok: string; fail: string; bullet: string; spark: string; folder: string };
   };
 }

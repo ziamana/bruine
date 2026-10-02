@@ -40,18 +40,20 @@ export type CopyClipboard = (text: string) => Promise<CopyOutcome>;
 
 /** T56: what `/mouse` says, and the cost it names rather than hides. */
 export const MOUSE_ON_NOTICE =
-  "Mouse selection on: drag to select, release to copy. The wheel no longer scrolls the transcript.";
+  "Mouse selection on: drag to select, release to copy. The wheel scrolls kumo's transcript window, so the input bar stays put.";
 export const MOUSE_OFF_NOTICE =
-  "Mouse selection off: the wheel scrolls the transcript again, and dragging selects nothing.";
+  "Mouse selection off: the wheel scrolls the terminal's scrollback again, input bar and all, and dragging selects nothing.";
 
 /**
  * T56: the wheel notice. It names the cost and the way out, because a transcript
  * that will not scroll with no word is indistinguishable from a broken app.
  */
 export const WHEEL_NOTICE =
-  "The wheel does not scroll while mouse selection is on, and kumo cannot move the terminal's scrollback itself. /mouse off gives the wheel back.";
+  "The wheel needs the app's transcript window and this session has none. /mouse off gives the wheel back to the terminal.";
 
-/** What the input hook needs to know about one chunk. */
+/**
+ * What the input hook needs to know about one chunk.
+ */
 export interface MouseRead extends ParsedChunk {
   /** True when the chunk was for the mouse, so it must not reach the editor. */
   handled: boolean;
@@ -70,6 +72,11 @@ export interface MouseFeatureOptions {
    * and not this module's guess.
    */
   readText: (span: SelectionSpan) => string;
+  /**
+   * Move the app's transcript window, negative up. The wheel's only way to scroll
+   * now that kumo owns the window rather than the terminal.
+   */
+  scroll?: (rows: number) => void;
   copy?: CopyClipboard;
   env?: NodeJS.ProcessEnv;
 }
@@ -82,6 +89,7 @@ export class MouseFeature {
   readonly #repaint: () => void;
   readonly #notify: (text: string, opts?: { red?: boolean }) => void;
   readonly #readText: (span: SelectionSpan) => string;
+  readonly #scroll: ((rows: number) => void) | undefined;
   readonly #copy: CopyClipboard;
   readonly #trace: string | undefined;
   #wanted: boolean;
@@ -96,6 +104,7 @@ export class MouseFeature {
     this.#repaint = opts.repaint;
     this.#notify = opts.notify;
     this.#readText = opts.readText;
+    this.#scroll = opts.scroll;
     this.#toast = new ToastHost(opts.tui);
     const env = opts.env ?? process.env;
     this.#wanted = mouseSelectionAllowed(env);
@@ -176,7 +185,7 @@ export class MouseFeature {
   #act(samples: readonly MouseSample[]): void {
     for (const sample of samples) {
       if (sample.phase === "wheel") {
-        this.#onWheel();
+        this.#onWheel(sample.wheelDelta ?? 0);
         continue;
       }
       if (sample.phase === "press") {
@@ -207,21 +216,26 @@ export class MouseFeature {
   }
 
   /**
-   * T56: the wheel, detected and named once.
+   * T56: the wheel, and what it moves.
    *
-   * It cannot scroll, and the reason is not a missing feature in kumo: on the
-   * main screen the scrollback belongs to the terminal, holding the mouse takes
-   * the wheel away from it, and the app cannot move the terminal's cursor
-   * itself. `TuiMainScreen` tracks the hardware cursor and repaints by relative
-   * movement, so a cursor moved behind its back desyncs every later partial
-   * update, and the only re-sync it offers (`renderNow(true)`) erases the
-   * scrollback it was meant to preserve (`tui-main-screen.js:244`).
+   * It could not scroll, and the reason was never a missing feature in kumo: on the
+   * main screen the scrollback belongs to the terminal, holding the mouse takes the
+   * wheel away from it, and the app cannot move the terminal's cursor itself.
+   * `TuiMainScreen` tracks the hardware cursor and repaints by relative movement,
+   * so a cursor moved behind its back desyncs every later partial update, and the
+   * only re-sync it offers (`renderNow(true)`) erases the scrollback it was meant
+   * to preserve (`tui-main-screen.js:244`).
    *
-   * So the wheel is swallowed while the mouse is on, and saying so once is the
-   * whole of it. The two ways out are `/mouse off`, which is instant, and a
-   * scrollback window in the app, which is a ticket of its own.
+   * What changed is the frame, not the terminal: the shell now owns a transcript
+   * window (`shell.ts`), so a wheel notch scrolls a window kumo is painting and the
+   * composer stays on the last row. A shell with no window behind it (an old one,
+   * a form) still cannot scroll, and then the notice is the whole of it.
    */
-  #onWheel(): void {
+  #onWheel(delta: number): void {
+    if (this.#scroll !== undefined) {
+      this.#scroll(delta);
+      return;
+    }
     if (this.#wheelExplained) return;
     this.#wheelExplained = true;
     this.#notify(WHEEL_NOTICE, { red: true });

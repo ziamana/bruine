@@ -566,6 +566,39 @@ test("grouping: 4 grep collapse to +2 more, failed grep stays, ctrl+o expands (T
   });
 });
 
+test("PageUp reads the transcript and the composer stays on the last row", async () => {
+  // The defect this is for: the composer sat at the end of a frame the terminal
+  // scrolled, so reading the first turn of five put the input bar off the screen
+  // and the only way back was to scroll to the bottom and find it. The frame is now
+  // windowed by the app, so both are on screen at once.
+  const words = ["ONE", "TWO", "THREE", "FOUR", "FIVE"];
+  await scenario("scroll", words.map((w) => textScript(w)), async (h) => {
+    for (const [i, word] of words.entries()) {
+      await h.prompt(`turn ${String(i)}`);
+      await h.waitFor(word);
+    }
+    await h.waitStable(400, 2000);
+    const live = h.screen();
+    // Long enough that the terminal has to scroll: the situation that used to cost
+    // the user their composer.
+    expect(live.join("\n")).not.toContain("ONE");
+    await h.dump("scroll-live");
+
+    h.press("pageUp");
+    await h.waitFor("lines below");
+    const up = h.screen();
+    // The first turn is readable again, and the footer is still the last row.
+    expect(up.join("\n")).toContain("ONE");
+    expect(up.at(-1)).toContain("e2e-model");
+    expect(up.at(-1)).toBe(live.at(-1));
+    await h.dump("scroll-back");
+
+    h.press("pageDown");
+    await h.until(() => !h.screen().join("\n").includes("lines below"), 2000, "live edge");
+    expect(h.screen().at(-1)).toContain("e2e-model");
+  });
+});
+
 const askTool = (questions: unknown, id = "q1"): Script =>
   toolScript("ask_user_question", { questions }, id);
 

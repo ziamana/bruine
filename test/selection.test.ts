@@ -21,7 +21,7 @@ import {
 } from "../src/ui/clipboard-write.js";
 import { ToastHost } from "../src/ui/toast.js";
 import { KumoUi } from "../src/ui/kumo-ui.js";
-import { MOUSE_OFF_NOTICE, MOUSE_ON_NOTICE, mouseTrace, mouseSelectionAllowed } from "../src/ui/mouse.js";
+import { MOUSE_OFF_NOTICE, MOUSE_ON_NOTICE, MouseFeature, mouseTrace, mouseSelectionAllowed } from "../src/ui/mouse.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
 import type { Terminal } from "@earendil-works/pi-tui";
 import { strip } from "./fakes.js";
@@ -541,7 +541,7 @@ describe("selecting in the shell (T56)", () => {
     terminal.onInput?.(release(at.col + 4, at.row));
     await Promise.resolve();
     expect(copied).toEqual([]);
-    expect(ui.mouse.toggle()).toMatch(/no longer scrolls/i);
+    expect(ui.mouse.toggle()).toMatch(/input bar stays put/i);
     expect(terminal.writes.at(-1)).toBe(ENABLE_MOUSE);
     await ui.shutdown();
   });
@@ -550,7 +550,7 @@ describe("selecting in the shell (T56)", () => {
     const { ui } = makeUi();
     ui.start();
     expect(ui.mouse.toggle(false)).toMatch(/wheel scrolls/i);
-    expect(ui.mouse.toggle(true)).toMatch(/no longer scrolls/i);
+    expect(ui.mouse.toggle(true)).toMatch(/input bar stays put/i);
     await ui.shutdown();
   });
 
@@ -588,20 +588,44 @@ describe("selecting in the shell (T56)", () => {
     await ui.shutdown();
   });
 
-  test("the wheel says once that it cannot scroll, and names the way out", async () => {
-    // A transcript that will not scroll with no word is indistinguishable from a
-    // broken app. Once is enough: the user has read it or has not.
+  test("the wheel scrolls kumo's own window, and only the shell's absence is explained", async () => {
+    // The notice used to be all there was: a wheel that did nothing, once. The
+    // shell owns a transcript window now, so the wheel scrolls it and the input
+    // bar stays on the last row. A feature wired without a window still has to say
+    // so, because a transcript that will not scroll with no word is a broken app.
     const { ui, terminal } = makeUi();
+    for (const line of ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"]) {
+      ui.addChat({ render: () => [line], invalidate: () => {} });
+    }
     ui.start();
+    // One frame first: the window is fed by the frames kumo has painted, and a
+    // session that has painted nothing has no history to scroll.
+    painted(ui);
     terminal.onInput?.("\x1b[<64;10;5M");
-    expect(painted(ui)).toContain("does not scroll");
-    expect(painted(ui)).toContain("/mouse off");
-    terminal.onInput?.("\x1b[<64;10;5M");
-    terminal.onInput?.("\x1b[<64;10;5M");
-    // The notice is 3 s and then gone, and the wheel does not bring it back.
+    painted(ui);
+    expect(ui.shell.back).toBeGreaterThan(0);
+    expect(painted(ui)).toContain("lines below");
+    // Down again, and the window is back on the live edge with no hint left.
+    terminal.onInput?.("\x1b[<65;10;5M");
+    terminal.onInput?.("\x1b[<65;10;5M");
+    expect(ui.shell.back).toBe(0);
+    expect(painted(ui)).not.toContain("lines below");
+
+    // No window behind the feature: the notice is the whole of it, and once.
+    const bare = new MouseFeature({
+      tui: ui.tui,
+      terminal,
+      repaint: () => {},
+      notify: (text) => ui.showNotice(text, { red: true }),
+      readText: () => "",
+    });
+    bare.start();
+    bare.read("\x1b[<64;10;5M");
+    expect(painted(ui)).toContain("transcript window");
+    bare.read("\x1b[<64;10;5M");
     await new Promise((r) => setTimeout(r, 50));
     ui.showNotice("");
-    expect(painted(ui)).not.toContain("does not scroll");
+    expect(painted(ui)).not.toContain("transcript window");
     await ui.shutdown();
   });
 

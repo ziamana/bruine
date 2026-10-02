@@ -34,12 +34,16 @@ describe("iconsFor (T14.5)", () => {
 });
 
 describe("cross-platform source audit (T14.4)", () => {
+  // The audit is about paths the app OPENS. A file that only ever prints a
+  // location is not one of them, and has to be able to write the label a shell
+  // user expects to read.
+  const displayOnly = [join("gate", "rules.ts"), join("ui", "place.ts")];
   test("no POSIX home paths or ~ strings in src/", () => {
     const offenders: string[] = [];
     for (const file of sourceFiles(join(__dirname, "..", "src"))) {
       // T18.3 deliberately matches "~/" targets in the gate; everything else
       // must stay free of hardcoded POSIX home paths and ~ strings.
-      if (file.endsWith(join("gate", "rules.ts"))) continue;
+      if (displayOnly.some((suffix) => file.endsWith(suffix))) continue;
       const text = readFileSync(file, "utf8");
       if (/\/home\/|~\//.test(text)) offenders.push(file.split(sep).slice(-2).join("/"));
     }

@@ -45,6 +45,29 @@ export function clipCells(text: string, width: number, ellipsis = "…"): string
   return out + suffix;
 }
 
+/**
+ * Keep the end, truncating on a grapheme boundary and counting cells.
+ *
+ * A path is named by its tail: `projets/kumo` says more than `projets`, so a
+ * label too long for its row loses its head and keeps the cells it has room for.
+ */
+export function clipStart(text: string, width: number, ellipsis = "…"): string {
+  if (width <= 0) return "";
+  if (stringWidth(text) <= width) return text;
+  const prefix = width >= stringWidth(ellipsis) ? ellipsis : ".".repeat(width);
+  const room = width - stringWidth(prefix);
+  const segments = [...segmenter.segment(text)];
+  let out = "";
+  let used = 0;
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const cells = stringWidth(segments[i]!.segment);
+    if (used + cells > room) break;
+    out = segments[i]!.segment + out;
+    used += cells;
+  }
+  return prefix + out;
+}
+
 export const SPINNER_FRAMES = ["·", "✢", "✺", "✶", "✻", "✽", "✻", "✶", "✺", "✢"];
 export const ASCII_SPINNER_FRAMES = ["-", "\\", "|", "/"];
 export function spinnerFrame(elapsed: number, icons: KumoIcons): string {

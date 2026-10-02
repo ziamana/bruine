@@ -24,6 +24,8 @@ import { LOGO_STOPS, terminalMotionAllowed, wordmarkFrame } from "./logo-motion.
 import { ChatTranscript, ConsoleBand, Gap, Margin, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
 import { displayModel } from "./footer.js";
+import { PlaceRow } from "./place.js";
+import { Shell } from "./shell.js";
 import { QuestionForm } from "./questions.js";
 import { WorkingComponent } from "./working.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
@@ -298,6 +300,8 @@ export class KumoUi {
   readonly editor: PlainGlyphEditor;
   readonly footer: FooterComponent;
   readonly icons: KumoIcons;
+  /** The frame: header, a scrollable transcript, and the band pinned under it. */
+  readonly shell: Shell;
   /**
    * T56: the mouse. Drag to select, release to copy. It owns the gesture, the
    * clipboard, and the one terminal sequence nobody else writes, so all this
@@ -347,6 +351,9 @@ export class KumoUi {
     this.chat = new ChatTranscript(icons);
     this.editor = new PlainGlyphEditor(this.tui, editorTheme);
     this.editor.onSubmit = (text) => {
+      // A prompt is a decision to go on, so the transcript goes back to the live edge
+      // with it: the answer is about to be written at the bottom of the screen.
+      this.shell.toEnd();
       // Working is shown by the render plugin on turn/start, AFTER the prompt echo
       // (showing it here put it above the user's message on the real server).
       // T30: the update notice stays until the first prompt.
@@ -404,11 +411,8 @@ export class KumoUi {
       notify: (text, opts) => this.showNotice(text, opts),
       readText: (span) => this.#readSelection(span),
       copy: handlers.copyText,
+      scroll: (rows) => this.scrollTranscript(rows),
     });
-    this.#layer.addChild(this.header);
-    this.#layer.addChild(this.chat);
-    this.#layer.addChild(new Margin(new Gap(this.taskPanel)));
-    this.#layer.addChild(new Margin(this.noticeBox));
     // Cockpit (Nuage + Cockpit mix): live speed/cache/context next to the editor on
     // wide color terminals; ctrl+b hides it. Basic/ASCII terminals keep the plain editor.
     this.dock = new DockRow(
@@ -428,8 +432,19 @@ export class KumoUi {
     );
     this.dock.visible = this.fancyHeader;
     this.footer.compact = (w) => this.dock.shown(w);
-    // The editor, the cockpit and the footer share one painted surface (T40).
-    this.#layer.addChild(new ConsoleBand([this.dock, this.footer]));
+    // The place, on the console surface between the input and the footer: the eye is
+    // already there, and a coding agent's whole world is the directory it runs in.
+    const place = new PlaceRow(process.cwd());
+    // The editor, the place, the cockpit and the footer share one painted surface (T40).
+    // The shell owns the order so the transcript can be windowed: scrolled back, the
+    // band below it has to stay on the last row, and only the layout knows that.
+    this.shell = new Shell(
+      [this.header],
+      this.chat,
+      [new Margin(new Gap(this.taskPanel)), new Margin(this.noticeBox), new ConsoleBand([this.dock, place, this.footer])],
+      () => this.terminal.rows,
+    );
+    this.#layer.addChild(this.shell);
     this.tui.addChild(this.#layer);
 
     // T30: the launcher ran the 24 h registry check in the background; the
@@ -497,6 +512,25 @@ export class KumoUi {
       this.requestRender();
       return { consume: true };
     }
+    // PageUp/PageDown move the transcript window instead of the cursor. The editor
+    // only ever used them to walk a multi-line buffer, and the cost of taking them
+    // is a paste of a thousand lines; the cost of leaving them is that the one key
+    // a reader reaches for scrolls the composer out of sight.
+    if (matchesKey(data, "pageUp") || matchesKey(data, "ctrl+pageUp")) {
+      this.scrollTranscript(this.#pageRows());
+      return { consume: true };
+    }
+    if (matchesKey(data, "pageDown") || matchesKey(data, "ctrl+pageDown")) {
+      this.scrollTranscript(-this.#pageRows());
+      return { consume: true };
+    }
+    // End only means "follow the live edge" while the window is away from it; at
+    // the live edge it is the editor's own "go to end of line".
+    if (this.shell.scrolled && (matchesKey(data, "end") || matchesKey(data, "ctrl+end"))) {
+      this.shell.toEnd();
+      this.requestRender();
+      return { consume: true };
+    }
     if (this.#confirming) {
       if (matchesKey(data, "tab") || matchesKey(data, "shift+tab")) {
         return { consume: true };
@@ -516,6 +550,8 @@ export class KumoUi {
     }
     // T31.4: Tab is completion only (the Editor owns it). Never a mode action.
     if (matchesKey(data, "escape")) {
+      // Escape means "stop, and take me back to what is happening".
+      if (this.shell.scrolled) this.shell.toEnd();
       handlers.onEscape();
       return { consume: true };
     }
@@ -577,6 +613,29 @@ export class KumoUi {
   #readSelection(span: SelectionSpan): string {
     const lines = this.tui.render(this.terminal.columns);
     return selectedText(lines, viewportTop(lines.length, this.terminal.rows), span);
+  }
+
+  /**
+   * Move the transcript window, positive towards the live edge.
+   *
+   * The page is the terminal minus the band, so a page is what fits: scrolling by
+   * any other amount either repeats rows or skips them.
+   */
+  #pageRows(): number {
+    return Math.max(1, this.terminal.rows - 7);
+  }
+
+  /**
+   * The one door onto the window, for the keys and the wheel.
+   *
+   * Positive goes away from the live edge, which is the direction a wheel reports as
+   * positive too, so the wheel needs no arithmetic of its own. It repaints even when
+   * the window did not move, so a wheel that has reached the end still says so by
+   * drawing rather than by doing nothing.
+   */
+  scrollTranscript(rows: number): void {
+    this.shell.scrollBy(rows);
+    this.requestRender();
   }
 
   start(): void {

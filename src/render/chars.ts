@@ -9,6 +9,7 @@ export interface KumoIcons {
   fail: string;
   bullet: string;
   spark: string;
+  folder: string;
 }
 
 export const UNICODE_ICONS: KumoIcons = {
@@ -18,6 +19,7 @@ export const UNICODE_ICONS: KumoIcons = {
   fail: "✗",
   bullet: "●",
   spark: "",
+  folder: "▸",
 };
 
 export const ASCII_ICONS: KumoIcons = {
@@ -27,6 +29,7 @@ export const ASCII_ICONS: KumoIcons = {
   fail: "x",
   bullet: ">",
   spark: "",
+  folder: ">",
 };
 
 const UTF8_RE = /utf-?8/i;

@@ -585,7 +585,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "!cmd  Run a shell command yourself (output not sent to the model)",
           "@file  Attach a file (a list opens as you type)",
           "/exit  Quit kumo (also ctrl+d)",
-          `Esc interrupt, ctrl+c clear, ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, ctrl+b cockpit, f2 next model, ${TASKS_HELP}`,
+          `Esc interrupt, ctrl+c clear, ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, ctrl+b cockpit, f2 next model, PageUp/PageDown read back (the input bar stays), ${TASKS_HELP}`,
         ].join("\n"),
       );
       return;

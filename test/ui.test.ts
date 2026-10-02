@@ -587,8 +587,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     }
   });
 
-  test("every turn is numbered on its own band, and the number moves on (T55 P1b)", async () => {
-    const { userMessageComponent } = await import("../src/ui/assistant-text.js");
+  test("a prompt band is padding and prompt, with no number on it (T55 P1b)", async () => {
     const savedColor = process.env.KUMO_COLOR;
     process.env.KUMO_COLOR = "truecolor";
     const { resetColorDepth } = await import("../src/ui/palette.js");
@@ -608,16 +607,12 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       const second = text.findIndex((l) => l.includes("second question"));
       expect(first).toBeGreaterThan(0);
       expect(second).toBeGreaterThan(first);
-      // The label sits on the band's own top line, one line above the prompt, so
-      // it costs no extra row and is exactly where the eye already goes.
-      expect(text[first - 1]).toContain("turn 1");
-      expect(text[second - 1]).toContain("turn 2");
-      // And it is right-aligned, inside the 2-column margin the page keeps
-      // everywhere else: 2 cells of band after the number, never zero.
-      expect(text[first - 1]!.trimEnd().endsWith("turn 1")).toBe(true);
-      expect(text[first - 1]).toMatch(/turn 1 {2}$/);
-      expect(text[second - 1]).toMatch(/turn 2 {2}$/);
-      // The band still spans the full width: the margin is inside the tint.
+      // The line above a prompt is the band's own padding, and it says nothing:
+      // a `turn N` there was one more thing to read before the question.
+      expect(text[first - 1]!.trim()).toBe("");
+      expect(text[second - 1]!.trim()).toBe("");
+      expect(text.join("\n")).not.toMatch(/turn \d/);
+      // The band still spans the full width: the padding is inside the tint.
       expect(visibleWidth(text[first - 1]!)).toBe(60);
     } finally {
       if (savedColor === undefined) delete process.env.KUMO_COLOR;
@@ -835,116 +830,6 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     expect(terminalMotionAllowed({ stdoutTTY: true, env: {}, ascii: false })).toBe(true);
   });
 
-  test("the banner: a small mark, the version, the keys, then what is loaded (C7)", () => {
-    const { ui } = makeUi();
-    ui.setResources({
-      skills: ["apex", "ask-user", "brixhub", "browser", "grill-me", "herdr", "impeccable", "make-interfaces-feel-better"],
-      plugins: ["render", "repl"],
-    });
-    const lines = (width: number): string[] => ui.headerText(width).split("\n").map(strip);
-
-    const wide = lines(100);
-    // Line 1: a mark of one cell, not the wordmark, and the version.
-    expect(wide[0]).toBe("▌ v0.2.0");
-    // Line 2: the keys in the clear, their labels in gray.
-    expect(wide[1]).toBe("escape interrupt · ctrl+c clear · ctrl+d exit · / commands");
-    // A blank row, then the sections: `[Title]` and the names, indented two columns.
-    expect(wide[2]).toBe("");
-    expect(wide[3]).toBe("[Skills]");
-    expect(wide[4]).toBe("  apex, ask-user, brixhub, browser, grill-me, herdr, impeccable, make-interfaces-feel-better");
-    expect(wide[5]).toBe("[Plugins]");
-    expect(wide[6]).toBe("  render, repl");
-    expect(wide).toHaveLength(7);
-
-    // The keywords are legible, the labels are quiet: the keys are what a first
-    // session needs, and `muted` is where a reading still clears AA.
-    const painted = ui.headerText(100).split("\n")[1]!;
-    expect(painted).toContain("\x1b[37mescape\x1b[39m"); // text
-    expect(painted).toContain("\x1b[90minterrupt\x1b[39m"); // muted
-    // The section title is amber, so the eye finds the lists without a rule.
-    expect(ui.headerText(100)).toContain("\x1b[33m[Skills]\x1b[39m");
-
-    // 60 columns: the help line still fits whole, the names wrap.
-    const mid = lines(60);
-    expect(mid[1]).toBe("escape interrupt · ctrl+c clear · ctrl+d exit · / commands");
-    expect(mid.slice(3)).toEqual([
-      "[Skills]",
-      "  apex, ask-user, brixhub, browser, grill-me, herdr",
-      "  impeccable, make-interfaces-feel-better",
-      "[Plugins]",
-      "  render, repl",
-    ]);
-
-    // 30 columns: the labels go before a key is abbreviated, and the list is cut
-    // at three rows with the rest counted rather than dropped.
-    const narrow = lines(30);
-    expect(narrow[1]).toBe("escape · ctrl+c · ctrl+d · /");
-    expect(narrow[3]).toBe("[Skills]");
-    expect(narrow.slice(4, 8)).toEqual([
-      "  apex, ask-user, brixhub",
-      "  browser, grill-me, herdr",
-      "  impeccable",
-      "  +1 more",
-    ]);
-    for (const width of [100, 60, 30]) {
-      for (const line of lines(width)) expect(visibleWidth(line), `${String(width)}: ${line}`).toBeLessThanOrEqual(width);
-    }
-  });
-
-  test("a section is planned, not painted: rows, indents and the hidden count (C7)", async () => {
-    const { planResourceSection } = await import("../src/ui/kumo-ui.js");
-    // Empty: no section at all, rather than a title over nothing.
-    expect(planResourceSection("Skills", [], 100)).toEqual([]);
-    expect(planResourceSection("Skills", ["  ", ""], 100)).toEqual([]);
-    // One row of names, then the hidden count when the list does not fit in three.
-    const many = Array.from({ length: 12 }, (_, i) => `skill-${String(i)}`);
-    const rows = planResourceSection("Skills", many, 30);
-    expect(rows[0]).toEqual({ kind: "title", text: "[Skills]" });
-    expect(rows.filter((r) => r.kind === "names")).toHaveLength(3);
-    // 28 cells of room, three names of eight per row: nine shown, three counted.
-    expect(rows.at(-1)).toEqual({ kind: "more", text: "+3 more", hidden: 3 });
-    // Wide enough for all twelve: two rows of names and no `more`, because there
-    // is nothing hidden (98 cells fit eight of them).
-    const wide = planResourceSection("Skills", many, 100);
-    expect(wide.filter((r) => r.kind === "names")).toHaveLength(2);
-    expect(wide.filter((r) => r.kind === "more")).toHaveLength(0);
-    // Every row fits, at every width, whatever the names are.
-    for (const width of [100, 60, 30]) {
-      for (const row of planResourceSection("Skills", many, width)) {
-        const text = row.kind === "title" ? row.text : `  ${row.text}`;
-        expect(visibleWidth(text), `${String(width)}: ${text}`).toBeLessThanOrEqual(width);
-      }
-    }
-  });
-
-  test("an empty section is omitted, never announced (C7)", () => {
-    const { ui } = makeUi();
-    // Nothing loaded: two rows and no `[Skills]` over an empty list.
-    expect(ui.headerText(100).split("\n").map(strip)).toEqual([
-      "▌ v0.2.0",
-      "escape interrupt · ctrl+c clear · ctrl+d exit · / commands",
-    ]);
-    ui.setResources({ skills: [] });
-    expect(ui.headerText(100)).not.toContain("[Skills]");
-    // Plugins only: the skills section stays absent rather than empty.
-    ui.setResources({ plugins: ["repl"] });
-    const rows = ui.headerText(60).split("\n").map(strip);
-    expect(rows).not.toContain("[Skills]");
-    expect(rows[2]).toBe("");
-    expect(rows[3]).toBe("[Plugins]");
-    expect(rows[4]).toBe("  repl");
-  });
-
-  test("a name longer than the row is clipped, and nothing wraps the banner (C7)", () => {
-    const { ui } = makeUi();
-    ui.setResources({ skills: ["a-skill-name-far-too-long-for-any-narrow-terminal"] });
-    const rows = ui.headerText(30).split("\n").map(strip);
-    // Clipped with a mark, so a reader can see the name is not the whole of it.
-    expect(rows[4]!.startsWith("  a-skill-name-far-too-long")).toBe(true);
-    expect(rows[4]!.endsWith("…")).toBe(true);
-    for (const row of rows) expect(visibleWidth(row)).toBeLessThanOrEqual(30);
-  });
-
   test("ASCII terminals get ASCII, and the lists come from the real sources (C7)", async () => {
     const a = new KumoUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), ASCII_ICONS);
     a.setResources({ plugins: ["repl"] });
@@ -992,65 +877,16 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       );
       const { ui } = makeUi();
       // The load is in the background: the first frame must not wait on it.
-      expect(ui.headerText(100)).not.toContain("[Skills]");
-      await vi.waitFor(() => expect(ui.headerText(100)).toContain("[Skills]"));
+      expect(strip(ui.headerText(100))).not.toContain("skills");
+      await vi.waitFor(() => expect(strip(ui.headerText(100))).toContain("skills"));
       const rows = ui.headerText(100).split("\n").map(strip);
-      expect(rows[3]).toBe("[Skills]");
       // Sorted by name, from the manifest, never from a constant.
-      expect(rows[4]).toBe("  apex, brixhub");
+      expect(rows[3]).toMatch(/^ {2}skills {3}apex \u00b7 brixhub/);
       await ui.shutdown();
     } finally {
       if (saved === undefined) delete process.env.DSH_HOME;
       else process.env.DSH_HOME = saved;
       rmSync(home, { recursive: true, force: true });
-    }
-  });
-
-  test("a color terminal gets the same two lines, and they never move (C7)", async () => {
-    vi.useFakeTimers();
-    const saved = { tty: process.stdout.isTTY, color: process.env.KUMO_COLOR, ci: process.env.CI, anim: process.env.KUMO_NO_ANIMATION, term: process.env.TERM };
-    process.stdout.isTTY = true;
-    process.env.KUMO_COLOR = "truecolor";
-    delete process.env.CI;
-    delete process.env.KUMO_NO_ANIMATION;
-    process.env.TERM = "xterm-256color";
-    const { resetColorDepth } = await import("../src/ui/palette.js");
-    const { WorkingComponent } = await import("../src/ui/working.js");
-    resetColorDepth();
-    const ui = new KumoUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), UNICODE_ICONS);
-    try {
-      // The wordmark used to be drawn here at 24-bit, and nowhere else: two
-      // different screens for one session, and the expensive one moved under the
-      // user. It is the setup welcome's mark now, so the header is text on every
-      // terminal: a name, the route, and the line that says how to quit.
-      const lines = strip(ui.headerText(100)).split("\n");
-      expect(lines).toHaveLength(2);
-      expect(lines[0]).toContain("v0.2.0");
-      expect(lines[1]).toContain("ctrl+d exit");
-      expect(ui.headerText(100)).not.toMatch(/[\u2588\u2584\u2580\u2591\u2592\u2593]/);
-      // And a turn starting does not sweep it: the header is not an animation.
-      const initial = ui.headerText();
-      ui.addChat(new WorkingComponent(() => Date.now(), ui.icons));
-      vi.advanceTimersByTime(200);
-      expect(ui.headerText()).toBe(initial);
-      vi.advanceTimersByTime(500);
-      expect(ui.headerText()).toBe(initial);
-      ui.addChat(new WorkingComponent(() => Date.now(), ui.icons));
-      vi.advanceTimersByTime(500);
-      expect(ui.headerText()).toBe(initial);
-    } finally {
-      await ui.shutdown();
-      process.stdout.isTTY = saved.tty;
-      if (saved.color === undefined) delete process.env.KUMO_COLOR;
-      else process.env.KUMO_COLOR = saved.color;
-      if (saved.ci === undefined) delete process.env.CI;
-      else process.env.CI = saved.ci;
-      if (saved.anim === undefined) delete process.env.KUMO_NO_ANIMATION;
-      else process.env.KUMO_NO_ANIMATION = saved.anim;
-      if (saved.term === undefined) delete process.env.TERM;
-      else process.env.TERM = saved.term;
-      resetColorDepth();
-      vi.useRealTimers();
     }
   });
 
@@ -1097,8 +933,9 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       ui.updateHeader();
       expect(phases.length).toBeGreaterThan(0);
       expect(new Set(phases).size).toBe(1);
-      // No ghosted mark, no block glyphs: the session opens on text.
-      expect(phases.every((frame) => !/[\u2591\u2592\u2593\u2588\u2584\u2580]/.test(frame))).toBe(true);
+      // The mark is there from the first frame and it is the finished one: no ghosted
+      // frames, no half-drawn wordmark, nothing that is not the final glyphs.
+      expect(phases.every((frame) => /[\u2588\u2584\u2580]/.test(frame) && !/[\u2591\u2592\u2593]/.test(frame))).toBe(true);
       const frame = ui.tui.render(60).map(strip).join("\n");
       expect(frame).toContain("ctrl+d exit");
       const after = phases.length;

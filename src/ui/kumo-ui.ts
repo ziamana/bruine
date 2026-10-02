@@ -32,6 +32,7 @@ import { echoLine, QuestionForm } from "./questions.js";
 import type { QuestionCallComponent } from "./question-call-component.js";
 import type { ReasoningComponent } from "./reasoning-component.js";
 import { PromptFrame } from "./prompt-frame.js";
+import { besideLogo, LOGO_BESIDE_GAP, LOGO_MIN_WIDTH, logoRows, paintResourceLine, planResourceLine } from "./header.js";
 import { TurnActivity } from "./turn-activity.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
 import { createAutocomplete } from "./file-complete.js";
@@ -118,6 +119,9 @@ export interface SessionResources {
   plugins?: readonly string[];
 }
 
+/** Columns of margin the header component keeps on each side; the layout is made for what is left. */
+const HEADER_MARGIN = 1;
+
 /** The keys the help line names, in the order a first session meets them. */
 const HELP_KEYS: ReadonlyArray<readonly [string, string]> = [
   ["escape", "interrupt"],
@@ -138,6 +142,13 @@ const SHORT_KEYS: Record<string, string> = { escape: "esc", "ctrl+c": "^c", "ctr
  * does not fit is cut by the terminal into two rows, which would move the banner
  * under itself — the one thing a fixed frame must not do.
  */
+/** Cells the key line takes with every label written out. */
+export function helpLineCells(sep = "\u00b7"): number {
+  return (
+    HELP_KEYS.reduce((n, [key, label]) => n + visibleWidth(key) + 1 + visibleWidth(label), 0) + (HELP_KEYS.length - 1) * (sep.length + 2)
+  );
+}
+
 export function helpLineParts(width: number, sep = "\u00b7"): Array<[string, string | undefined]> {
   const keys = HELP_KEYS.map(([key, label]) => [key, label] as [string, string]);
   const bare = HELP_KEYS.map(([key]) => [key, undefined] as [string, undefined]);
@@ -147,62 +158,6 @@ export function helpLineParts(width: number, sep = "\u00b7"): Array<[string, str
     (row.length - 1) * (sep.length + 2);
   for (const row of [keys, bare, short]) if (cells(row) <= width) return row.map(([k, l]) => [k, l] as [string, string | undefined]);
   return short.map(([k, l]) => [k, l] as [string, string | undefined]);
-}
-
-/** One row of a resource section, uncoloured: the renderer paints it by kind. */
-export interface ResourceRow {
-  kind: "title" | "names" | "more";
-  text: string;
-  /** How many names the section did not have room for (`more` rows only). */
-  hidden?: number;
-}
-
-/**
- * A `[Skills]` / `[Plugins]` section: names indented two columns, comma-separated,
- * wrapped at the width and cut at three rows.
- *
- * Pure, and it returns nothing at all for an empty list: a session that loaded no
- * skills must not be told it loaded none, and a header that grows a `[Skills]` title
- * over an empty section teaches the user to ignore the sections that matter.
- *
- * The names are counted, not truncated mid-word: `+4 more` says there are four, so
- * the list never claims to be complete when it is not.
- */
-export function planResourceSection(
-  title: string,
-  names: readonly string[],
-  width: number,
-  maxRows = 3,
-): ResourceRow[] {
-  const clean = names.map((n) => n.trim()).filter((n) => n !== "");
-  if (clean.length === 0) return [];
-  const room = Math.max(8, width - 2);
-  const rows: Array<{ text: string; count: number }> = [];
-  let current = "";
-  let count = 0;
-  for (const name of clean) {
-    const candidate = current === "" ? name : `${current}, ${name}`;
-    if (current !== "" && visibleWidth(candidate) > room) {
-      rows.push({ text: current, count });
-      current = name;
-      count = 1;
-      continue;
-    }
-    current = candidate;
-    count += 1;
-  }
-  rows.push({ text: current, count });
-  const kept = rows.slice(0, Math.max(1, maxRows));
-  const shown = kept.reduce((n, row) => n + row.count, 0);
-  const hidden = clean.length - shown;
-  const out: ResourceRow[] = [
-    { kind: "title", text: `[${title}]` },
-    // A single name longer than the row is the one case a word wrap cannot save:
-    // it is clipped rather than allowed to wrap the banner onto another line.
-    ...kept.map((row) => ({ kind: "names" as const, text: truncateToWidth(row.text, room, "\u2026") })),
-  ];
-  if (hidden > 0) out.push({ kind: "more", text: `+${String(hidden)} more`, hidden });
-  return out;
 }
 
 /**
@@ -769,6 +724,13 @@ export class KumoUi {
 
   start(): void {
     this.tui.setFocus(this.promptFrame);
+    // A launch takes the whole terminal: what the shell printed before (a system
+    // banner, the last command's output) is cleared from view, and kumo starts at the
+    // top. Only the visible screen; the scrollback is the user's. KUMO_NO_CLEAR=1,
+    // CI and a pipe keep the terminal exactly as it was.
+    if (process.stdout.isTTY === true && process.env.CI !== "1" && process.env.KUMO_NO_CLEAR !== "1") {
+      this.terminal.clearScreen();
+    }
     this.tui.start();
     // T56: ask for the mouse, so a drag can be seen and copied. KUMO_MOUSE_SELECT=0
     // and a form both keep the terminal's.
@@ -839,15 +801,15 @@ export class KumoUi {
   }
 
   /**
-   * The user's prompt opens a turn, so it carries the turn number and the band
-   * shows it (T55 P1b). One place numbers the turns, so the label on the band and
-   * the number on the receipt can never drift apart.
+   * The user's prompt opens a turn, so the shell numbers it (T55 P1b) — for the
+   * receipt that closes the turn, not for a label on the prompt. The band used to
+   * carry a right-aligned `turn N` above the question, which was one more thing
+   * to read before the thing that was actually asked, and a number that said
+   * nothing the transcript does not already show.
    */
   addUserPrompt(text: string): void {
     this.#turn += 1;
-    const comp = userMessageComponent(text) as Component & { turn?: number };
-    comp.turn = this.#turn;
-    this.addChat(comp);
+    this.addChat(userMessageComponent(text));
   }
 
   /** How many turns this session has run. */
@@ -1035,43 +997,55 @@ export class KumoUi {
   }
 
   /**
-   * The banner: a small mark and the version, the way out, then what is loaded.
+   * The banner: the wordmark with the version and the server beside it, the way out
+   * under that, then what is loaded.
    *
-   * The wordmark was drawn here at 24-bit and 256 colors and collapsed to nothing
-   * anywhere else, so the session a user reads was two different screens depending
-   * on what their terminal could do — and the expensive one was the one that moved
-   * under them. One cell of the accent is the mark now, and the big one is the
-   * setup welcome's, which is the only screen where nothing is being read yet.
+   * The mark is two rows and stays still: it is the same on every frame and every
+   * terminal that can draw it, and it gives the first screen its identity without a
+   * sweep or a boot sequence. Beside it, row one names the build and where the model
+   * is served, row two is the key line. Under a blank row, skills and plugins are one
+   * line each, a label and the names that fit with the rest counted, and the command
+   * that lists them all. The route is the status bar's, not the banner's.
    *
-   * The route left the header with them: the status bar's own row already names the
-   * model and its effort, and a first screen that says it twice is a screen with
-   * less room for what it does not say.
+   * Without room for the mark (under about forty-five columns), or on an ASCII
+   * terminal, the same two facts are two plain lines.
    */
-  headerText(width = this.terminal.columns): string {
+  headerText(width = this.terminal.columns - HEADER_MARGIN * 2): string {
     const ascii = this.icons.think === "*";
     const sep = ascii ? "-" : "\u00b7";
-    const mark = ascii ? "|" : "\u258c";
-    const rows: string[] = [
-      `${this.#ink("sky")(mark)} ${this.#ink("muted")(`v${this.version}`)}${this.#hostCell(sep)}`,
-      helpLineParts(width, sep)
+    const keys = (room: number): string =>
+      helpLineParts(room, sep)
         .map(([key, label]) =>
           label === undefined ? this.#ink("text")(key) : `${this.#ink("text")(key)} ${this.#ink("muted")(label)}`,
         )
-        .join(this.#ink("faint")(` ${sep} `)),
-    ];
-    const sections: ResourceRow[] = [
-      ...planResourceSection("Skills", this.#resources.skills, width),
-      ...planResourceSection("Plugins", this.#resources.plugins, width),
-    ];
-    if (sections.length === 0) return rows.join("\n");
-    // The blank row is what makes the sections read as a list rather than as more
-    // chrome: the eye needs a gap to change register.
-    rows.push("");
-    for (const row of sections) {
-      const text = row.kind === "title" ? this.#ink("amber")(row.text) : this.#ink(row.kind === "more" ? "faint" : "muted")(row.text);
-      rows.push(row.kind === "title" ? text : `  ${text}`);
+        .join(this.#ink("faint")(` ${sep} `));
+    const rows: string[] = [];
+    if (!ascii && width >= LOGO_MIN_WIDTH) {
+      const [top, bottom] = logoRows();
+      const version = this.#ink("text")(`v${this.version}`);
+      if (besideLogo(width) >= helpLineCells(sep)) {
+        rows.push(`${top}${LOGO_BESIDE_GAP}${version}${this.#hostCell(sep)}`, `${bottom}${LOGO_BESIDE_GAP}${keys(besideLogo(width))}`);
+      } else {
+        // Not enough room to keep the key labels next to the mark: the mark keeps the
+        // build and the host, and the key line takes the full width under it.
+        rows.push(`${top}${LOGO_BESIDE_GAP}${version}`, `${bottom}${LOGO_BESIDE_GAP}${this.#hostName()}`, keys(width));
+      }
+    } else {
+      const mark = ascii ? "|" : "\u258c";
+      rows.push(`${this.#ink("sky")(mark)} ${this.#ink("muted")(`v${this.version}`)}${this.#hostCell(sep)}`, keys(width));
     }
-    return rows.join("\n");
+    const lineSep = ascii ? " - " : " \u00b7 ";
+    const ellipsis = ascii ? "..." : "\u2026";
+    const ink = { label: this.#ink("lavender"), name: this.#ink("muted"), chrome: this.#ink("faint") };
+    const resources = [
+      planResourceLine("skills", this.#resources.skills, width, { hint: "/skills", sep: lineSep, ellipsis }),
+      planResourceLine("plugins", this.#resources.plugins, width, { sep: lineSep, ellipsis }),
+    ].flatMap((plan) => (plan === undefined ? [] : [paintResourceLine(plan, width, ink, lineSep)]));
+    // The blank row is what makes the lines read as a list rather than as more
+    // chrome: the eye needs a gap to change register.
+    if (resources.length > 0) rows.push("", ...resources);
+    // Whatever the host is called, a row never wraps the banner onto another line.
+    return rows.map((row) => truncateToWidth(row, width)).join("\n");
   }
 
   /** Paint in a palette role, unless the terminal cannot read colour. */
@@ -1137,6 +1111,12 @@ export class KumoUi {
       this.#cachedHost = host ?? headerHost(readKumoJsonForHeader(), this.footer.state.provider);
     }
     return this.#cachedHost;
+  }
+
+  /** The host or provider alone, muted, for the row where it has the mark to itself. */
+  #hostName(): string {
+    const host = this.#host();
+    return host === "" || host === "?" ? "" : this.#ink("muted")(host);
   }
 
   /** `  ·  127.0.0.1`: where the model is served, so the first screen says which server answers. */

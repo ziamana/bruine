@@ -107,23 +107,22 @@ describe("the transcript window keeps the composer on the last row", () => {
   });
 
   test("a turn that keeps writing does not yank the window to the end", () => {
-    let lines = ["one", "two", "three", "four", "five"];
+    // A transcript longer than the window: ten rows less the editor leave nine.
+    let lines = Array.from({ length: 14 }, (_, i) => `line ${String(i)}`);
     const live: Component = { render: () => lines, invalidate: () => {} };
-    const shell = new Shell([], live, [block("editor")], () => 20);
+    const shell = new Shell([], live, [block("editor")], () => 10);
     shell.render(40);
     shell.scrollBy(2);
-    const newestShown = (): string => {
-      const frame = shell.render(40).map(strip);
-      return frame.filter((l) => l.startsWith("line ") || /^(one|two|three|four|five|six)$/.test(l)).at(-1)!;
-    };
+    const newestShown = (): string =>
+      shell.render(40).map(strip).filter((l) => l.startsWith("line ")).at(-1)!;
     const before = newestShown();
-    lines = ["one", "two", "three", "four", "five", "six"];
+    expect(before).toBe("line 11");
+    lines = [...lines, "line 14"];
     // The offset is kept constant in lines, so it grows with the live edge: the
-    // reader's window does not creep forward and is certainly not yanked — the line
-    // below it is still "five", and "six" has not appeared above it.
+    // reader's window does not creep forward and is certainly not yanked.
     expect(newestShown()).toBe(before);
     expect(shell.back).toBe(3);
-    expect(newestShown()).not.toBe("six");
+    expect(newestShown()).not.toBe("line 14");
     expect(shell.render(40).map(strip).at(-1)).toBe("editor");
   });
 
@@ -212,6 +211,45 @@ describe("the transcript window keeps the composer on the last row", () => {
     step = words.length - 1;
     const frame = shell.render(60).map(strip);
     expect(frame.filter((l) => l.startsWith("Ça"))).toEqual(["Ça marche, je suis connecté"]);
+  });
+
+  test("paging past the top shows the first page whole, not a sliver of it", () => {
+    // A transcript only a little longer than the window, and a page jump bigger than
+    // what is above the window: the old frame showed one line and a screen of blanks.
+    const lines = Array.from({ length: 20 }, (_, i) => `line ${String(i)}`);
+    const live: Component = { render: () => lines, invalidate: () => {} };
+    const shell = new Shell([block("header")], live, [block("editor")], () => 12);
+    shell.render(40);
+    shell.scrollBy(500);
+    const frame = shell.render(40).map(strip);
+    const shown = frame.filter((l) => l.startsWith("line "));
+    // 12 rows less the header and the editor: ten lines, from the very first.
+    expect(shown).toEqual(lines.slice(0, 10));
+    expect(frame[0]).toBe("header");
+    expect(frame.at(-1)).toBe("editor");
+    expect(frame).toHaveLength(12);
+  });
+
+  test("the windowed frame's first line is not the live frame's, so the renderer redraws it whole", () => {
+    // The renderer repaints only the lines that changed. A windowed frame starts with
+    // the same lines as the live one it replaces; without a difference on its first
+    // line a terminal that had scrolled repainted from the middle and left the rest
+    // of the screen blank.
+    const lines = Array.from({ length: 20 }, (_, i) => `line ${String(i)}`);
+    const live: Component = { render: () => lines, invalidate: () => {} };
+    const shell = new Shell([block("header")], live, [block("editor")], () => 12);
+    const atRest = shell.render(40);
+    shell.scrollBy(3);
+    const held = shell.render(40);
+    expect(held[0]).not.toBe(atRest[0]);
+    // It paints nothing: the visible text is the same line.
+    expect(strip(held[0]!)).toBe(strip(atRest[0]!));
+    // And every windowed frame carries it, so moving in the window repaints only what moved.
+    shell.scrollBy(1);
+    expect(shell.render(40)[0]).toBe(held[0]);
+    // Back at the live edge the line is the plain one again.
+    shell.scrollBy(-50);
+    expect(shell.render(40)[0]).toBe(atRest[0]);
   });
 
   test("a terminal too short for a window still gets its band", () => {

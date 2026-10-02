@@ -12,9 +12,6 @@ import { blendHex, bgEnabled, boxLine, colorDepth, fillLine, paintHex, NUAGE, ty
 import { reasoningStyle } from "../render/reasoning.js";
 import { ansi } from "./theme.js";
 
-/** Columns of empty space kept on each side of a bottom-area component. */
-const MARGIN = 2;
-
 /** Collapse thresholds matching pi-tui Editor (T27.5): >10 lines or >1000 chars. */
 export function pasteChip(text: string): string | undefined {
   const lines = text.split("\n").length;
@@ -111,16 +108,13 @@ export class ChatTranscript extends Container {
           const body = painted ? cut + " ".repeat(Math.max(0, inner - visibleWidth(cut))) : cut;
           return fillLine("userBlock", (painted ? " " : railPaint("blue", railChar, 0)) + body);
         };
-        // T55 P1b: the turn number rides the band's own top line, right-aligned.
-        // It costs no extra row (that line was already a blank pad), and it lands
-        // exactly where the eye already goes to find out which turn it is on.
-        const turn = (child as { turn?: number }).turn;
-        const label = turn === undefined ? "" : ansi.gray(`turn ${String(turn)}`);
-        const inner = width - 1;
-        // Right-aligned inside the 2-column margin the page keeps everywhere else,
-        // so the number is not glued to the last column of the terminal.
-        const top = label === "" ? "" : " ".repeat(Math.max(1, inner - MARGIN - visibleWidth(label))) + label;
-        lines.push(band(top));
+        // The band's top line is its own padding: one blank row in the tint above
+        // the prompt, so the prompt sits inside the band rather than on its edge.
+        // It used to carry a right-aligned `turn N`, which is one more piece of
+        // chrome between the eye and the question that was asked, and a number the
+        // reader has no use for: the receipt under the answer already counts what a
+        // turn did.
+        lines.push(band(""));
         // The accent spends the first of the band's two leading columns, so the
         // prompt still starts in column 2.
         for (const line of block) lines.push(band(` ${withoutEmoji(line)}`));

@@ -29,6 +29,9 @@ import { Container, type Component } from "@earendil-works/pi-tui";
 /** Transcript lines kept behind the window. A few screenfuls of reading, not an archive. */
 const HISTORY_LINES = 2000;
 
+/** An SGR reset: invisible, and enough to make a windowed frame's first line differ from the live one. */
+const HELD_MARK = "\x1b[0m";
+
 /** Below this the transcript gets nothing and the band has the terminal to itself. */
 const MIN_ROWS = 8;
 
@@ -119,14 +122,27 @@ export class Shell extends Container {
     // The window is the last `keep` lines of the history, less the `back` lines
     // below it: slicing to the end would show the live edge and the offset would
     // only be a way to lose rows.
-    const from = Math.max(0, this.#history.length - area - this.#back);
-    const to = Math.max(0, this.#history.length - this.#back);
+    // Near the top of the transcript the offset can be larger than what is left above
+    // the window: the window stops at the first page and shows it whole, rather than
+    // a sliver of its first lines over a screen of blanks.
+    const to = Math.max(Math.min(this.#history.length, area), this.#history.length - this.#back);
+    const from = Math.max(0, to - area);
     const window = this.#history.slice(from, to);
     // The gap is what holds the band on the last row. A window shorter than the
     // budget — the top of the history, or a frame that just grew — is padded, never
     // left short, or the composer would drift up with it.
     const gap = Math.max(0, area - window.length);
-    return [...top, ...Array.from({ length: gap }, () => ""), ...window, ...hint, ...bottom];
+    const frame = [...top, ...Array.from({ length: gap }, () => ""), ...window, ...hint, ...bottom];
+    // The renderer repaints only the lines that differ, and treats the top of the
+    // screen as wherever the previous frame left it. A windowed frame shorter than a
+    // live one that had scrolled starts with the very same lines (the header, the
+    // first turns), so nothing "above the screen" looked changed, and the repaint
+    // landed twelve rows too high with the rest of the screen blank. A first line
+    // that is not byte-for-byte the live one makes it redraw the whole frame when the
+    // window opens; the mark paints nothing, and every windowed frame carries it, so
+    // moving inside the window is still a repaint of what moved.
+    if (frame.length > 0) frame[0] = `${HELD_MARK}${frame[0]!}`;
+    return frame;
   }
 
   /**

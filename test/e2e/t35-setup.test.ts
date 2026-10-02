@@ -322,9 +322,8 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
 
     // Models: enter the fake server address (whatever the local scan found).
     await h.waitFor("AI servers: found, add, or remove");
-    for (let i = 0; i < 8 && !(await h.selectedLine()).includes("Enter a server address"); i++) {
-      await h.pressN("down", 1);
-    }
+    h.type("address");
+    await h.until(() => h.text().includes("Filter: address_"), 20_000, "filtered server choices");
     expect(await h.selectedLine()).toContain("Enter a server address");
     h.press("enter");
     // No trailing space: the blank cell after the colon is not painted on
@@ -373,9 +372,9 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
     h.type("s");
     await h.until(() => h.text().includes("Summary"), 20_000, "summary step");
     await h.dump("t35-first-install-summary");
-    expect(h.text()).toContain("Search   none");
-    expect(h.text()).toContain("Theme    dark");
-    expect(h.text()).toContain("Telemetry no");
+    expect(h.text()).toMatch(/Search\s+none/);
+    expect(h.text()).toMatch(/Theme\s+dark/);
+    expect(h.text()).toMatch(/Telemetry\s+no/);
     h.press("enter");
     await h.waitFor("kumo: configuration saved.");
 
@@ -411,6 +410,46 @@ test("fresh setup offers Set up later and exits without writing configuration", 
     await h.waitFor("configuration postponed");
     expect(h.exit?.exitCode).toBe(0);
     expect(await readdir(home)).toEqual([]);
+  } finally {
+    await h.close();
+  }
+});
+
+
+test("setup cards keep Mode, Search and the three Telemetry choices independently editable", async () => {
+  const home = await mkdtemp(join(tmpdir(), "kumo-setup-cards-"));
+  await writeFile(join(home, "settings.yaml"), "agent-default-model:\n  provider: deepseek-official\n  model: deepseek-chat\n");
+  const h = await SetupPty.start(home);
+  try {
+    await h.waitMenu();
+    await h.pressN("down", 1); h.press("enter");
+    await h.waitFor("Default access mode");
+    expect(h.text()).toContain("Recommended");
+    await h.dump("t35-mode-cards");
+    await h.pressN("up", 1); h.press("enter"); // Ask instead of Auto
+    await h.waitMenu();
+    await h.pressN("down", 2); h.press("enter");
+    await h.waitFor("Web search (a search needs");
+    await h.dump("t35-search-cards");
+    h.press("enter"); // None
+    await h.waitMenu();
+    await h.pressN("down", 5); h.press("enter");
+    await h.waitFor("Usage data · 1/3");
+    await h.dump("t35-telemetry-cards");
+    h.press("enter"); // No usage data
+    await h.waitFor("Updates · 2/3");
+    await h.pressN("down", 1); h.press("enter"); // No updates
+    await h.waitFor("Suggestions · 3/3");
+    await h.pressN("down", 1); h.press("enter"); // No suggestions
+    await h.waitMenu();
+    await h.pressN("down", 6); h.press("enter");
+    await h.waitFor("kumo: configuration saved.");
+    const doc = JSON.parse(await readFile(join(home, "kumo.json"), "utf8"));
+    expect(doc.permissionMode).toBe("ask");
+    expect(doc.search).toEqual({ provider: "none" });
+    expect(doc.telemetry).toBe(false);
+    expect(doc.suggestions).toBe(false);
+    expect(doc.updateCheck).toBe(false);
   } finally {
     await h.close();
   }

@@ -9,6 +9,7 @@ export interface SetupFrameOptions {
   help: string;
   rows: () => number;
   status?: () => string;
+  onContentHeight?: (rows: number, width: number) => void;
 }
 
 /** Shared title, step badge, content rhythm and keyboard help for full setup. */
@@ -36,8 +37,9 @@ export class SetupFrame implements Component {
     const help = wrapTextWithAnsi(ansi.gray(plainGlyphs(this.options.help)), w).map(row);
     const status = this.options.status?.();
     const foot = [...(status ? wrapTextWithAnsi(ansi.gray(plainGlyphs(status)), w).map(row) : []), ...help];
-    const body = this.content.render(w);
     const budget = Math.max(1, this.options.rows() - header.length - foot.length - 4);
+    this.options.onContentHeight?.(budget, w);
+    const body = this.content.render(w);
     const rendered = [edge(glyph.top, glyph.right), ...header, row(""), ...body.slice(0, budget).map(row), row(""), ...foot, edge(glyph.bottom, glyph.lower)];
     return colorDepth() === "none" ? rendered.map(line => line.replace(/\x1b\[[0-9;]*m/g, "")) : rendered;
   }

@@ -1,4 +1,4 @@
-import { isKeyRelease, matchesKey, visibleWidth, type Component, type SelectItem } from "@earendil-works/pi-tui";
+import { isKeyRelease, matchesKey, visibleWidth, truncateToWidth, wrapTextWithAnsi, type Component, type SelectItem } from "@earendil-works/pi-tui";
 import { fillLine, gradientStops } from "../ui/palette.js";
 import { ansi } from "../ui/theme.js";
 import { LOGO_STOPS, terminalMotionAllowed, wordmarkFrame } from "../ui/logo-motion.js";
@@ -71,6 +71,11 @@ export class SetupCardPicker implements Component {
   #selected = 0;
   #top = 0;
 
+  #height: number | undefined;
+  setHeight(rows: number): void { this.#height = Math.max(1, rows); }
+  setSelectedIndex(index: number): void { this.#selected = Math.max(0, Math.min(this.items.length - 1, index)); }
+  getSelectedIndex(): number { return this.#selected; }
+
   constructor(private readonly items: SetupCardOption[], private readonly rows: () => number) {}
 
   render(width: number): string[] {
@@ -79,7 +84,7 @@ export class SetupCardPicker implements Component {
       ? { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|", arrow: ">" }
       : { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│", arrow: "›" };
     if (width < 40) {
-      const limit = Math.max(1, Math.min(this.items.length, this.rows() - 8));
+      const limit = Math.max(1, Math.min(this.items.length, Math.floor((this.#height ?? this.rows() - 8) / 3)));
       if (this.#selected < this.#top) this.#top = this.#selected;
       if (this.#selected >= this.#top + limit) this.#top = this.#selected - limit + 1;
       return this.items.slice(this.#top, this.#top + limit).flatMap((item, offset) => {
@@ -94,9 +99,9 @@ export class SetupCardPicker implements Component {
     const chrome = (text: string, selected: boolean): string =>
       selected ? ansi.cyan(text) : ansi.faint(text);
     const lines: string[] = [];
-    const usable = Math.max(1, this.rows() - 13);
-    const perCard = 5;
-    const visible = Math.max(1, Math.floor(usable / perCard));
+    const usable = Math.max(1, this.#height ?? this.rows() - 8);
+    const perCard = 6;
+    const visible = Math.max(1, Math.floor((usable - (this.items.length * perCard > usable ? 1 : 0)) / perCard));
     if (this.#selected < this.#top) this.#top = this.#selected;
     if (this.#selected >= this.#top + visible) this.#top = this.#selected - visible + 1;
     const end = Math.min(this.items.length, this.#top + visible);
@@ -108,19 +113,22 @@ export class SetupCardPicker implements Component {
       const badge = item.recommended === true ? " Recommended " : "";
       const left = glyph.tl;
       const right = glyph.tr;
-      const topFill = cardWidth - visibleWidth(badge) - 2;
+      const topFill = cardWidth - visibleWidth(badge) - 3;
       const top = `${left}${glyph.h}${badge}${glyph.h.repeat(Math.max(0, topFill))}${right}`;
       const bottom = `${glyph.bl}${glyph.h.repeat(cardWidth - 2)}${glyph.br}`;
       const title = fitPlain(item.label, contentWidth);
-      const description = fitPlain(item.description ?? "", contentWidth);
+      const description = wrapTextWithAnsi(item.description ?? "", contentWidth).slice(0, 2);
       lines.push(`${" ".repeat(pad)}${marker}${chrome(top, selected)}`);
       lines.push(`${" ".repeat(pad)}  ${chrome(glyph.v, selected)} ${selected ? ansi.bold(ansi.text(title)) : title}${" ".repeat(Math.max(0, contentWidth - visibleWidth(title)))} ${chrome(glyph.v, selected)}`);
-      lines.push(`${" ".repeat(pad)}  ${chrome(glyph.v, selected)} ${ansi.gray(description)}${" ".repeat(Math.max(0, contentWidth - visibleWidth(description)))} ${chrome(glyph.v, selected)}`);
+      for (let row = 0; row < 2; row++) {
+        const text = description[row] ?? "";
+        lines.push(`${" ".repeat(pad)}  ${chrome(glyph.v, selected)} ${ansi.gray(text)}${" ".repeat(Math.max(0, contentWidth - visibleWidth(text)))} ${chrome(glyph.v, selected)}`);
+      }
       lines.push(`${" ".repeat(pad)}  ${chrome(bottom, selected)}`);
       lines.push("");
     }
     if (this.items.length > visible) {
-      lines.push(center(ansi.faint(`${String(this.#selected + 1)} of ${String(this.items.length)}`), `${String(this.#selected + 1)} of ${String(this.items.length)}`, width));
+      lines.push(center(ansi.gray(`${String(this.#selected + 1)} of ${String(this.items.length)}`), `${String(this.#selected + 1)} of ${String(this.items.length)}`, width));
     }
     return lines;
   }
@@ -128,7 +136,7 @@ export class SetupCardPicker implements Component {
   invalidate(): void {}
 
   handleInput(data: string): void {
-    if (isKeyRelease(data)) return;
+    if (isKeyRelease(data) || this.items.length === 0) return;
     if (matchesKey(data, "up") || matchesKey(data, "down")) {
       const next = matchesKey(data, "up")
         ? (this.#selected - 1 + this.items.length) % this.items.length
@@ -154,15 +162,15 @@ export class SetupThemePicker implements Component {
 
   render(width: number): string[] {
     const ascii = useAscii();
-    const title = "Select your preferred theme";
+    const title = fitPlain("Select your preferred theme", width);
     const names = this.themes.map((theme, index) => {
       const text = index === this.#selected ? `${ascii ? "> " : "› "}${theme}${ascii ? " <" : " ‹"}` : theme;
       return center(index === this.#selected ? ansi.bold(ansi.violet(text)) : ansi.faint(text), text, width);
     });
     const hintsText = ascii ? "Navigate up/down     Enter continue     S keep current" : "Navigate ↑/↓     Enter continue     S keep current";
     const visibleHints = fitPlain(hintsText, width);
-    const hints = center(ansi.faint(visibleHints), visibleHints, width);
-    const cardWidth = Math.max(20, Math.min(72, width - 4));
+    const hints = center(ansi.gray(visibleHints), visibleHints, width);
+    const cardWidth = Math.max(4, Math.min(72, width - 4));
     const cardPad = Math.max(0, Math.floor((width - cardWidth) / 2));
     const line = (s: string): string => fitPlain(s, Math.max(1, cardWidth - 4));
     const frame = (s: string): string => `${" ".repeat(cardPad)}${ascii ? `| ${s}${" ".repeat(Math.max(0, cardWidth - 4 - visibleWidth(s)))} |` : `│ ${s}${" ".repeat(Math.max(0, cardWidth - 4 - visibleWidth(s)))} │`}`;
@@ -178,7 +186,7 @@ export class SetupThemePicker implements Component {
       "",
       center(ansi.faint("Preview"), "Preview", width),
       `${" ".repeat(Math.max(0, middle))}${ansi.faint(border)}`,
-      ...preview.map((s) => frame(s)),
+      ...preview.map((s) => frame(line(s))),
       `${" ".repeat(Math.max(0, middle))}${ansi.faint(lower)}`,
       "",
       hints,
@@ -236,17 +244,8 @@ function center(styled: string, plain: string, width: number): string {
 }
 
 function fitPlain(value: string, width: number): string {
-  if (visibleWidth(value) <= width) return value;
   if (width <= 0) return "";
-  let result = "";
-  let cells = 0;
-  for (const char of value) {
-    const size = visibleWidth(char);
-    if (cells + size > width - 1) break;
-    result += char;
-    cells += size;
-  }
-  return `${result}…`;
+  return visibleWidth(value) <= width ? value : truncateToWidth(value, width, useAscii() ? "..." : "…");
 }
 
 function useAscii(): boolean {

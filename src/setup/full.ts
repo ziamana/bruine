@@ -130,6 +130,63 @@ class LineInput implements Component {
   }
 }
 
+/** Filter a display label while retaining the original item used by the flow. */
+export class SetupFilterList implements Component {
+  onSelect?: (item: SelectItem) => void;
+  onSelectionChange?: (item: SelectItem) => void;
+  #filter = "";
+  #filtering = false;
+  #list: SelectList;
+  #visible: SelectItem[];
+  constructor(private items: SelectItem[], private maxVisible = 10, private layout?: SelectListLayoutOptions) {
+    this.#visible = items;
+    this.#list = this.makeList(items);
+  }
+  get filtering(): boolean { return this.#filtering; }
+  getSelectedItem(): SelectItem | null { return this.#list.getSelectedItem(); }
+  setSelectedIndex(index: number): void { this.#list.setSelectedIndex(Math.max(0, this.#visible.indexOf(this.items[index]!))); }
+  setHeight(rows: number): void {
+    const limit = Math.max(1, rows - 1);
+    if (limit !== this.maxVisible) { this.maxVisible = limit; this.refresh(); }
+  }
+  private makeList(items: SelectItem[]): SelectList {
+    const list = new SelectList(items, this.maxVisible, { ...selectListTheme, noMatch: () => ansi.gray("No matching options") }, this.layout);
+    list.onSelect = item => this.onSelect?.(item);
+    list.onSelectionChange = item => this.onSelectionChange?.(item);
+    return list;
+  }
+  private refresh(): void {
+    const selected = this.getSelectedItem();
+    const query = this.#filter.toLocaleLowerCase();
+    this.#visible = this.items.filter(item => `${item.label} ${item.description ?? ""}`.toLocaleLowerCase().includes(query));
+    this.#list = this.makeList(this.#visible);
+    if (selected) this.#list.setSelectedIndex(Math.max(0, this.#visible.indexOf(selected)));
+    const next = this.getSelectedItem();
+    if (next) this.onSelectionChange?.(next);
+  }
+  clearFilter(): boolean {
+    if (!this.#filtering) return false;
+    this.#filter = ""; this.#filtering = false; this.refresh(); return true;
+  }
+  render(width: number): string[] {
+    const caption = this.#filtering ? `Filter: ${this.#filter}_` : "Filter: type to filter";
+    return [truncateToWidth(ansi.gray(caption), width), ...this.#list.render(width)];
+  }
+  handleInput(data: string): void {
+    if (isKeyRelease(data)) return;
+    if (matchesKey(data, "escape")) { this.clearFilter(); return; }
+    if (matchesKey(data, "backspace")) { this.#filter = dropLastChar(this.#filter); this.refresh(); return; }
+    const typed = typedText(data);
+    if (typed) {
+      if (!this.#filtering && typed === "/") this.#filtering = true;
+      else { this.#filtering = true; this.#filter += typed; this.refresh(); }
+      return;
+    }
+    if (this.#visible.length) this.#list.handleInput(data);
+  }
+  invalidate(): void { this.#list.invalidate(); }
+}
+
 /** A CheckList row: `disabled` rows are group headers — no box, not toggleable. */
 export interface CheckItem {
   value: string;
@@ -139,7 +196,9 @@ export interface CheckItem {
 }
 
 /** Space toggles checkboxes, Enter confirms. */
-class CheckList implements Component {
+export class CheckList implements Component {
+  #filter = "";
+  #filtering = false;
   onDone?: (indices: number[]) => void;
   onSkip?: () => void;
   #cursor = 0;
@@ -147,36 +206,51 @@ class CheckList implements Component {
   constructor(
     private readonly items: CheckItem[],
     readonly checked: Set<number>,
-    private readonly maxVisible = 10,
+    private maxVisible = 10,
   ) {
     this.#cursor = this.#nearest(0, 1) ?? 0;
   }
-  /** Nearest selectable row at or after `from` stepping `dir`; undefined if none. */
+  get filtering(): boolean { return this.#filtering; }
+  setHeight(rows: number): void { this.maxVisible = Math.max(1, rows - 1); }
+  clearFilter(): boolean {
+    if (!this.#filtering) return false;
+    this.#filter = ""; this.#filtering = false; this.#top = 0; return true;
+  }
+  #matches(item: CheckItem): boolean {
+    return `${item.label} ${item.description ?? ""}`.toLocaleLowerCase().includes(this.#filter.toLocaleLowerCase());
+  }
+  #visible(): number[] {
+    if (!this.#filter) return this.items.map((_, i) => i);
+    const found = new Set<number>();
+    let group: number | undefined;
+    this.items.forEach((item, i) => {
+      if (item.disabled) { group = i; return; }
+      if (this.#matches(item)) { if (group !== undefined) found.add(group); found.add(i); }
+    });
+    return [...found];
+  }
+  /** Search in original indices: a filtered-out check remains selected. */
   #nearest(from: number, dir: number): number | undefined {
     for (let i = from; i >= 0 && i < this.items.length; i += dir) {
-      if (this.items[i]?.disabled !== true) return i;
+      if (this.items[i]?.disabled !== true && this.#matches(this.items[i]!)) return i;
     }
     return undefined;
   }
   render(width: number): string[] {
-    if (this.#cursor >= this.items.length) this.#cursor = Math.max(0, this.items.length - 1);
-    if (this.#cursor < this.#top) this.#top = this.#cursor;
-    if (this.#cursor >= this.#top + this.maxVisible) this.#top = this.#cursor - this.maxVisible + 1;
-    const lines: string[] = [];
-    for (let i = this.#top; i < Math.min(this.items.length, this.#top + this.maxVisible); i++) {
+    const visible = this.#visible();
+    const cursor = visible.indexOf(this.#cursor);
+    if (cursor < this.#top) this.#top = Math.max(0, cursor);
+    if (cursor >= this.#top + this.maxVisible) this.#top = cursor - this.maxVisible + 1;
+    const lines = [truncateToWidth(ansi.gray(this.#filtering ? `Filter: ${this.#filter}_` : "Filter: type to filter"), width)];
+    if (!visible.length) return [...lines, ansi.gray("No matching skills")];
+    for (const i of visible.slice(this.#top, this.#top + this.maxVisible)) {
       const item = this.items[i]!;
-      // T26 item format: `name  ·  description`, cut to width.
-      const text =
-        item.description !== undefined && item.description !== ""
-          ? `${item.label}  ·  ${item.description}`
-          : item.label;
-      if (item.disabled === true) {
-        lines.push(truncateToWidth(ansi.bold(`  ${text}`), Math.max(1, width)));
-        continue;
-      }
+      const text = item.description ? `${item.label}  ·  ${item.description}` : item.label;
+      if (item.disabled) { lines.push(truncateToWidth(ansi.bold(ansi.gray(`  ${text}`)), width)); continue; }
       const mark = this.checked.has(i) ? "[x] " : "[ ] ";
-      const prefix = i === this.#cursor ? ansi.cyan("❯ ") : "  ";
-      lines.push(truncateToWidth(`${prefix}${mark}${text}`, Math.max(1, width)));
+      const arrow = process.env.KUMO_ASCII === "1" ? "> " : "→ ";
+      const prefix = i === this.#cursor ? ansi.cyan(arrow) : "  ";
+      lines.push(truncateToWidth(`${prefix}${mark}${text}`, width));
     }
     return lines;
   }
@@ -186,8 +260,23 @@ class CheckList implements Component {
     // T35: `s` skips the whole step (keep current), same as the Skip item. T60:
     // read through the decoder, so the shortcut survives the kitty protocol.
     const typed = typedText(data).toLowerCase();
-    if (typed === "s") {
+    if (!this.#filtering && typed === "s") {
       this.onSkip?.();
+      return;
+    }
+    if (matchesKey(data, "escape")) { this.clearFilter(); return; }
+    if (matchesKey(data, "backspace")) {
+      this.#filter = dropLastChar(this.#filter);
+      this.#cursor = this.#nearest(0, 1) ?? this.#cursor;
+      this.#top = 0; return;
+    }
+    if (typed && !matchesKey(data, "space")) {
+      if (!this.#filtering && typed === "/") this.#filtering = true;
+      else {
+        this.#filtering = true; this.#filter += typed;
+        this.#cursor = this.#nearest(0, 1) ?? this.#cursor;
+        this.#top = 0;
+      }
       return;
     }
     if (matchesKey(data, "up")) {
@@ -199,7 +288,8 @@ class CheckList implements Component {
       return;
     }
     if (matchesKey(data, "space")) {
-      if (this.items[this.#cursor]?.disabled === true) return;
+      const item = this.items[this.#cursor];
+      if (!item || item.disabled === true || !this.#matches(item)) return;
       if (this.checked.has(this.#cursor)) this.checked.delete(this.#cursor);
       else this.checked.add(this.#cursor);
       return;
@@ -208,6 +298,20 @@ class CheckList implements Component {
       this.onDone?.([...this.checked].sort((a, b) => a - b));
     }
   }
+}
+
+export interface SetupSummaryRow { label: string; value: string; }
+
+/** A compact two-column review with enough room left for the Save action. */
+export class SetupSummary implements Component {
+  constructor(private rows: SetupSummaryRow[], private destination: string) {}
+  render(width: number): string[] {
+    const labelWidth = Math.min(12, Math.max(1, Math.floor(width * 0.42)));
+    const valueWidth = Math.max(1, width - labelWidth - 1);
+    const lines = this.rows.map(row => `${ansi.gray(truncateToWidth(row.label, labelWidth).padEnd(labelWidth))} ${ansi.text(truncateToWidth(row.value, valueWidth))}`);
+    return [...lines, "", ansi.gray(truncateToWidth(`Save to ${this.destination}`, width)), ...wrapTextWithAnsi(ansi.gray("settings.yaml · kumo.json · .env · skills/"), Math.max(1, width))];
+  }
+  invalidate(): void {}
 }
 
 /** ── bundled skills location (works from src, dist/plugins-inlined bin, or install) ── */
@@ -606,6 +710,7 @@ export async function runFullSetup(
   tui.addChild(root);
   tui.addChild(statusWidget);
 
+  let activeFocus: (Component & { clearFilter?: () => boolean }) | undefined;
   let activeResolve: ((o: Outcome<never>) => void) | null = null;
   // T26 skills step: before the first submit the pre-checked rows come from
   // kumo.json (or, for a pre-T26 first run, from the user-home `.agents` migration
@@ -625,6 +730,7 @@ export async function runFullSetup(
       return { consume: true };
     }
     if (matchesKey(data, "escape")) {
+      if (activeFocus?.clearFilter?.()) { tui.requestRender(); return { consume: true }; }
       if (escapeStaysOnWelcome) return { consume: true };
       activeResolve?.(BACK);
       return { consume: true };
@@ -660,9 +766,14 @@ export async function runFullSetup(
           ...(displayStep === undefined ? {} : { step: STEPS.indexOf(displayStep) + 1 }),
           help: keyHelp,
           rows: () => terminal.rows,
+          onContentHeight: (rows, width) => {
+            const extra = [...(built.above ?? []), ...(built.below ?? [])].reduce((n, c) => n + c.render(width).length, 0);
+            (built.widget as Component & { setHeight?: (rows: number) => void }).setHeight?.(Math.max(1, rows - extra));
+          },
           status: () => status === "kumo setup" || status === "Kumo setup" || (displayStep !== undefined && status === stepTitle(displayStep)) ? "" : status,
         }));
       } else root.addChild(box);
+      activeFocus = built.focus;
       tui.setFocus(built.focus);
       tui.requestRender();
       activeResolve = (o) => {
@@ -681,11 +792,12 @@ export async function runFullSetup(
       above?: Component;
       layout?: SelectListLayoutOptions;
       help?: string;
+      filter?: boolean;
     } = {},
   ): Promise<Outcome<T>> => {
-    keyHelp = opts.help ?? "↑/↓ move  ·  Enter select  ·  Esc back  ·  Ctrl+C quit";
+    keyHelp = opts.help ?? `${opts.filter ? "Type filter  ·  / search  ·  " : ""}↑/↓ move  ·  Enter select  ·  Esc back  ·  Ctrl+C quit`;
     return interactive<T>(title, (finish) => {
-      const list = new SelectList(items, Math.min(items.length, 10), selectListTheme, opts.layout);
+      const list = opts.filter ? new SetupFilterList(items, Math.min(items.length, 10), opts.layout) : new SelectList(items, Math.min(items.length, 10), selectListTheme, opts.layout);
       // Honor a previous answer when re-entering the step (Esc/back).
       if (opts.initial !== undefined) list.setSelectedIndex(opts.initial);
       const previewHolder: { current: Component | null } = {
@@ -706,7 +818,7 @@ export async function runFullSetup(
       if (skipIdx >= 0) {
         const origInput = list.handleInput.bind(list);
         list.handleInput = (data: string) => {
-          if (!isKeyRelease(data) && typedText(data).toLowerCase() === "s") {
+          if (!isKeyRelease(data) && typedText(data).toLowerCase() === "s" && !(list instanceof SetupFilterList && list.filtering)) {
             list.setSelectedIndex(skipIdx);
             finish(map(skipIdx));
             return;
@@ -727,12 +839,22 @@ export async function runFullSetup(
     title: string,
     items: SetupCardOption[],
     map: (index: number) => T,
-  ): Promise<Outcome<T>> =>
-    interactive<T>(title, (finish) => {
+    options: { initial?: number; above?: Component; help?: string } = {},
+  ): Promise<Outcome<T>> => {
+    const skip = items.findIndex(item => item.value === "skip");
+    keyHelp = options.help ?? `↑/↓ move  ·  Enter select${skip >= 0 ? "  ·  S keep current" : ""}  ·  Esc back  ·  Ctrl+C quit`;
+    return interactive<T>(title, (finish) => {
       const picker = new SetupCardPicker(items, () => terminal.rows);
+      if (options.initial !== undefined) picker.setSelectedIndex(options.initial);
       picker.onSelect = (index) => finish(map(index));
-      return { widget: picker, focus: picker };
+      const original = picker.handleInput.bind(picker);
+      picker.handleInput = data => {
+        if (!isKeyRelease(data) && skip >= 0 && typedText(data).toLowerCase() === "s") { finish(map(skip)); return; }
+        original(data);
+      };
+      return { widget: picker, focus: picker, ...(options.above ? { above: [options.above] } : {}) };
     });
+  };
 
   const lineStep = (prompt: string, secret = false): Promise<Outcome<string>> => {
     keyHelp = "Enter continue  ·  Backspace edit  ·  Esc back  ·  Ctrl+C quit";
@@ -749,7 +871,7 @@ export async function runFullSetup(
     checked: Set<number>,
   ): Promise<Skippable<number[]>> =>
     (() => {
-      keyHelp = "↑/↓ move  ·  Space toggle  ·  Enter continue  ·  S skip  ·  Esc back";
+      keyHelp = "Type filter  ·  / search  ·  ↑/↓ move  ·  Space toggle  ·  Enter continue  ·  S skip  ·  Esc back";
       return interactive<number[] | typeof SKIP>(title, (finish) => {
       const cl = new CheckList(items, checked);
       cl.onDone = (idx) => finish(idx);
@@ -1101,6 +1223,7 @@ export async function runFullSetup(
         "AI servers: found, add, or remove; Enter to pick an action (s skips)",
         items,
         (i) => i,
+        { filter: true },
       );
       if (sel === BACK || sel === CANCEL) return sel;
       const item = items[sel] as SelectItem;
@@ -1233,7 +1356,7 @@ export async function runFullSetup(
       initial = flow.answers.roles.vision === undefined ? 0 : undefined;
     }
 
-    const src = await selectStep(`Role: ${label} (s skips)`, items, (i) => i, initial !== undefined ? { initial } : {});
+    const src = await selectStep(`Role: ${label} (s skips)`, items, (i) => i, { filter: true, ...(initial !== undefined ? { initial } : {}) });
     if (src === BACK || src === CANCEL) return src;
     const item = items[src] as SelectItem;
     if (item.value === "skip") return SKIP;
@@ -1255,7 +1378,7 @@ export async function runFullSetup(
     let model = "";
     let contextWindow: number | undefined;
     for (;;) {
-      const ms = await selectStep(`Main model on ${d.baseUrl}`, modelItems, (i) => i);
+      const ms = await selectStep(`Main model on ${d.baseUrl}`, modelItems, (i) => i, { filter: true });
       if (ms === BACK || ms === CANCEL) return ms;
       const chosen = modelItems[ms] as SelectItem;
       if (chosen.value !== "+") {
@@ -1316,12 +1439,12 @@ export async function runFullSetup(
   async function stepMode(): Promise<StepResult> {
     displayStep = "mode";
     const cur = flow.answers.permissionMode;
-    const m = await selectStep(
+    const m = await cardStep(
       "Default access mode (s skips)",
       [
-        { value: "ask", label: "Ask: confirm every command and write" },
-        { value: "auto", label: "Auto (recommended): kumo decides, risky actions still ask" },
-        { value: "full", label: "Full access: never asks" },
+        { value: "ask", label: "Ask", description: "Confirm every command and write." },
+        { value: "auto", label: process.env.KUMO_ASCII === "1" ? "Auto *" : "Auto ★", description: "Kumo decides; risky actions still ask.", recommended: true },
+        { value: "full", label: "Full access", description: "Commands and writes run without asking." },
         { value: "skip", label: `Skip (keep: ${cur})` },
       ],
       (i) => i,
@@ -1344,13 +1467,13 @@ export async function runFullSetup(
     const detected = await detectSearxng(opts.fetchImpl !== undefined ? { fetchImpl: opts.fetchImpl } : {});
     setStatus(stepTitle("search"));
     const curSearch = flow.answers.search.provider;
-    const s = await selectStep(
+    const s = await cardStep(
       "Web search (a search needs an index of the web. Nothing is scraped for free) (s skips)",
       [
-        { value: "none", label: "None (default)" },
-        { value: "searxng", label: detected !== undefined ? `SearXNG: detected on ${detected}` : "SearXNG: self-hosted instance URL" },
-        { value: "brave", label: "Brave Search: API key" },
-        { value: "tavily", label: "Tavily: API key" },
+        { value: "none", label: "None", description: "Keep web search disabled (default)." },
+        { value: "searxng", label: "SearXNG", description: detected !== undefined ? `Detected on ${detected}` : "Connect your self-hosted instance URL." },
+        { value: "brave", label: "Brave Search", description: "Connect using a Brave Search API key." },
+        { value: "tavily", label: "Tavily", description: "Connect using a Tavily API key." },
         { value: "skip", label: `Skip (keep: ${curSearch})` },
       ],
       (i) => i,
@@ -1440,21 +1563,21 @@ export async function runFullSetup(
       updateCheckChoice = readUpdateCheckChoice(await readKumoJsonDoc(dshHome)) ?? true;
     }
     const curTele = flow.answers.telemetry ? "yes" : "no";
-    const sel = await selectStep("Share anonymous usage data with DeepSeek Harness? (s skips)", [
-      { value: "no", label: "No (default)" },
-      { value: "yes", label: "Yes" },
+    const sel = await cardStep("Share anonymous usage data with DeepSeek Harness? (s skips)", [
+      { value: "no", label: "No", description: "Do not share anonymous usage data (default)." },
+      { value: "yes", label: "Yes", description: "Share anonymous usage data with DeepSeek Harness." },
       { value: "skip", label: `Skip (keep: ${curTele})` },
-    ], (i) => i, { initial: flow.answers.telemetry ? 1 : 0 });
+    ], (i) => i, { initial: flow.answers.telemetry ? 1 : 0, above: new Text(ansi.gray("Usage data · 1/3"), 0, 0) });
     if (sel === BACK || sel === CANCEL) return sel;
     if (sel === 2) return {};
-    const u = await selectStep(
+    const u = await cardStep(
       "Check npm once a day for a newer kumo and note it at startup? (nothing is sent but the version query)",
       [
-        { value: "yes", label: "Yes (recommended)" },
-        { value: "no", label: "No" },
+        { value: "yes", label: "Yes", description: "Check npm daily and show available updates at startup.", recommended: true },
+        { value: "no", label: "No", description: "Keep automatic update checks disabled." },
       ],
       (i) => i,
-      { initial: updateCheckChoice ? 0 : 1 },
+      { initial: updateCheckChoice ? 0 : 1, above: new Text(ansi.gray("Updates · 2/3"), 0, 0) },
     );
     if (u === BACK || u === CANCEL) return u;
     updateCheckChoice = u === 0;
@@ -1467,14 +1590,14 @@ export async function runFullSetup(
         suggestionsChoice = true;
       }
     }
-    const sg = await selectStep(
+    const sg = await cardStep(
       "Suggest the likely next prompt as dim ghost text in the empty editor?",
       [
-        { value: "yes", label: "Yes (default)" },
-        { value: "no", label: "No" },
+        { value: "yes", label: "Yes", description: "Show a suggested next prompt in the empty editor (default)." },
+        { value: "no", label: "No", description: "Keep next-prompt suggestions disabled." },
       ],
       (i) => i,
-      { initial: suggestionsChoice ? 0 : 1 },
+      { initial: suggestionsChoice ? 0 : 1, above: new Text(ansi.gray("Suggestions · 3/3"), 0, 0) },
     );
     if (sg === BACK || sg === CANCEL) return sg;
     suggestionsChoice = sg === 0;
@@ -1483,25 +1606,22 @@ export async function runFullSetup(
 
   async function stepSummary(bundledRoot: string, bundled: SkillMeta[]): Promise<StepResult> {
     displayStep = "summary";
-    const plan = flow.buildPlan({ dshHome, bundledSkillsRoot: bundledRoot, bundledSkills: bundled });
+    flow.buildPlan({ dshHome, bundledSkillsRoot: bundledRoot, bundledSkills: bundled });
     const a = flow.answers;
     const ref = (r: RolePick | undefined): string =>
       r === undefined ? "none" : `${r.cloud ?? r.discovered?.baseUrl ?? "?"} · ${r.model}`;
-    const lines = [
-      `  Main     ${ref(a.roles.main)}`,
-      `  Fast     ${ref(a.roles.fast ?? a.roles.main)}${a.roles.fast === undefined ? "  (default = main)" : ""}`,
-      `  Vision   ${ref(a.roles.vision)}`,
-      `  Access   ${a.permissionMode}`,
-      `  Search   ${a.search.provider}`,
-      `  Skills   ${a.skills.length > 0 ? a.skills.join(", ") : "none"}`,
-      `  Theme    ${a.theme}`,
-      `  Telemetry ${a.telemetry ? "yes" : "no"}`,
-      `  Updates   ${updateCheckChoice ? "daily check on" : "check off"}`,
-      `  Suggestions ${suggestionsChoice ? "on" : "off"}`,
-      "",
-      `  writes: ${dshHome}/settings.yaml · kumo.json · .env · skills/`,
-    ].join("\n");
-    const shown = new Text(ansi.bold("Review\n") + lines, 1, 1);
+    const shown = new SetupSummary([
+      { label: "Main", value: ref(a.roles.main) },
+      { label: "Fast", value: `${ref(a.roles.fast ?? a.roles.main)}${a.roles.fast === undefined ? " (default = main)" : ""}` },
+      { label: "Vision", value: ref(a.roles.vision) },
+      { label: "Access", value: a.permissionMode },
+      { label: "Search", value: a.search.provider },
+      { label: "Skills", value: a.skills.length ? a.skills.join(", ") : "none" },
+      { label: "Theme", value: a.theme },
+      { label: "Telemetry", value: a.telemetry ? "yes" : "no" },
+      { label: "Updates", value: updateCheckChoice ? "daily check on" : "check off" },
+      { label: "Suggestions", value: suggestionsChoice ? "on" : "off" },
+    ], dshHome);
     const choice = await selectStep(
       "Summary",
       [

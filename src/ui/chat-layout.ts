@@ -76,8 +76,11 @@ export class ChatTranscript extends Container {
     const card = (text: string): string => `  ${boxLine("surface", text, cardCells)}`;
     for (const child of this.children) {
       const rail = (child as { rail?: RailState }).rail;
-      // Same 2-column margin on both sides: railed blocks lose 2 more cells to "▍ ".
-      const block = child.render(rail === undefined ? inner : Math.max(1, width - 6));
+      // Same 2-column margin on both sides: railed blocks lose 2 more cells to "▍ "
+      // and 2 more to the right margin, so a line that ends in a measurement
+      // (the duration, the diff counter) has 2 cells of gray after it instead of
+      // finishing on the card border.
+      const block = child.render(rail === undefined ? inner : Math.max(1, width - 8));
       if (!block.length) continue;
       lines.push("");
       // The rail runs the full height of the card, padding lines included (Aron: "la
@@ -104,7 +107,9 @@ export class ChatTranscript extends Container {
         const turn = (child as { turn?: number }).turn;
         const label = turn === undefined ? "" : ansi.gray(`turn ${String(turn)}`);
         const inner = width - 1;
-        const top = label === "" ? "" : " ".repeat(Math.max(1, inner - visibleWidth(label))) + label;
+        // Right-aligned inside the 2-column margin the page keeps everywhere else,
+        // so the number is not glued to the last column of the terminal.
+        const top = label === "" ? "" : " ".repeat(Math.max(1, inner - MARGIN - visibleWidth(label))) + label;
         lines.push(band(top));
         // The accent spends the first of the band's two leading columns, so the
         // prompt still starts in column 2.

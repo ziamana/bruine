@@ -701,6 +701,22 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     expect(text).toContain("\x1b[31m");
   });
 
+  test("a tool line keeps 2 cells of card after the duration (UI polish 2026-09-27)", () => {
+    const { ui } = makeUi();
+    let clock = 0;
+    const slow = new ToolCallComponent("bash", () => clock, UNICODE_ICONS);
+    slow.setArgs('{"command":"pnpm test"}');
+    clock = 2200;
+    slow.result(true, "ok");
+    ui.addChat(slow);
+    const line = ui.tui.render(100).map(strip).find((l) => l.includes("pnpm test"))!;
+    // The card reaches the right margin, so a line that ends in a measurement used
+    // to end on the card border with nothing after it. Two cells of card now follow
+    // the number: the same margin the page has on the other side.
+    expect(line.endsWith("2.2s  ")).toBe(true);
+    expect(visibleWidth(line)).toBe(98);
+  });
+
   test("a blank line separates the transcript from the task panel", () => {
     const { ui } = makeUi();
     ui.addChat(new Text("last chat block", 1, 0));
@@ -770,8 +786,13 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       // it costs no extra row and is exactly where the eye already goes.
       expect(text[first - 1]).toContain("turn 1");
       expect(text[second - 1]).toContain("turn 2");
-      // And it is right-aligned, hugging the right edge of the band.
+      // And it is right-aligned, inside the 2-column margin the page keeps
+      // everywhere else: 2 cells of band after the number, never zero.
       expect(text[first - 1]!.trimEnd().endsWith("turn 1")).toBe(true);
+      expect(text[first - 1]).toMatch(/turn 1 {2}$/);
+      expect(text[second - 1]).toMatch(/turn 2 {2}$/);
+      // The band still spans the full width: the margin is inside the tint.
+      expect(visibleWidth(text[first - 1]!)).toBe(60);
     } finally {
       if (savedColor === undefined) delete process.env.KUMO_COLOR;
       else process.env.KUMO_COLOR = savedColor;

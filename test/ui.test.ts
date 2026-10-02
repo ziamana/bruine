@@ -734,7 +734,10 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       const kept = await quiet.ui.reload();
       expect(kept.background).toBe("kept");
       expect(quiet.terminal.writes.join("")).toContain("\x1b]11;?\x07");
-      expect(quiet.ui.tui.render(80).join("\n")).toContain(bgCode("surface", "truecolor"));
+      // The bottom area is the terminal's own background; the painted surface left in
+      // the transcript is the user's block.
+      quiet.ui.addUserPrompt("ship it");
+      expect(quiet.ui.tui.render(80).join("\n")).toContain(bgCode("userBlock", "truecolor"));
 
       // A terminal that answers. A fresh UI, because pi-tui answers OSC 11
       // queries in order and the shell above left an unanswered one at the head
@@ -748,8 +751,9 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       const read = await pending;
       expect(read.background).toBe("read");
       // A light terminal, so the painted surfaces are not the authored ones.
-      const probed = bgCode("surface", "truecolor");
-      expect(probed).not.toBe("\x1b[48;2;28;32;48m");
+      live.ui.addUserPrompt("ship it");
+      const probed = bgCode("userBlock", "truecolor");
+      expect(probed).not.toBe("\x1b[48;2;21;42;54m");
       expect(live.ui.tui.render(80).join("\n")).toContain(probed);
       await live.ui.shutdown();
     } finally {
@@ -779,8 +783,11 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     resetColorDepth();
     try {
       const { ui, terminal } = makeUi();
-      const authored = bgCode("surface", "truecolor");
+      ui.addUserPrompt("ship it");
+      const authored = bgCode("userBlock", "truecolor");
       expect(ui.tui.render(80).join("\n")).toContain(authored);
+      // The editor and the status bar sit on the terminal's own background.
+      expect(ui.tui.render(80).join("\n")).not.toContain(bgCode("surface", "truecolor"));
 
       // The query for the terminal's own background really goes out on the wire,
       // and a terminal that never answers simply keeps the authored surfaces.
@@ -790,7 +797,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
 
       // Once a light background is known, every painted surface follows it.
       setTerminalBackdrop({ r: 255, g: 255, b: 255 });
-      const probed = bgCode("surface", "truecolor");
+      const probed = bgCode("userBlock", "truecolor");
       expect(probed).not.toBe(authored);
       const after = ui.tui.render(80).join("\n");
       expect(after).toContain(probed);

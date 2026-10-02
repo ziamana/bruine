@@ -22,7 +22,7 @@ export class PromptFrame implements Component {
   stop(): void { this.#working = undefined; }
   get active(): boolean { return this.#working?.active === true; }
   render(width: number): string[] {
-    const role = this.#working ? "lavender" : this.editor.focused ? "edge" : "faint";
+    const role = this.#working || this.editor.focused ? "lavender" : "faint";
     this.editor.borderColor = text => paint(role, this.icons.think === "*" ? text.replaceAll("─", "-").replaceAll("↑", "^").replaceAll("↓", "v") : text);
     const rows = this.content.render(width);
     if (!this.#working) return rows;

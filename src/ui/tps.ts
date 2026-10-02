@@ -3,7 +3,8 @@
  * sample timestamps — never copies dsh's figure. Per LLM call (T25.1):
  * t0 = first delta, t1 = last delta, n = usage.outputTokens (or delta count
  * estimate when no usage). Decode TPS = n / (t1 - t0), shown for the LAST
- * finished call. Live during a call: deltas so far / (now - t0).
+ * finished call. Delta counts are a legacy estimate, not a token measurement:
+ * the UI uses measuredTps, which requires output usage and a usable interval.
  * Prefill pp = new input tokens / (t0 - request start), shown only when > 0.
  */
 export interface TpsUsage {
@@ -11,6 +12,9 @@ export interface TpsUsage {
   inputTokens?: number;
   cacheReadTokens?: number;
 }
+
+// A handful of chunks delivered in one burst cannot establish decode throughput.
+const MIN_DECODE_MS = 250;
 
 /** Share of prompt reused (T27.1): cached / total, handling both include styles. */
 export function cachePercent(cached: number, totalInput: number): number | undefined {
@@ -29,6 +33,7 @@ export class TpsMeter {
   #t1: number | undefined;
   #deltas = 0;
   #tps = 0;
+  #measuredTps = 0;
   #pp: number | undefined;
   #cachePct: number | undefined;
   #cacheFirst = false;
@@ -45,6 +50,8 @@ export class TpsMeter {
     this.#t0 = undefined;
     this.#t1 = undefined;
     this.#deltas = 0;
+    this.#measuredTps = 0;
+    this.#pp = undefined;
   }
 
   /** One decode delta (reasoning/text/tool-call) at the given time. */
@@ -59,13 +66,16 @@ export class TpsMeter {
     this.#t1 = timeMs;
     this.#deltas += 1;
     const dt = (timeMs - this.#t0) / 1000;
-    this.#tps = dt > 0 ? this.#deltas / dt : 0;
+    this.#tps = dt > 0 ? (this.#deltas - 1) / dt : 0;
   }
 
   /** Usage chunk at the end of a call: final decode rate + prefill rate. */
   usage(timeMs: number, usage: TpsUsage): void {
     const out = Number(usage.outputTokens ?? NaN);
     const n = Number.isFinite(out) ? Math.max(0, out) : this.#deltas;
+    const decodeMs = this.#t0 !== undefined && this.#t1 !== undefined ? this.#t1 - this.#t0 : 0;
+    this.#measuredTps = Number.isFinite(out) && out > 0 && Number.isFinite(decodeMs) && decodeMs >= MIN_DECODE_MS
+      ? out * 1000 / decodeMs : 0;
     if (this.#t0 !== undefined && this.#t1 !== undefined) {
       const dt = (this.#t1 - this.#t0) / 1000;
       this.#tps = dt > 0 ? n / dt : 0;
@@ -125,13 +135,20 @@ export class TpsMeter {
     this.#t1 = undefined;
     this.#deltas = 0;
     this.#tps = 0;
+    this.#measuredTps = 0;
     this.#pp = undefined;
     this.#cachePct = undefined;
     this.#cacheFirst = false;
+    this.#calls = 0;
   }
 
   get tps(): number {
     return this.#tps;
+  }
+
+  /** Tokens/s backed by model usage; zero means there is no reliable reading. */
+  get measuredTps(): number {
+    return this.#measuredTps;
   }
 
   get pp(): number | undefined {

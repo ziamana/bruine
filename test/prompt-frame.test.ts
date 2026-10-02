@@ -39,7 +39,7 @@ test.each([100, 60, 30])("composer keeps rules, cursor and multi-line input at %
   ui.footer.render = () => [];
   ui.editor.focused = true; ui.editor.setText("first line\nsecond line");
   let rows = ui.promptFrame.render(width);
-  expect(rows[0]).toContain(fgCode("edge", "truecolor"));
+  expect(rows[0]).toContain(fgCode("lavender", "truecolor"));
   const working = new WorkingComponent(() => 0); ui.addChat(working);
   rows = ui.promptFrame.render(width);
   expect(rows[0]).toContain("Waiting for model"); expect(rows[1]).toContain(fgCode("lavender", "truecolor"));

@@ -257,17 +257,13 @@ export class FooterComponent implements Component {
     const mode = badges.find((b) => b !== "plan") ?? "ask";
     const plan = badges.includes("plan");
     if (this.#ascii) return [mode, ...(plan ? ["plan"] : [])].join("  ");
+    // A mode is a word, not a chip: the quiet ones are colored text, and FULL ACCESS,
+    // the one badge a user has to notice (T23), is bold rose.
     const pill = (text: string, tone: "rose" | "lavender" | "sky" | "muted"): string => {
-      if (!bgEnabled()) {
-        // T23: FULL ACCESS is the one badge a user has to notice, so it stays bold
-        // rose; on a painted surface the chip carries the colour instead.
-        if (tone === "muted") return paint("muted", text);
-        if (tone === "lavender") return paint("lavender", text);
-        if (tone === "rose") return ansi.bold(paint("rose", text));
-        return paint("sky", text);
-      }
-      const body = ` ${text} `;
-      return tone === "muted" ? ansi.chipBg(paint("muted", body)) : onBg(tone, paint("onSky", body));
+      if (tone === "muted") return paint("muted", text);
+      if (tone === "lavender") return paint("lavender", text);
+      if (tone === "rose") return ansi.bold(paint("rose", text));
+      return paint("sky", text);
     };
     const painted =
       mode === "ask" ? pill(mode, "muted") : mode === "FULL ACCESS" ? pill(mode, "rose") : pill(mode, "sky");

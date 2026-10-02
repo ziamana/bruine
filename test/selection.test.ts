@@ -604,12 +604,12 @@ describe("selecting in the shell (T56)", () => {
     terminal.onInput?.("\x1b[<64;10;5M");
     painted(ui);
     expect(ui.shell.back).toBeGreaterThan(0);
-    expect(painted(ui)).toContain("lines below");
+    expect(painted(ui)).toContain("Jump to latest message");
     // Down again, and the window is back on the live edge with no hint left.
     terminal.onInput?.("\x1b[<65;10;5M");
     terminal.onInput?.("\x1b[<65;10;5M");
     expect(ui.shell.back).toBe(0);
-    expect(painted(ui)).not.toContain("lines below");
+    expect(painted(ui)).not.toContain("Jump to latest message");
 
     // No window behind the feature: the notice is the whole of it, and once.
     const bare = new MouseFeature({

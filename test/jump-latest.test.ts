@@ -7,7 +7,9 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, describe, expect, test } from "vitest";
 import { ASCII_ICONS, UNICODE_ICONS } from "../src/render/chars.js";
 import { JumpToLatest } from "../src/ui/jump-latest.js";
+import { KumoUi } from "../src/ui/kumo-ui.js";
 import { MouseFeature, type MouseControl } from "../src/ui/mouse.js";
+import { viewportTop } from "../src/ui/selection.js";
 import { resetColorDepth } from "../src/ui/palette.js";
 import type { Terminal } from "@earendil-works/pi-tui";
 import { strip } from "./fakes.js";
@@ -250,5 +252,100 @@ describe("the mouse on the pill (D5)", () => {
     mouse.read(drag(9, 0));
     expect(mouse.span).toEqual({ startRow: 0, endRow: 0, startCol: 4, endCol: 10 });
     mouse.stop();
+  });
+});
+describe("the pill in the real shell (D5)", () => {
+  class FakeTerminal implements Terminal {
+    writes: string[] = [];
+    onInput?: (data: string) => void;
+    columns = 60;
+    rows = 20;
+    kittyProtocolActive = false;
+    start(onInput: (data: string) => void): void {
+      this.onInput = onInput;
+    }
+    stop(): void {}
+    async drainInput(): Promise<void> {}
+    write(data: string): void {
+      this.writes.push(data);
+    }
+    moveBy(): void {}
+    hideCursor(): void {}
+    showCursor(): void {}
+    clearLine(): void {}
+    clearFromCursor(): void {}
+    clearScreen(): void {}
+    setTitle(): void {}
+    setProgress(): void {}
+  }
+
+  /** A transcript tall enough that the window has something above it to show. */
+  async function shell(): Promise<{ ui: KumoUi; terminal: FakeTerminal; painted: () => string }> {
+    const terminal = new FakeTerminal();
+    const ui = new KumoUi(
+      "test",
+      { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} },
+      terminal,
+      UNICODE_ICONS,
+    );
+    for (let i = 0; i < 40; i++) ui.addChat({ render: () => [`line ${String(i)}`], invalidate: () => {} });
+    ui.start();
+    // One frame first: the window is fed by the frames kumo has painted.
+    ui.tui.render(terminal.columns);
+    return { ui, terminal, painted: () => ui.tui.render(terminal.columns).map(strip).join("\n") };
+  }
+
+  test("PageUp brings it up, End takes it away, and the pill takes itself away", async () => {
+    const { ui, terminal, painted } = await shell();
+    expect(painted()).not.toContain("Jump to latest");
+
+    // PageUp: the window is held above the live edge, so the way back is on screen.
+    terminal.onInput?.("\x1b[5~");
+    expect(ui.shell.scrolled).toBe(true);
+    const up = painted();
+    expect(up).toContain("Jump to latest message");
+    expect(up).toContain("End");
+    // And it is one row above the band, not inside it: the composer never moves.
+    const frame = ui.tui.render(terminal.columns).map(strip);
+    expect(frame.filter((line) => line.includes("Jump to latest"))).toHaveLength(1);
+    // The window is really above the live edge, so the pill is really answering a
+    // question: the newest line is off screen.
+    expect(frame.join("\n")).not.toContain("line 39");
+
+    // End: back to the live edge, and the pill with it.
+    terminal.onInput?.("\x1b[F");
+    expect(ui.shell.scrolled).toBe(false);
+    expect(painted()).not.toContain("Jump to latest");
+
+    // The mouse: a press on the pill's own columns is a click on the pill.
+    terminal.onInput?.("\x1b[5~");
+    const lines = ui.tui.render(terminal.columns);
+    const top = viewportTop(lines.length, terminal.rows);
+    const at = ui.jumpLatest.span(lines, top)!;
+    expect(at).toBeDefined();
+    const press = (col: number, row: number): string => `\x1b[<0;${col + 1};${row + 1}M`;
+    const release = (col: number, row: number): string => `\x1b[<0;${col + 1};${row + 1}m`;
+    terminal.onInput?.(press(at.from + 1, at.row));
+    expect(ui.shell.scrolled).toBe(false);
+    // Nothing was selected by the press, so the release copies nothing either.
+    terminal.onInput?.(release(at.from + 1, at.row));
+    expect(painted()).not.toContain("Jump to latest");
+    await ui.shutdown();
+  });
+
+  test("a press on the transcript is still a selection, not a jump", async () => {
+    const { ui, terminal } = await shell();
+    terminal.onInput?.("\x1b[5~");
+    const lines = ui.tui.render(terminal.columns);
+    const top = viewportTop(lines.length, terminal.rows);
+    const at = ui.jumpLatest.span(lines, top)!;
+    const press = (col: number, row: number): string => `\x1b[<0;${col + 1};${row + 1}M`;
+    const drag = (col: number, row: number): string => `\x1b[<32;${col + 1};${row + 1}M`;
+    // Two rows above the pill is transcript text, not the pill's own padding.
+    terminal.onInput?.(press(3, at.row - 2));
+    terminal.onInput?.(drag(9, at.row - 2));
+    expect(ui.shell.scrolled).toBe(true); // the drag did not jump to the end
+    expect(ui.mouse.span).toBeDefined();
+    await ui.shutdown();
   });
 });

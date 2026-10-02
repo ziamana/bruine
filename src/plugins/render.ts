@@ -287,6 +287,7 @@ export function attachTui(
     const now = typeof f.time === "number" ? f.time : Date.now();
     if (f.type === "start") {
       tps.startCall(now);
+      ui.footer.set({ tps: 0, pp: undefined });
       closeLive();
       // T59: the workspace is read now so the end of the turn can be diffed
       // against it. Fire and forget: a slow repository must never delay the
@@ -303,7 +304,7 @@ export function attachTui(
     }
     if (f.type === "end") {
       tps.endCall();
-      ui.footer.set({ tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
+      ui.footer.set({ tps: tps.measuredTps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
       hideWorking();
       closeLive();
       ui.requestRender();
@@ -313,7 +314,7 @@ export function attachTui(
     if (chunk === undefined) return;
     const trackDelta = (): void => {
       tps.delta(now);
-      ui.footer.set({ tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
+      ui.footer.set({ tps: tps.measuredTps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
     };
     switch (chunk.type) {
       case "reasoning-delta":
@@ -387,13 +388,13 @@ export function attachTui(
         if (reported(u.inputTokens) !== undefined) readings.inputTokens = lastInputTokens;
         if (reported(u.outputTokens) !== undefined) readings.outputTokens = lastOutputTokens;
         if (reported(cached) !== undefined) readings.cacheRead = lastCacheTokens;
-        ui.footer.set({ ...readings, tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
+        ui.footer.set({ ...readings, tps: tps.measuredTps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
         ui.requestRender();
         return;
       }
       case "finish":
         tps.endCall();
-        ui.footer.set({ tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
+        ui.footer.set({ tps: tps.measuredTps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
         closeLive();
         ui.requestRender();
         return;

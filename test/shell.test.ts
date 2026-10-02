@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { Shell } from "../src/ui/shell.js";
+import { JumpToLatest } from "../src/ui/jump-latest.js";
 import { displayPlace, PlaceRow } from "../src/ui/place.js";
 import { clipStart } from "../src/render/reasoning.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
@@ -65,15 +66,32 @@ describe("the transcript window keeps the composer on the last row", () => {
     expect(frame).toContain("line 26");
   });
 
-  test("the hint says how far back, and is gone at the live edge", () => {
+  test("the hint is the jump pill, and it is only there while the window is held (D5)", () => {
     const live = block(...Array.from({ length: 30 }, (_, i) => `line ${String(i)}`));
-    const shell = new Shell([block("header")], live, [block("editor")], () => 20);
+    const pill = new JumpToLatest(UNICODE_ICONS);
+    const shell = new Shell([block("header")], live, [block("editor")], () => 20, pill);
     shell.render(40);
+    // The shell owns the flag, so the row and the offset it describes cannot drift.
+    expect(pill.visible).toBe(false);
+    expect(shell.render(40).map(strip).join("\n")).not.toContain("Jump to latest");
+
     shell.scrollBy(4);
-    expect(shell.render(40).map(strip).join("\n")).toContain("4 lines below");
+    const held = shell.render(40).map(strip);
+    expect(pill.visible).toBe(true);
+    // One row, and it sits between the window and the band: the way back, then the
+    // composer. A hint that took a second row would push the band off the screen.
+    expect(held.filter((l) => l.includes("Jump to latest"))).toHaveLength(1);
+    const at = (needle: string): number => held.findIndex((l) => l.includes(needle));
+    expect(at("editor")).toBe(held.length - 1);
+    expect(at("Jump to latest")).toBe(held.length - 2);
+    expect(held).toHaveLength(20);
+
     shell.toEnd();
     const home = shell.render(40).map(strip);
-    expect(home.join("\n")).not.toContain("lines below");
+    // The flag is the frame's, not the offset's: it is settled by the next render,
+    // which is also the moment the row stops being drawn.
+    expect(pill.visible).toBe(false);
+    expect(home.join("\n")).not.toContain("Jump to latest");
     // 1 header + 30 transcript + 1 editor: the whole frame, as before.
     expect(home).toHaveLength(32);
   });
@@ -164,12 +182,12 @@ describe("PageUp keeps the composer where the user left it", () => {
     // percentage and a model name, or an honest `no model` — so the band still
     // holds the bottom of the screen while the transcript is read above.
     expect(scrolled.at(-1)).toMatch(/%|no model/);
-    // And the user can see how far back they are, so the window is not a mystery.
-    expect(scrolled.join("\n")).toMatch(/lines below/);
+    // And the way back is on screen, so the window is not a mystery.
+    expect(scrolled.join("\n")).toContain("Jump to latest message");
 
     // PageDown walks it back to the live edge, and the frame is the tall one again.
     for (let i = 0; i < 4; i += 1) terminal.onInput?.("\x1b[6~");
-    expect(frame().join("\n")).not.toMatch(/lines below/);
+    expect(frame().join("\n")).not.toContain("Jump to latest message");
     expect(ui.shell.scrolled).toBe(false);
 
     // A prompt is a decision to go on, so it takes the view with it.

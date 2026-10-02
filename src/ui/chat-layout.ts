@@ -222,20 +222,13 @@ export class ConsoleBand extends Container {
   }
   override render(width: number): string[] {
     const inner = Math.max(1, width - MARGIN * 2);
-    const painted = bgEnabled();
-    // The accent belongs to the surface, so it only exists when there is one: on
-    // 16 colors the band is byte for byte the 2-column margin it replaced, rather
-    // than a lone colored bar with nothing to anchor it.
-    const accent = painted ? ansi.edge(" ") : " ";
     const lines: string[] = [];
     for (const zone of this.zones) {
       for (const raw of zone.render(inner)) {
-        const body = truncateToWidth(raw, inner);
-        const pad = painted ? " ".repeat(Math.max(0, inner - visibleWidth(body))) : "";
-        // The accent is flush against the left edge, exactly like the prompt
-        // band's, and spends the first of the two margin columns: nothing to its
-        // left but the terminal's own background, and the body still starts at 2.
-        lines.push(fillLine("surface", `${accent} ${body}${pad}`));
+        // The bottom area keeps the terminal's own background: the editor is framed
+        // by its two rules and the status bar is plain text under it, so nothing
+        // here is a painted slab. Same 2-column margin as before.
+        lines.push(`${" ".repeat(MARGIN)}${truncateToWidth(raw, inner)}`);
       }
     }
     return lines;

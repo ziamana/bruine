@@ -24,6 +24,7 @@ import { LOGO_STOPS, terminalMotionAllowed, wordmarkFrame } from "./logo-motion.
 import { ChatTranscript, ConsoleBand, Gap, Margin, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
 import { displayModel } from "./footer.js";
+import { JumpToLatest } from "./jump-latest.js";
 import { Shell } from "./shell.js";
 import { QuestionForm } from "./questions.js";
 import { ReasoningComponent } from "./reasoning-component.js";
@@ -303,6 +304,8 @@ export class KumoUi {
   readonly icons: KumoIcons;
   /** The frame: header, a scrollable transcript, and the band pinned under it. */
   readonly shell: Shell;
+  /** D5: the one control under a held window, and the way back to the live edge. */
+  readonly jumpLatest: JumpToLatest;
   /**
    * T56: the mouse. Drag to select, release to copy. It owns the gesture, the
    * clipboard, and the one terminal sequence nobody else writes, so all this
@@ -402,6 +405,7 @@ export class KumoUi {
     // T56: every row goes through one layer, because a selection can cross the
     // transcript, the task panel and the console band, and only the composed
     // frame knows which line a screen row belongs to.
+    this.jumpLatest = new JumpToLatest(icons);
     this.#layer = new SelectionLayer(
       () => this.mouse.span,
       () => this.terminal.rows,
@@ -414,6 +418,16 @@ export class KumoUi {
       readText: (span) => this.#readSelection(span),
       copy: handlers.copyText,
       scroll: (rows) => this.scrollTranscript(rows),
+      // D5: a press on the pill is a press on a control, not the start of a
+      // selection. The frame is composed here, so the hit test is asked here —
+      // the same reason the selection's text is read here.
+      control: {
+        hit: (row, col) => this.#hitJumpLatest(row, col),
+        activate: () => {
+          this.shell.toEnd();
+          this.requestRender();
+        },
+      },
     });
     // Cockpit (Nuage + Cockpit mix): live speed/cache/context next to the editor on
     // wide color terminals; ctrl+b hides it. Basic/ASCII terminals keep the plain editor.
@@ -437,7 +451,9 @@ export class KumoUi {
       if (this.chat.children.some(c => c instanceof ReasoningComponent && c.active)) return "Thinking";
       return "Working";
     }, icons);
-    this.dock.visible = this.fancyHeader;
+    // The cockpit is opt-in (ctrl+b): by default the footer owns the readings, as one
+    // quiet three-row status bar, and the editor is not shouldering a side panel.
+    this.dock.visible = false;
     this.footer.compact = (w) => this.dock.shown(w);
     // The editor, the place, the cockpit and the footer share one painted surface (T40).
     // The shell owns the order so the transcript can be windowed: scrolled back, the
@@ -447,6 +463,7 @@ export class KumoUi {
       this.chat,
       [new Margin(new Gap(this.taskPanel)), new Margin(this.noticeBox), new ConsoleBand([this.promptFrame, this.footer])],
       () => this.terminal.rows,
+      this.jumpLatest,
     );
     this.#layer.addChild(this.shell);
     this.tui.addChild(this.#layer);
@@ -617,6 +634,18 @@ export class KumoUi {
   #readSelection(span: SelectionSpan): string {
     const lines = this.tui.render(this.terminal.columns);
     return selectedText(lines, viewportTop(lines.length, this.terminal.rows), span);
+  }
+
+  /**
+   * D5: is this point the jump-to-latest pill?
+   *
+   * Read out of the composed frame rather than from a row the pill remembers: the
+   * frame is taller than the screen, so the row the pill was drawn on is not the
+   * row it sits on, and only the frame knows which one that is.
+   */
+  #hitJumpLatest(row: number, col: number): boolean {
+    const lines = this.tui.render(this.terminal.columns);
+    return this.jumpLatest.hitTest(lines, viewportTop(lines.length, this.terminal.rows), row, col);
   }
 
   /**

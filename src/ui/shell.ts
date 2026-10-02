@@ -16,16 +16,32 @@
  *
  * The live path is untouched: at rest the transcript renders whole and the terminal
  * scrolls it exactly as before.
+ *
+ * The row under a held window is a component, not a string (D5). It used to be a
+ * `N lines below · PageDown follows` label, which said how far back the user was
+ * and nothing about how to get back; the pill that replaced it is a control, and a
+ * control the shell owns is a control that cannot claim to be there when the window
+ * is at the live edge.
  */
 
-import { Container, truncateToWidth, type Component } from "@earendil-works/pi-tui";
-import { ansi } from "./theme.js";
+import { Container, type Component } from "@earendil-works/pi-tui";
 
 /** Transcript lines kept behind the window. A few screenfuls of reading, not an archive. */
 const HISTORY_LINES = 2000;
 
 /** Below this the transcript gets nothing and the band has the terminal to itself. */
 const MIN_ROWS = 8;
+
+/**
+ * The row that says the window is away from the live edge, when it is (D5).
+ *
+ * The shell owns the offset, so it owns the flag too: the row and the thing it
+ * describes cannot drift apart, and the caller never has to remember to set a
+ * boolean it could get wrong. A hint that draws nothing costs no row.
+ */
+export interface WindowHint extends Component {
+  visible: boolean;
+}
 
 export class Shell extends Container {
   /** Index of the transcript among `children`; everything after it is pinned. */
@@ -41,6 +57,7 @@ export class Shell extends Container {
     readonly transcript: Component,
     below: readonly Component[],
     private readonly rows: () => number,
+    private readonly hint?: WindowHint,
   ) {
     super();
     this.#split = head.length;
@@ -86,11 +103,17 @@ export class Shell extends Container {
     this.#ingest(live);
     // At rest the transcript is printed whole and the terminal scrolls it, which is
     // what it has always done: the window is a mode, not the default frame.
+    if (this.#back === 0 && this.hint === undefined) return [...top, ...live, ...bottom];
+
+    // The hint is measured before the window, so it can never be the row that
+    // pushes the composer off the bottom — and it draws nothing at the live edge.
+    const hint: string[] = [];
+    if (this.hint !== undefined) {
+      this.hint.visible = this.#back > 0;
+      hint.push(...this.hint.render(width));
+    }
     if (this.#back === 0) return [...top, ...live, ...bottom];
 
-    // The hint is placed before the transcript is measured, so it can never be the
-    // row that pushes the composer off the bottom.
-    const hint = [truncateToWidth(ansi.faint(`  ${String(this.#back)} lines below  ·  PageDown follows`), width)];
     const rows = Math.max(MIN_ROWS, this.rows());
     const area = Math.max(1, rows - top.length - hint.length - bottom.length);
     // The window is the last `keep` lines of the history, less the `back` lines

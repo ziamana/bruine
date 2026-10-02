@@ -203,18 +203,14 @@ describe("console band (T40)", () => {
     expect(plain).toBe("  L36");
   });
 
-  test("the accent is the first cell, flush against the left edge", () => {
+  test("the band keeps the terminal's own background: no accent, no painted slab", () => {
     process.env.KUMO_COLOR = "truecolor";
     resetColorDepth();
     const line = new ConsoleBand([zone(["ab"])]).render(40)[0]!;
-    // Nothing may sit to the left of the accent: a surface column there reads as
-    // a second, dimmer blue stripe right beside the real one. The accent spends
-    // the first of the two margin columns, so the body still starts at column 2.
-    expect(line).toMatch(/^\x1b\[[0-9;]*m\x1b\[48;2;74;168;224m /);
-    expect(line.replace(/\x1b\[[0-9;]*m/g, "")).toMatch(/^ {2}ab/);
-    // EL only paints the last cells if the background is still active there.
-    expect(line.indexOf("\x1b[K")).toBeGreaterThan(line.indexOf("ab"));
-    expect(line.endsWith("\x1b[K\x1b[49m")).toBe(true);
+    // Pi-style bottom area: the editor is framed by its rules and the status bar is
+    // plain text, so even on a truecolor terminal nothing here sets a background.
+    expect(line).toBe("  ab");
+    expect(line).not.toContain("\x1b[48");
   });
 
   test("without a paintable background the band is the margin it replaced", () => {

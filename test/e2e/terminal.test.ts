@@ -654,7 +654,7 @@ test("PageUp reads the transcript and the composer stays on the last row", async
     await h.dump("scroll-live");
 
     h.press("pageUp");
-    await h.waitFor("lines below");
+    await h.waitFor("Jump to latest message");
     const up = h.screen();
     // The first turn is readable again, and the composer stayed exactly where it was.
     expect(up.join("\n")).toContain("ONE");
@@ -663,8 +663,53 @@ test("PageUp reads the transcript and the composer stays on the last row", async
     await h.dump("scroll-back");
 
     h.press("pageDown");
-    await h.until(() => !h.screen().join("\n").includes("lines below"), 2000, "live edge");
+    await h.until(() => !h.screen().join("\n").includes("Jump to latest message"), 2000, "live edge");
     expect(h.screen().slice(-3)).toEqual(liveBand);
+  });
+});
+
+test("the pill is the way back: End and a click on it both return to the bottom (D5)", async () => {
+  const words = ["ALPHA", "BRAVO", "CHARLIE", "DELTA", "ECHO"];
+  await scenario("jumppill", words.map((w) => textScript(w)), async (h) => {
+    for (const [i, word] of words.entries()) {
+      await h.prompt(`turn ${String(i)}`);
+      await h.waitFor(word);
+    }
+    await h.waitStable(300, 2000);
+    const atRest = h.screen().join("\n");
+    expect(atRest).not.toContain("Jump to latest");
+
+    h.press("pageUp");
+    await h.waitFor("Jump to latest message");
+    const held = h.screen();
+    // One row, the name of the key that goes back, and the band untouched below it.
+    expect(held.filter((line) => line.includes("Jump to latest"))).toHaveLength(1);
+    expect(held.find((line) => line.includes("Jump to latest"))).toMatch(/↓ Jump to latest message · End/);
+    expect(held.slice(-3).join("\n")).toContain("e2e-model");
+    await h.dump("jump-held");
+
+    // End: the live edge, and the pill gone with it.
+    h.press("end");
+    await h.until(() => !h.screen().join("\n").includes("Jump to latest message"), 2000, "End returns");
+    expect(h.screen().slice(-3).join("\n")).toContain("e2e-model");
+
+    // The mouse: a press on the pill's own columns is a click on the pill. SGR
+    // mouse reports are 1-based, so the row and the column are read off the screen
+    // and moved one cell right and down before they are sent.
+    h.press("pageUp");
+    await h.waitFor("Jump to latest message");
+    const rows = h.screen();
+    const row = rows.findIndex((line) => line.includes("Jump to latest"));
+    const col = rows[row]!.indexOf("↓") + 3;
+    expect(row).toBeGreaterThanOrEqual(0);
+    expect(col).toBeGreaterThan(0);
+    h.type(`\x1b[<0;${col + 1};${row + 1}M`);
+    h.type(`\x1b[<0;${col + 1};${row + 1}m`);
+    await h.until(() => !h.screen().join("\n").includes("Jump to latest message"), 3000, "the click returns");
+    // A click is not a drag: nothing was selected, so nothing was copied over it.
+    expect(h.screen().join("\n")).not.toContain("Copied");
+    expect(h.screen().slice(-3).join("\n")).toContain("e2e-model");
+    await h.dump("jump-clicked");
   });
 });
 

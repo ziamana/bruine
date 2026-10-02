@@ -73,7 +73,7 @@ export const NUAGE = {
 } satisfies Record<string, Swatch>;
 
 /** The roles setTerminalBackdrop is allowed to override. */
-const PROBED_ROLES = ["surface", "chip", "edge"] as const;
+const PROBED_ROLES = ["surface", "chip", "edge", "userBlock", "toolOk", "toolPending", "toolErr"] as const;
 type ProbedRole = (typeof PROBED_ROLES)[number];
 
 export type PaletteRole = keyof typeof NUAGE;
@@ -151,12 +151,22 @@ export function deriveBackdrop(bg: { r: number; g: number; b: number }): Backdro
       surface,
       chip: toHex(mix(rgb(surface), [255, 255, 255], 0.45)),
       edge: toHex(mix(base, [40, 104, 160], 0.85)),
+      userBlock: toHex(mix(base, [120, 190, 230], 0.26)),
+      toolOk: toHex(mix(base, [110, 200, 140], 0.26)),
+      toolPending: toHex(mix(base, [150, 155, 175], 0.24)),
+      toolErr: toHex(mix(base, [235, 110, 130], 0.24)),
     };
   }
   return {
     surface: toHex(mix(base, [43, 52, 82], 0.62)),
     chip: toHex(mix(base, [58, 68, 102], 0.62)),
     edge: toHex(mix(base, [74, 168, 224], 0.9)),
+    // The transcript blocks: the same tints as the authored values, laid over the
+    // real background so they stay a veil on a terminal that is not pure black.
+    userBlock: toHex(mix(base, [24, 52, 70], 0.9)),
+    toolOk: toHex(mix(base, [24, 54, 36], 0.9)),
+    toolPending: toHex(mix(base, [48, 52, 64], 0.9)),
+    toolErr: toHex(mix(base, [74, 28, 38], 0.9)),
   };
 }
 

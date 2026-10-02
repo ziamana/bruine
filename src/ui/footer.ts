@@ -7,7 +7,6 @@ import { clipStart } from "../render/reasoning.js";
 import { ansi } from "./theme.js";
 import { bgEnabled, onBg, paint, type PaletteRole } from "./palette.js";
 import { displayPlace } from "./place.js";
-import { SpeedHistory } from "./dock.js";
 
 /** The breathing room between the two ends of a row, in cells. */
 const GAP = 2;
@@ -32,10 +31,10 @@ export interface FooterState {
   cwd?: string;
   /** D3: the branch under that directory, when it is a repository. */
   gitBranch?: string;
-  /** D3: tokens written into the last request (↑) and read back out of it (↓). */
+  /** D3: tokens written into the session's prompts (↑) and read back out of them (↓). */
   inputTokens?: number;
   outputTokens?: number;
-  /** D3: tokens served out of the prompt cache (R) — the count behind CH. */
+  /** D3: tokens served out of the prompt cache (R) — the session total behind CH. */
   cacheRead?: number;
 }
 
@@ -124,8 +123,8 @@ export function readGitBranch(cwd: string): string | undefined {
 }
 
 /**
- * A name that has to give up its head, by the same rule the `PlaceRow` above the
- * input uses: `…/jets/kumo` still names the directory, `…/jets` names the wrong one.
+ * A name that has to give up its head, by the same rule a path on screen follows:
+ * `…/jets/kumo` still names the directory, `…/jets` names the wrong one.
  */
 export function shortenHead(text: string, cells: number, ascii = false): string {
   return clipStart(text, cells, ascii ? "..." : "\u2026");
@@ -161,18 +160,25 @@ function twoUp(left: string, right: string, width: number): string {
  * to be read:
  *
  *     ~/Bureau  ⎇ main                              FULL ACCESS
- *     ↑17k ↓749 R34k CH99.9% 12%/131k   Ornith-1.5-9B • high
+ *     ↑17k ↓749  cached 34k · hit 99.9%  ctx 12% of 131k  Ornith-1.5-9B-Q4_K_M • high
  *     ↯ TPS: 78.0 tok/s
  *
  * The context bar left with the row on purpose: a bar is a shape, and a shape costs
- * a reading twice — once as the bar and once as the number beside it. The cockpit
- * still draws it (`dock.ts`) for the sessions wide enough to show one, and the
- * absolute count is still on the row as `↑`, which is where it came from.
+ * a reading twice — once as the bar and once as the number beside it. The row is
+ * the only place the window is on screen, as `ctx 12% of 131k`.
  *
- * A narrow terminal loses readings, in the order they stop being true: the
- * throughput first (it only moves while a model generates), then the cache (a rate,
- * not an amount), then the context (a number the eye knows by heart after an hour).
- * The route is never the thing that is dropped, and never the thing that is cut.
+ * `↑ ↓` are the session's totals — every token this conversation has written and
+ * read back — counted the way pi's status line counts them (`spend.ts`), so they
+ * survive a compaction and a resumed session. `cached` is the session total the
+ * cache served and `hit` the rate of the latest call, because a rate averaged over
+ * a session says how the last hour went and not how well the cache is working now.
+ *
+ * The labels are a luxury, not a reading: a row too narrow for `cached 34k` keeps
+ * the letters (`R34k CH99.9%`) and loses nothing but the words. A narrow terminal
+ * then loses readings, in the order they stop being true: the throughput first (it
+ * only moves while a model generates), then the cache (a rate, not an amount), then
+ * the context (a number the eye knows by heart after an hour). The route is never
+ * the thing that is dropped, and never the thing that is cut.
  */
 export class FooterComponent implements Component {
   state: FooterState = {};
@@ -191,18 +197,12 @@ export class FooterComponent implements Component {
     this.#branch = readGitBranch(this.#cwd);
   }
 
-  /** Live tok/s samples for the cockpit sparkline. */
-  readonly speed = new SpeedHistory();
-  /** When the cockpit shows the metrics, the footer keeps place, mode and route. */
-  compact: (width: number) => boolean = () => false;
-
   set(next: FooterState): void {
     // The branch belongs to the directory, so it is re-read when the directory
     // changes and never otherwise — `set` is called on every usage chunk.
     const moved = next.cwd !== undefined && next.cwd !== (this.state.cwd ?? this.#cwd);
     this.state = { ...this.state, ...next };
     if (moved) this.#branch = readGitBranch(this.state.cwd ?? this.#cwd);
-    if (next.tps !== undefined) this.speed.push(next.tps);
   }
 
   render(width: number): string[] {
@@ -271,19 +271,28 @@ export class FooterComponent implements Component {
   }
 
   /**
-   * `↑17k ↓749 R34k CH99.9% 12%/131k`, longest reading first. `whole` says the
-   * row got every reading, which is what the throughput row is worth a row for.
+   * `↑17k ↓749  ·  cached 34k · hit 99.9%  ·  ctx 12% of 131k`, longest
+   * reading first. `whole` says the row got every reading, which is what the
+   * throughput row is worth a row for.
+   *
+   * The words come first and the numbers keep the colours that mean something
+   * (a cache that stopped answering is rose, a context past 60% is amber), so the
+   * row reads as readings rather than as a string of grey symbols.
    */
   #turnRow(width: number): { line: string; whole: boolean } {
-    const groups = this.#metricGroups(width);
+    const tiers = this.#metricTiers();
     for (const right of this.#routeCells()) {
       const rw = visibleWidth(right);
       if (rw > width) continue;
-      for (const [i, metrics] of groups.entries()) {
-        // An empty first group is not a squeeze: a session with no reading yet
-        // still gets its throughput row.
-        if (visibleWidth(metrics) + GAP + rw <= width) {
-          return { line: twoUp(metrics, right, width), whole: i === 0 };
+      for (const tier of tiers) {
+        // The words are a luxury: a labelled reading that does not fit leaves the
+        // row with its short form rather than with one reading fewer.
+        for (const metrics of [tier.long, tier.short]) {
+          // An empty first group is not a squeeze: a session with no reading yet
+          // still gets its throughput row.
+          if (visibleWidth(metrics) + GAP + rw <= width) {
+            return { line: twoUp(metrics, right, width), whole: tier === tiers[0] };
+          }
         }
       }
       return { line: twoUp("", right, width), whole: false };
@@ -311,55 +320,92 @@ export class FooterComponent implements Component {
     return [`${head(tagged)} ${tail}`, head(tagged), `${head(name)} ${tail}`, head(name)];
   }
 
-  /** The readings, in the order they may be given up: all, no cache, arrows only. */
-  #metricGroups(width: number): string[] {
-    if (this.compact(width)) return [""];
+  /** `label value`: the label quiet, the value in the role its meaning earns. */
+  #read(label: string, value: string, role: PaletteRole = "text"): string {
+    return `${this.#ink("muted")(label)} ${this.#ink(role)(value)}`;
+  }
+
+  /**
+   * The dot that groups two readings of one row. Faint, because it is structure:
+   * a separator nobody reads is a separator that costs nothing.
+   */
+  #dot(inner = false): string {
+    const gap = inner ? " " : "  ";
+    return `${gap}${this.#ink("faint")(this.#ascii ? "-" : "\u00b7")}${gap}`;
+  }
+
+  /**
+   * The readings, in the order they may be given up: all of them, then all but
+   * the cache, then the arrows alone.
+   *
+   * Each one is written twice. The long form names what the number is, which is
+   * what a reader who has not seen the bar for a month needs; the short form
+   * keeps the letters one who has read it for an hour knows. Words never buy the
+   * loss of a reading: a bare `R34k` says more than no cache at all.
+   */
+  #metricTiers(): { long: string; short: string }[] {
     const s = this.state;
-    const io: string[] = [];
-    // ASCII terminals get `^` and `v`: the arrows are one cell in a unicode font
-    // and a wrapping hazard everywhere else.
-    if (s.inputTokens !== undefined) io.push(this.#ink("text")(`${this.#ascii ? "^" : "\u2191"}${formatK(s.inputTokens)}`));
-    if (s.outputTokens !== undefined) io.push(this.#ink("text")(`${this.#ascii ? "v" : "\u2193"}${formatK(s.outputTokens)}`));
-    const cache: string[] = [];
-    if (s.cacheRead !== undefined) cache.push(this.#ink("muted")(`R${formatK(s.cacheRead)}`));
-    if (s.cachePct !== undefined) {
-      const pct = s.cachePct;
-      const label = `CH${formatHit(pct)}%`;
-      cache.push(
-        s.cacheFirst === true
-          ? this.#ink("muted")(label)
-          : pct >= 80
-            ? this.#ink("mint")(label)
-            : pct >= 30
-              ? this.#ink("amber")(label)
-              : this.#ink("rose")(label),
-      );
-    }
-    const context: string[] = [];
-    if (s.contextWindow !== undefined && s.contextWindow > 0) {
-      const pct = ((s.contextUsed ?? 0) / s.contextWindow) * 100;
-      // T31.5: the reading is in the colour as much as in the digits — mint under
-      // 60%, amber to 74%, rose from 75%, where the next turn starts costing more.
-      const label = `${formatPct(s.contextUsed ?? 0, s.contextWindow)}%/${formatWindow(s.contextWindow)}`;
-      context.push(
-        pct >= 75 ? this.#ink("rose")(label) : pct >= 60 ? this.#ink("amber")(label) : this.#ink("mint")(label),
-      );
-    }
-    return [[...io, ...cache, ...context].join(" "), [...io, ...context].join(" "), io.join(" ")];
+    const up = this.#ascii ? "^" : "\u2191";
+    const down = this.#ascii ? "v" : "\u2193";
+    const io = [
+      s.inputTokens === undefined ? undefined : this.#ink("text")(`${up}${formatK(s.inputTokens)}`),
+      s.outputTokens === undefined ? undefined : this.#ink("text")(`${down}${formatK(s.outputTokens)}`),
+    ].filter((part): part is string => part !== undefined).join(" ");
+    // The cache answers twice: how much the session was served, and how well the
+    // last call hit. One label each, so the two are never confused for one.
+    const served = s.cacheRead === undefined
+      ? { long: undefined, short: undefined }
+      : { long: this.#read("cached", formatK(s.cacheRead)), short: this.#ink("muted")(`R${formatK(s.cacheRead)}`) };
+    const hitRole: PaletteRole = s.cachePct === undefined
+      ? "text"
+      : s.cacheFirst === true
+        ? "muted"
+        : s.cachePct >= 80
+          ? "mint"
+          : s.cachePct >= 30
+            ? "amber"
+            : "rose";
+    const hit = s.cachePct === undefined
+      ? { long: undefined, short: undefined }
+      : { long: this.#read("hit", `${formatHit(s.cachePct)}%`, hitRole), short: this.#ink(hitRole)(`CH${formatHit(s.cachePct)}%`) };
+    const cache = {
+      long: [served.long, hit.long].filter((part) => part !== undefined).join(this.#dot(true)),
+      short: [served.short, hit.short].filter((part) => part !== undefined).join(" "),
+    };
+    // T31.5: the reading is in the colour as much as in the digits — mint under
+    // 60%, amber to 74%, rose from 75%, where the next turn starts costing more.
+    const window = s.contextWindow;
+    const used = s.contextUsed ?? 0;
+    const share = window === undefined || window <= 0 ? 0 : (used / window) * 100;
+    const ctxRole: PaletteRole = share >= 75 ? "rose" : share >= 60 ? "amber" : "mint";
+    const context = window === undefined || window <= 0
+      ? { long: undefined, short: undefined }
+      : {
+        long: this.#read("ctx", `${formatPct(used, window)}% of ${formatWindow(window)}`, ctxRole),
+        short: this.#ink(ctxRole)(`${formatPct(used, window)}%/${formatWindow(window)}`),
+      };
+    const row = (...readings: { long: string | undefined; short: string | undefined }[]): { long: string; short: string } => ({
+      // The dots are a luxury too: the short form is the letters and nothing
+      // else, so a narrow terminal loses exactly the readings it lost before.
+      long: readings.map((r) => r.long).filter((part) => part !== undefined && part !== "").join(this.#dot()),
+      short: readings.map((r) => r.short).filter((part) => part !== undefined && part !== "").join(" "),
+    });
+    const both = { long: io, short: io };
+    return [row(both, cache, context), row(both, context), both];
   }
 
   /** The throughput, in sky: a rate and nothing else. */
   #speedRow(width: number): string | undefined {
     const s = this.state;
-    if (this.compact(width) || s.tps === undefined || !(s.tps > 0)) return undefined;
+    if (s.tps === undefined || !(s.tps > 0)) return undefined;
     // `↯` and not `⚡`: the bolt is an emoji, two cells wide in half the fonts kumo
     // runs in, and a row one cell off is a row that wraps.
     const bolt = this.#ascii ? "*" : "\u21af";
-    const rate = `${bolt} TPS: ${s.tps.toFixed(1)} tok/s`;
+    const rate = `${this.#ink("sky")(s.tps.toFixed(1))} ${this.#ink("muted")("tok/s")}`;
     const line =
       s.pp !== undefined && s.pp > 0
-        ? `${this.#ink("sky")(rate)}  ${this.#ink("muted")(`prefill ${formatK(Math.round(s.pp * 10) / 10)} tok/s`)}`
-        : this.#ink("sky")(rate);
+        ? `${this.#ink("faint")(bolt)} ${this.#ink("muted")("TPS:")} ${rate}  ${this.#ink("muted")(`prefill ${formatK(Math.round(s.pp * 10) / 10)} tok/s`)}`
+        : `${this.#ink("faint")(bolt)} ${this.#ink("muted")("TPS:")} ${rate}`;
     return truncateToWidth(line, width);
   }
 

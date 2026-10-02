@@ -8,11 +8,14 @@ import { fileLink } from "./links.js";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 import { diffCounter, diffForCall, renderDiff, type FileDiff } from "./diff-view.js";
+import { parsePartialJson } from "./partial-json.js";
 
-const SUMMARY_KEYS = ["command", "cmd", "path", "file_path", "url", "query", "pattern"];
+const SUMMARY_KEYS = ["command", "cmd", "path", "file_path", "url", "query", "pattern", "name"];
 /** T59: the tools whose call is a change to the workspace. */
 const WRITE_TOOLS = new Set(["write", "edit", "multi_edit", "notebook_edit"]);
 const MAX_OUTPUT_LINES = 5;
+/** Lines of a multi-line command kept on screen while the call is still being written. */
+const MAX_PENDING_COMMAND_ROWS = 4;
 
 function padCells(text: string, width: number): string {
   const w = stringWidth(text);
@@ -34,7 +37,26 @@ export function relCwd(p: string): string {
   }
 }
 
-export class ToolCallComponent implements Component {
+/**
+ * What the turn, the chat and the receipt need from a tool call, whichever
+ * component draws it: a generic call, or one with a shape of its own like a question.
+ */
+export interface ChatToolCall extends Component {
+  readonly tool: string;
+  readonly active: boolean;
+  readonly rail: RailState;
+  readonly doneOk: boolean | undefined;
+  readonly seconds: number | undefined;
+  args(delta: string): void;
+  setArgs(json: string): void;
+  result(ok: boolean, output: string): void;
+  cancel(): void;
+  touchedPath(): string | undefined;
+  /** One line saying what the call is about, for the approval gate. */
+  summary(width?: number): string;
+}
+
+export class ToolCallComponent implements ChatToolCall {
   #rawArgs = "";
   #startTime: number;
   #done: { ok: boolean; seconds: number; lines: string[]; rest: number } | undefined;
@@ -46,6 +68,17 @@ export class ToolCallComponent implements Component {
   get active(): boolean { return this.#done === undefined; }
   /** T55 P1c: a tool still in flight owns the rail, so the live edge is findable. */
   get rail(): RailState { return this.#done === undefined ? "active" : this.#done.ok ? "blue" : "red"; }
+
+  /**
+   * A call that shows a diff asks for a NEUTRAL card.
+   *
+   * The transcript tints a finished call green, which was the right call for a tool
+   * that just says it worked. It was the wrong one here: the diff paints its own
+   * green band for an added line and its own red band for a removed one, so a green
+   * card left the addition with nothing of its own while the deletion shouted. Two
+   * bands of equal weight on a neutral block is a diff that can be read.
+   */
+  get diffCard(): boolean { return this.#diff !== undefined && this.#diff.lines.length > 0; }
   get doneOk(): boolean | undefined { return this.#done?.ok; }
   get seconds(): number | undefined { return this.#done?.seconds; }
   args(delta: string): void { this.#rawArgs += delta; }
@@ -98,35 +131,57 @@ export class ToolCallComponent implements Component {
     return this.#arg("file_path") ?? this.#arg("path") ?? this.#arg("notebook_path");
   }
 
+  /**
+   * What the arguments say so far. The args arrive as deltas and are only valid
+   * JSON at the end, so the line is read out of the partial text: a command is seen
+   * being written, word by word, instead of a bare ellipsis until it is whole.
+   */
+  #partialArgs(): Record<string, unknown> | undefined {
+    const parsed = parsePartialJson(this.#rawArgs);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
+  }
+
   summary(width = 60, link = false): string {
     if (!this.#rawArgs) return "";
-    try {
-      const parsed: unknown = JSON.parse(this.#rawArgs);
-      const obj = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
-      const key = obj && SUMMARY_KEYS.find((k) => k in obj);
-      let text = key ? String(obj![key]) : JSON.stringify(parsed);
-      if (key === "path" || key === "file_path") text = relCwd(text);
-      const shown = clipCells(sanitize(text).replace(/\n/g, " "), Math.min(60, width), this.icons.think === "*" ? "..." : "…");
-      // A path is displayed relative to the cwd and linked to the absolute one.
-      return link && (key === "path" || key === "file_path")
-        ? fileLink(shown, String(obj![key]))
-        : shown;
-    } catch { return this.icons.think === "*" ? "..." : "…"; }
+    const ellipsis = this.icons.think === "*" ? "..." : "…";
+    const obj = this.#partialArgs();
+    if (obj === undefined) return ellipsis;
+    const key = SUMMARY_KEYS.find((k) => typeof obj[k] === "string" && obj[k] !== "");
+    let text = key ? String(obj[key]) : Object.keys(obj).length > 0 ? JSON.stringify(obj) : "";
+    if (text === "") return ellipsis;
+    if (key === "path" || key === "file_path") text = relCwd(text);
+    const shown = clipCells(sanitize(text).replace(/\n/g, " "), Math.max(1, width), ellipsis);
+    // A path is displayed relative to the cwd and linked to the absolute one.
+    return link && (key === "path" || key === "file_path") ? fileLink(shown, String(obj[key])) : shown;
+  }
+
+  /** A command being written keeps its later lines visible while the call is in flight. */
+  #commandTail(width: number): string[] {
+    const obj = this.#partialArgs();
+    const command = obj && (typeof obj.command === "string" ? obj.command : typeof obj.cmd === "string" ? obj.cmd : undefined);
+    if (command === undefined) return [];
+    const rows = sanitize(command).split("\n");
+    if (rows.length < 2) return [];
+    const shown = rows.slice(1, 1 + MAX_PENDING_COMMAND_ROWS);
+    const hidden = rows.length - 1 - shown.length;
+    const ellipsis = this.icons.think === "*" ? "..." : "…";
+    return [
+      ...shown.map((row) => ansi.gray(clipCells(`    ${row}`, width, ellipsis))),
+      ...(hidden > 0 ? [ansi.faint(clipCells(`    ${ellipsis} ${String(hidden)} more lines`, width))] : []),
+    ];
   }
   render(width: number): string[] {
     const toolPad = padCells(this.tool, 7);
     if (!this.#done) {
-      const summary = this.summary(width);
-      const detail = summary ? `  ${summary}` : "";
-      const plainLine = clipCells(`${spinnerFrame(this.now() - this.#startTime, this.icons)} ${toolPad}${detail}`, width);
-      const pending = this.tool === "ask_user"
-        ? [ansi.gray(clipCells(this.icons.think === "*" ? "Waiting for user input..." : "Waiting for user input…", width))]
-        : [];
       const fr = spinnerFrame(this.now() - this.#startTime, this.icons);
-      if (stringWidth(plainLine) === stringWidth(`${fr} ${toolPad}${detail}`)) {
-        return [`${ansi.cyan(fr)} ${ansi.text(toolPad)}${ansi.gray(detail)}`, ...pending];
-      }
-      return [plainLine, ...pending];
+      const room = Math.max(1, width - stringWidth(`${fr} ${toolPad}  `));
+      const summary = this.summary(room);
+      const detail = summary ? `  ${summary}` : "";
+      const plainLine = clipCells(`${fr} ${toolPad}${detail}`, width);
+      const head = stringWidth(plainLine) === stringWidth(`${fr} ${toolPad}${detail}`)
+        ? `${ansi.cyan(fr)} ${ansi.text(toolPad)}${ansi.gray(detail)}`
+        : plainLine;
+      return [head, ...this.#commandTail(width)];
     }
     const mark = this.#done.ok ? ansi.green(this.icons.ok) : ansi.red(this.icons.fail);
     const dur = formatDuration(this.#done.seconds) ?? (this.#done.ok ? "0.0s" : undefined);

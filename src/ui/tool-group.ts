@@ -96,8 +96,16 @@ export function formatTokens(n: number): string {
   return String(Math.round(n));
 }
 
-/** How a piece of a receipt is painted: the numbers read, the chrome recedes. */
-export type ReceiptRole = "value" | "label" | "ok" | "fail";
+/**
+ * How a piece of a receipt is painted: the numbers read, the chrome recedes.
+ *
+ * `sep` exists because the separators were the problem, not the values. The line is
+ * the most important text in a turn, and it is mostly separators and unit words;
+ * painting those as low as possible and the numbers only one step above made the
+ * whole line read as the palest thing on screen. So the values are `text`, the
+ * words that name them are `muted`, and only the separators are `faint`.
+ */
+export type ReceiptRole = "value" | "label" | "sep" | "ok" | "fail";
 
 export interface ReceiptSegment {
   text: string;
@@ -147,29 +155,29 @@ export function turnReceipt(opts: TurnReceiptOpts): ReceiptSegment[] {
     return out;
   }
 
-  if (opts.turn !== undefined) out.push(seg(`turn ${String(opts.turn)}`, "label"), seg(" · ", "label"));
+  if (opts.turn !== undefined) out.push(seg(`turn ${String(opts.turn)}`, "label"), seg(" · ", "sep"));
   out.push(seg(mark, markRole));
 
   // The mark is followed by a space, and only two measures are separated:
   // `✓ 5 tools · 41s · 1.2k tokens`, never `✓ · 5 tools ...`.
   let sep = " ";
   if (opts.tools > 0) {
-    out.push(seg(sep, "label"));
+    out.push(seg(sep, "sep"));
     out.push(seg(String(opts.tools), "value"), seg(` tool${opts.tools === 1 ? "" : "s"}`, "label"));
     sep = " · ";
   }
   if (wall !== undefined) {
-    out.push(seg(sep, "label"), seg(wall.value, "value"), seg(wall.unit, "label"));
+    out.push(seg(sep, "sep"), seg(wall.value, "value"), seg(wall.unit, "label"));
     sep = " · ";
   }
-  out.push(seg(sep, "label"));
+  out.push(seg(sep, "sep"));
   out.push(
     seg(opts.outputTokens >= 1000 ? formatTokens(opts.outputTokens) : String(Math.round(opts.outputTokens)), "value"),
     seg(" tokens", "label"),
   );
   // A cache the model never reported is not shown as 0%.
   if (opts.cachePct !== undefined && opts.cachePct > 0) {
-    out.push(seg(" · cache ", "label"), seg(String(Math.round(opts.cachePct)), "value"), seg("%", "label"));
+    out.push(seg(" · ", "sep"), seg("cache ", "label"), seg(String(Math.round(opts.cachePct)), "value"), seg("%", "label"));
   }
   return out;
 }

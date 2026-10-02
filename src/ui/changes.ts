@@ -19,11 +19,14 @@
  */
 
 import { isAbsolute, join } from "node:path";
+import stringWidth from "string-width";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import type { Component } from "@earendil-works/pi-tui";
 import { runTool, hasTool, type RunTool } from "../platform/tool.js";
 import { fileLink } from "./links.js";
 import { ansi } from "./theme.js";
 import { relCwd } from "./tool-call-component.js";
+import { clipStart } from "../render/reasoning.js";
 
 /** Paths to a status, keyed by the path git reports (relative to the repo root). */
 export type GitStatus = ReadonlyMap<string, string>;
@@ -32,6 +35,15 @@ export interface ChangedFile {
   path: string;
   /** git's own two-letter code, trimmed: `M`, `A`, `D`, `R`, `??`. */
   status: string;
+  /**
+   * Lines added and removed in the workspace, when git can count them.
+   *
+   * Undefined is the honest answer for a file git does not diff numerically (an
+   * untracked file, a binary one) and outside a repository: the path is still
+   * shown, without a number that would be a guess.
+   */
+  added?: number;
+  removed?: number;
 }
 
 /** How long git gets before we assume the workspace is not measurable. */
@@ -80,6 +92,29 @@ export function changedSince(before: GitStatus, after: GitStatus): ChangedFile[]
   return out;
 }
 
+/**
+ * `git diff --numstat -z` into a path -> [added, removed] map.
+ *
+ * `-z` for the same reason the porcelain reader needs it: a filename may hold a
+ * space, a quote or a tab. A binary file reports `-\t-`, which is not a number, and
+ * is left out rather than counted as zero.
+ */
+export function parseNumstat(raw: string): Map<string, { added: number; removed: number }> {
+  const out = new Map<string, { added: number; removed: number }>();
+  const fields = raw.split("\0");
+  for (let i = 0; i < fields.length; i += 1) {
+    const row = fields[i] as string;
+    const tab = row.indexOf("\t");
+    if (tab < 0) continue;
+    const added = Number(row.slice(0, tab));
+    const removed = Number(row.slice(tab + 1, row.indexOf("\t", tab + 1)));
+    const path = row.slice(row.indexOf("\t", tab + 1) + 1);
+    if (!Number.isFinite(added) || !Number.isFinite(removed) || path === "") continue;
+    out.set(path, { added, removed });
+  }
+  return out;
+}
+
 /** The workspace's status, or undefined when there is nothing to measure. */
 export async function gitStatus(cwd: string, run: RunTool = runTool): Promise<GitStatus | undefined> {
   if (!(await hasTool("git"))) return undefined;
@@ -89,6 +124,18 @@ export async function gitStatus(cwd: string, run: RunTool = runTool): Promise<Gi
   // Outside a repository git exits 128, and a failure is not a measurement.
   if (result.code !== 0) return undefined;
   return parsePorcelain(result.stdout.toString("utf8"));
+}
+
+/** The working tree's per-file line counts, or undefined when git cannot say. */
+export async function gitNumstat(cwd: string, run: RunTool = runTool): Promise<Map<string, { added: number; removed: number }> | undefined> {
+  if (!(await hasTool("git"))) return undefined;
+  const result = await run("git", ["diff", "--numstat", "-z", "HEAD"], { timeoutMs: GIT_TIMEOUT_MS });
+  if (result.code !== 0) return undefined;
+  // `git diff HEAD` counts what is staged and what is not, against the commit: an
+  // untracked file is not in it at all, and a new file appears only once staged.
+  // Those two are reported without numbers rather than with ones that would be a
+  // guess about lines nobody has counted yet.
+  return parseNumstat(result.stdout.toString("utf8"));
 }
 
 export interface TurnChangesOptions {
@@ -106,7 +153,16 @@ export interface TurnChangesOptions {
  */
 export async function turnChanges(opts: TurnChangesOptions): Promise<ChangedFile[]> {
   const after = await gitStatus(opts.cwd, opts.run);
-  if (opts.before !== undefined && after !== undefined) return changedSince(opts.before, after);
+  if (opts.before !== undefined && after !== undefined) {
+    // The counts are read from the working tree as it is now, not from the diff
+    // between the two readings: the user wants to know how big the change is, and a
+    // file the turn edited twice is one file with one size.
+    const counts = await gitNumstat(opts.cwd, opts.run);
+    return changedSince(opts.before, after).map((file) => {
+      const n = counts?.get(file.path);
+      return n === undefined ? file : { ...file, added: n.added, removed: n.removed };
+    });
+  }
   const seen = new Set<string>();
   const out: ChangedFile[] = [];
   for (const path of opts.declared ?? []) {
@@ -139,25 +195,51 @@ export class ChangedFilesComponent implements Component {
     if (this.files.length === 0 || width < 12) return [];
     const shown = this.files.slice(0, SHOWN_PATHS);
     const rest = this.files.length - shown.length;
-    const paths = shown.map((f) => this.#link(f.path));
     const label = ansi.gray("changed");
     const more = rest > 0 ? ansi.gray(`  +${String(rest)} more`) : "";
-    const line = `  ${label}  ${ansi.text(paths.join("  "))}${more}`;
-    // The OSC 8 wrapper is invisible but has width: measure what the user sees.
-    const cells = 2 + visibleWidthOf(paths, shown) + (rest > 0 ? 2 + String(rest).length + 6 : 0);
-    if (cells > width) return [`  ${label}  ${ansi.gray(`${String(this.files.length)} files`)}`];
-    return [line];
+    // The payload is the path and its size: `src/ui/mouse.ts +12 -3` says what the
+    // turn did, where a bare list of paths says only that something happened. A file
+    // git could not count keeps its path and shows no number.
+    // Three answers, best first: the paths with their sizes, the paths alone, and
+    // only then the count. The sizes are what a turn actually did, so they are the
+    // first thing to go, not the first thing to squeeze everything else out of.
+    const prefix = 2 + visibleWidth("changed") + 2 + (rest > 0 ? 2 + String(rest).length + 6 : 0);
+    for (const counted of [true, false]) {
+      const rows = shown.map((f) => this.#entry(f, width - prefix, counted));
+      const cells = rows.reduce((n, r) => n + r.width, 0) + Math.max(0, rows.length - 1) * 2;
+      if (prefix + cells <= width) return [`  ${label}  ${rows.map((r) => r.text).join("  ")}${more}`];
+    }
+    return [`  ${label}  ${ansi.gray(`${String(this.files.length)} files`)}`];
   }
 
-  #link(path: string): string {
-    const shown = relCwd(isAbsolute(path) ? path : join(this.cwd, path));
-    return fileLink(shown, isAbsolute(path) ? path : join(this.cwd, path));
+  /**
+   * One file: the shortest path that still names it, and its counters.
+   *
+   * Clipped from the LEFT, because the end of a path is the file name and the part
+   * that goes is the part a person already knows (they are in the directory). The
+   * link still points at the absolute path.
+   */
+  #entry(file: ChangedFile, width: number, counted: boolean): { text: string; width: number } {
+    const absolute = isAbsolute(file.path) ? file.path : join(this.cwd, file.path);
+    const rel = relCwd(absolute);
+    const counts = counted ? fileCounts(file) : "";
+    const room = Math.max(8, width - (counts === "" ? 0 : visibleWidth(counts) + 1));
+    // Clipped from the left, like every other path in the app: the end of a path is
+    // the file name, and the part that goes is the directory the user is already in.
+    const name = clipStart(rel, room, "…");
+    const linked = fileLink(name, absolute);
+    const text = counts === "" ? linked : `${linked} ${counts}`;
+    return { text, width: stringWidth(name) + (counts === "" ? 0 : visibleWidth(counts) + 1) };
   }
 
   invalidate(): void {}
 }
 
-/** Cell width of the joined path list, links measured as their text. */
-function visibleWidthOf(paths: readonly string[], files: readonly ChangedFile[]): number {
-  return paths.reduce((sum, p, i) => sum + relCwd(files[i]?.path ?? "").length + (i === 0 ? 0 : 2), 0);
+/** `+12 -3`, the counts git could give, in the two colours that mean them. */
+function fileCounts(file: ChangedFile): string {
+  if (file.added === undefined || file.removed === undefined) return "";
+  const out: string[] = [];
+  if (file.added > 0) out.push(ansi.green(`+${String(file.added)}`));
+  if (file.removed > 0) out.push(ansi.red(`-${String(file.removed)}`));
+  return out.join(" ");
 }

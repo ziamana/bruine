@@ -1,10 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { ChangedFilesComponent, changedSince, parsePorcelain, turnChanges, type GitStatus } from "../src/ui/changes.js";
+import { ChangedFilesComponent, changedSince, parseNumstat, parsePorcelain, turnChanges, type GitStatus } from "../src/ui/changes.js";
 import { strip } from "./fakes.js";
 import { ToolCallComponent } from "../src/ui/tool-call-component.js";
 import { KumoUi } from "../src/ui/kumo-ui.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
-import type { Terminal } from "@earendil-works/pi-tui";
+import { visibleWidth, type Terminal } from "@earendil-works/pi-tui";
 import type { ToolResult } from "../src/platform/tool.js";
 
 /**
@@ -38,8 +38,10 @@ const porcelain = (entries: readonly string[]): string => entries.map((e) => `${
 function gitSaying(...outputs: Array<string | undefined>): (cmd: string, args: readonly string[]) => Promise<ToolResult> {
   let call = 0;
   return async (cmd, args) => {
-    if (cmd !== "git" || args[0] !== "status") throw new Error(`unexpected tool: ${cmd} ${args.join(" ")}`);
-    const out = outputs[Math.min(call, outputs.length - 1)];
+    if (cmd !== "git" || (args[0] !== "status" && args[0] !== "diff")) throw new Error(`unexpected tool: ${cmd} ${args.join(" ")}`);
+    // `--numstat` is a second question, not a second status: it answers `-\t-` for
+    // a binary, which is a "cannot say" rather than a zero.
+    const out = args[0] === "diff" ? NUMSTAT : outputs[Math.min(call, outputs.length - 1)];
     call += 1;
     return { code: out === undefined ? 128 : 0, stdout: Buffer.from(out ?? "", "utf8"), stderr: out === undefined ? "fatal: not a git repository" : "" };
   };
@@ -78,6 +80,26 @@ describe("reading the workspace (T59)", () => {
   });
 });
 
+const NUMSTAT = ["7\t2\tsrc/b.ts", "-\t-\tlogo.png"].join("\0") + "\0";
+/** `strip` plus the OSC 8 wrapper: the link URI is invisible but has characters. */
+const shown = (text: string): string => strip(text).replace(/\x1b]8;;[^\x1b]*\x1b\\/g, "");
+
+describe("reading the counts (T59)", () => {
+  test("numstat is read per path, and a binary is left uncounted", () => {
+    const counts = parseNumstat(NUMSTAT);
+    expect(counts.get("src/b.ts")).toEqual({ added: 7, removed: 2 });
+    // `-\t-` is git saying "not a text file": counting it as zero would be a claim.
+    expect(counts.has("logo.png")).toBe(false);
+    expect(parseNumstat("")).toEqual(new Map());
+  });
+
+  test("a file git cannot count keeps its path and shows no number", () => {
+    const files = changedSince(new Map(), parsePorcelain(" M src/b.ts\0"));
+    expect(files[0]).toEqual({ path: "src/b.ts", status: "M" });
+    expect(strip(new ChangedFilesComponent(files, "/w").render(100)[0] ?? "")).not.toMatch(/[+-]\d/);
+  });
+});
+
 describe("attribution (T59)", () => {
   test("git answers, so the tools are not asked", async () => {
     // A file the user touched by hand is in both readings, so it is not the
@@ -89,6 +111,8 @@ describe("attribution (T59)", () => {
       run: gitSaying(porcelain([" M src/a.ts", "M  src/b.ts", "?? scratch.txt"])),
     });
     expect(changed.map((c) => c.path)).toEqual(["src/b.ts"]);
+    // The size comes from git's own count, not from the tool that named the file.
+    expect(changed[0]).toMatchObject({ added: 7, removed: 2 });
   });
 
   test("outside a repository the tools are the only source, and they are smaller", async () => {
@@ -191,6 +215,34 @@ describe("the line under the receipt (T59)", () => {
     const text = line(3, 22);
     expect(text).toContain("3 files");
     expect(text.split(NUL).length).toBe(1);
+  });
+
+  test("each path carries its own size, and the sizes are the first thing to go", () => {
+    const counted = [
+      { path: "src/a.ts", status: "M", added: 12, removed: 3 },
+      { path: "src/b.ts", status: "M", added: 4, removed: 0 },
+    ];
+    const at = (width: number): string =>
+      strip(new ChangedFilesComponent(counted, process.cwd()).render(width)[0] ?? "");
+    const wide = shown(at(100));
+    expect(wide).toContain("src/a.ts +12 -3");
+    // A count of zero on either side is not printed: `+4 -0` is noise.
+    expect(wide).toContain("src/b.ts +4");
+    expect(wide).not.toContain("-0");
+    // Too narrow for the numbers, the paths stay: the sizes are what the turn did,
+    // but the paths are what the user has to open.
+    const narrow = shown(at(30));
+    expect(narrow).toContain("src/a.ts");
+    expect(narrow).not.toContain("+12");
+  });
+
+  test("a path too long for the row keeps its name, not its head", () => {
+    const long = [{ path: `${process.cwd()}/src/ui/deeply/nested/folder/mouse.ts`, status: "M", added: 1, removed: 0 }];
+    const row = new ChangedFilesComponent(long, process.cwd()).render(40)[0] ?? "";
+    const text = shown(row);
+    expect(text).toContain("\u2026");
+    expect(text).toContain("mouse.ts");
+    expect(visibleWidth(strip(row))).toBeLessThanOrEqual(40);
   });
 
   test("nothing changed, nothing is printed", () => {

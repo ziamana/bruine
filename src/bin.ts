@@ -12,7 +12,6 @@ import { simpleSetup, type SetupIO } from "./setup/simple.js";
 import { migrateAgentsSkills } from "./setup/skills.js";
 import { localDefaultRoute } from "./setup/discover.js";
 import { ansi } from "./ui/theme.js";
-import { BootLoader } from "./ui/boot-loader.js";
 import { parseFlags } from "./flags.js";
 import { checkForUpdate, detectInstallKind, updateCommand } from "./update.js";
 
@@ -408,67 +407,20 @@ async function main(): Promise<void> {
   // or a non-TTY stdout.
   void checkForUpdate({ dshHome }).catch(() => undefined);
 
-  const boot = new BootLoader(process.stdout, env);
+  // C7: no boot drawing between the launcher and the session. The wordmark is the
+  // setup welcome's, and the session's own header is two plain lines; an animated
+  // mark here meant the interactive screen waited on an IPC handshake before it
+  // could paint, and a terminal that never answered left the mark on screen.
   delete env.KUMO_BOOT_IPC;
-  if (boot.enabled) env.KUMO_BOOT_IPC = "1";
-  boot.start();
-  const child = spawn(command, args, {
-    env,
-    stdio: boot.enabled ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
-  });
-
-  let readingBootKey = false;
-  let changedRawMode = false;
-  const stopReadingBootKey = (): void => {
-    if (!readingBootKey) return;
-    process.stdin.off("data", onBootKey);
-    if (changedRawMode) process.stdin.setRawMode(false);
-    process.stdin.pause();
-    readingBootKey = false;
-  };
-  const onBootKey = (): void => {
-    boot.skip();
-    stopReadingBootKey();
-  };
-  const finishBoot = (): void => {
-    stopReadingBootKey();
-    boot.stop();
-  };
-
-  if (boot.enabled) {
-    child.once("spawn", () => {
-      boot.processSpawned();
-      if (!boot.animated || process.stdin.isTTY !== true || typeof process.stdin.setRawMode !== "function") return;
-      changedRawMode = process.stdin.isRaw !== true;
-      if (changedRawMode) process.stdin.setRawMode(true);
-      process.stdin.on("data", onBootKey);
-      process.stdin.resume();
-      readingBootKey = true;
-    });
-    child.on("message", (message: unknown) => {
-      if (typeof message !== "object" || message === null || !("type" in message) || message.type !== "kumo:ui-ready") return;
-      const candidate = "route" in message ? message.route : undefined;
-      const route = typeof candidate === "object" && candidate !== null &&
-        "model" in candidate && typeof candidate.model === "string" &&
-        "host" in candidate && typeof candidate.host === "string"
-        ? { model: candidate.model, host: candidate.host } : undefined;
-      boot.skip();
-      boot.processReady(route);
-      stopReadingBootKey();
-      finishBoot();
-      child.send({ type: "kumo:boot-cleared" });
-    });
-  }
+  const child = spawn(command, args, { env, stdio: "inherit" });
 
   child.on("error", (err: NodeJS.ErrnoException) => {
-    finishBoot();
     if (err.code === "ENOENT") console.error(DSH_MISSING);
     else console.error(`kumo: ${err.message}`);
     process.exit(1);
   });
 
   child.on("close", (code, signal) => {
-    finishBoot();
     if (signal) process.kill(process.pid, signal);
     process.exit(code ?? 0);
   });

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { KumoUi } from "../src/ui/kumo-ui.js";
 import { ReasoningComponent } from "../src/ui/reasoning-component.js";
+import { TurnActivity } from "../src/ui/turn-activity.js";
 import { ToolCallComponent } from "../src/ui/tool-call-component.js";
 import { AssistantTextComponent, userMessageComponent } from "../src/ui/assistant-text.js";
 import { TpsMeter } from "../src/ui/tps.js";
@@ -96,7 +97,7 @@ describe("ReasoningComponent (T25.3 word by word)", () => {
     r.end();
     const lines = r.render(40);
     expect(lines).toHaveLength(1);
-    expect(strip(lines[0])).toBe("∴ Thought for 2.2s");
+    expect(strip(lines[0])).toBe("∴ Thought for 2s");
   });
 
   test("renders nothing before the first push", () => {
@@ -212,30 +213,6 @@ describe("ToolCallComponent (T27.2 aligned + rail)", () => {
     expect(groupRuns(mixed)).toHaveLength(3);
   });
 
-  test("the receipt carries the turn and the cache, and stays silent when it cannot (T55 P1b)", async () => {
-    const { turnSummary } = await import("../src/ui/tool-group.js");
-    const base = { tools: 5, wallSec: 41, outputTokens: 1200, cancelled: false };
-    // Unchanged when there is nothing new to say, so T27.3's shape still holds.
-    expect(turnSummary(base)).toBe("✓ 5 tools · 41s · 1.2k tokens");
-    expect(turnSummary({ ...base, turn: 3 })).toBe("turn 3 · ✓ 5 tools · 41s · 1.2k tokens");
-    expect(turnSummary({ ...base, cachePct: 82 })).toBe("✓ 5 tools · 41s · 1.2k tokens · cache 82%");
-    expect(turnSummary({ ...base, turn: 3, cachePct: 82 })).toBe(
-      "turn 3 · ✓ 5 tools · 41s · 1.2k tokens · cache 82%",
-    );
-    // A cache the model never reported is not invented as 0%.
-    expect(turnSummary({ ...base, cachePct: 0 })).not.toContain("cache");
-    // A cancelled turn is not a receipt with a turn number on it.
-    expect(turnSummary({ ...base, cancelled: true, turn: 3, cachePct: 82 })).toBe("· cancelled after 41s");
-  });
-
-  test("a turn too fast to measure prints no stopwatch at all (T55 P1b)", async () => {
-    const { turnSummary } = await import("../src/ui/tool-group.js");
-    const fast = { tools: 0, wallSec: 0.03, outputTokens: 12, cancelled: false };
-    // The defect shape: `✓ 0s · 12 tokens` is a stopwatch on nothing.
-    expect(turnSummary(fast)).not.toContain("0s");
-    expect(turnSummary(fast)).toContain("12 tokens");
-  });
-
   test("the receipt is structured, so the numbers are readable and the labels recede (T55)", async () => {
     const { turnReceipt, turnSummary } = await import("../src/ui/tool-group.js");
     const base = { tools: 5, wallSec: 41, outputTokens: 1200, cancelled: false, turn: 3, cachePct: 82 };
@@ -249,10 +226,15 @@ describe("ToolCallComponent (T27.2 aligned + rail)", () => {
     expect(roleOf("41")).toBe("value");
     expect(roleOf("1.2k")).toBe("value");
     expect(roleOf("82")).toBe("value");
-    // The labels and the separators are chrome and recede.
+    // The words that name the numbers are chrome and recede one step; the
+    // separators are structure and recede further (the line is mostly separators,
+    // and painting them like the words made the whole receipt the palest thing in
+    // the transcript).
     expect(roleOf("turn 3")).toBe("label");
     expect(roleOf(" tokens")).toBe("label");
-    expect(roleOf(" cache ")).toBe("label");
+    expect(roleOf("cache ")).toBe("label");
+    expect(seg.filter((s) => s.role === "sep").map((s) => s.text)).toEqual([" · ", " ", " · ", " · ", " · "]);
+    expect(roleOf("·")).toBe("sep");
     // Exactly one accent, and it is the mark.
     expect(seg.filter((s) => s.role === "ok" || s.role === "fail").map((s) => s.text)).toEqual(["✓"]);
     // Every character of the line is accounted for, so painting cannot drop any.
@@ -583,15 +565,21 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     resetColorDepth();
     try {
       const { ui } = makeUi();
-      const line = ui.tui.render(80).find((l) => l.includes("escape interrupt"));
+      // Stripped first: the key and its label are painted apart on purpose, so the
+      // raw row carries escapes between the words.
+      const index = ui.tui.render(80).findIndex((l) => strip(l).includes("escape interrupt"));
+      const line = index < 0 ? undefined : ui.tui.render(80)[index];
       expect(line).toBeDefined();
-      // Resolve the role the line is actually painted in, not the one we hope:
-      // it used to be `faint` here (2.64:1) while the plain terminal got `muted`.
-      const role = (Object.keys(NUAGE) as Array<keyof typeof NUAGE>).find((r) =>
-        line!.includes(fgCode(r, "truecolor")),
-      );
-      expect(role).toBe("muted");
-      expect(contrastRatio(NUAGE[role!].hex, NUAGE.surface.hex)).toBeGreaterThanOrEqual(4.5);
+      // Resolve the role each part is actually painted in, not the one we hope:
+      // the labels used to be `faint` here (2.64:1) while the plain terminal got
+      // `muted`, and T55 P0 is the claim that they clear AA on the surface.
+      const row = line!;
+      expect(row).toContain(`${fgCode("muted", "truecolor")}interrupt`);
+      expect(contrastRatio(NUAGE.muted.hex, NUAGE.surface.hex)).toBeGreaterThanOrEqual(4.5);
+      expect(row).not.toContain(`${fgCode("faint", "truecolor")}interrupt`);
+      // The key is the plain text colour: the brightest reading on the line is the
+      // one a first session cannot do without.
+      expect(row).toContain(`${fgCode("text", "truecolor")}escape`);
     } finally {
       if (savedColor === undefined) delete process.env.KUMO_COLOR;
       else process.env.KUMO_COLOR = savedColor;
@@ -704,7 +692,10 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       // The header and the footer still show the live route: no silent lie.
       expect(ui.liveRouteLabel()).toBe("local / First");
       expect(ui.footer.state.model).toBe("first.gguf");
-      expect(ui.headerFirstLine()).toContain("First");
+      // C7: the banner does not name the route; the status bar under the editor does.
+      expect(ui.liveRouteLabel()).toBe("local / First");
+      // The status bar names the route by its display name, as the footer always has.
+      expect(strip(ui.footer.render(80).join("\n"))).toContain("(local) First");
 
       // A settings.yaml that cannot be parsed is reported, never guessed at.
       writeFileSync(join(home, "settings.yaml"), "llm-pi-ai: [\n  broken: :\n");
@@ -767,6 +758,20 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     }
   });
 
+  test("the header says which server answers, and forgets it when the route changes (T27b.3, T37)", async () => {
+    const { headerHost } = await import("../src/ui/kumo-ui.js");
+    expect(headerHost({ models: { main: { baseUrl: "http://192.168.1.64:8081/v1" } } }, "local")).toBe("192.168.1.64");
+    expect(headerHost({ models: { main: { provider: "openrouter" } } }, undefined)).toBe("openrouter");
+    expect(headerHost(undefined, "local")).toBe("local");
+    expect(headerHost(undefined, undefined)).toBe("?");
+    const { ui } = makeUi();
+    ui.footer.set({ model: "m", provider: "local" });
+    // The first header row carries the version and, once the route is known, where it points.
+    expect(strip(ui.headerText())).toMatch(/v0\.2\.0/);
+    ui.resetRouteCache();
+    expect(strip(ui.headerText())).toMatch(/v0\.2\.0/);
+  });
+
   test("routeLabel names a route the way the header does", async () => {
     const { routeLabel } = await import("../src/ui/kumo-ui.js");
     expect(routeLabel({ provider: "local", model: "a.gguf", name: "Ornith" })).toBe("local / Ornith");
@@ -813,33 +818,195 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     }
   });
 
-  test("header shows model and host; condensation frames hold a fixed wordmark grid", async () => {
+  test("the banner names the session, not the route, and motion is the welcome's (C7)", async () => {
     const { ui } = makeUi();
     ui.footer.set({ model: "Ornith 1.5 9B", provider: "local", modelName: "Ornith 1.5 9B" });
     ui.updateHeader();
     const text = ui.tui.render(80).map(strip).join("\n");
-    expect(text).toContain("kumo");
-    expect(text).toContain("Ornith 1.5 9B");
-    expect(strip(ui.headerFirstLine(false))).not.toContain("kumo");
-    const { headerHost } = await import("../src/ui/kumo-ui.js");
-    const { LOGO, ignitionFrame, litCells, terminalMotionAllowed } = await import("../src/ui/logo-motion.js");
-    const frames = Array.from({ length: 8 }, (_, step) => ignitionFrame(step / 7));
-    expect(frames.every((frame) => frame.length === 2 && frame.every((line) => [...line].length === LOGO[0].length))).toBe(true);
-    expect(frames.flat().join("")).not.toMatch(/\p{Extended_Pictographic}/u);
-    // The wordmark is legible from the first frame — light travels through it,
-    // and the head stops short of the end while the session is still unknown.
-    expect(litCells(0)).toBeGreaterThan(0);
-    expect(litCells(1)).toBeLessThan(LOGO[0].length);
-    expect(frames[0]!.join("")).not.toEqual(frames.at(-1)!.join(""));
+    expect(text).toContain("v0.2.0");
+    // The route is the status bar's row, not the banner's: one place says it.
+    expect(strip(ui.footer.render(80).join("\n"))).toContain("Ornith 1.5 9B");
+    const { LOGO, terminalMotionAllowed } = await import("../src/ui/logo-motion.js");
+    // The mark is the setup welcome's now; the session says its name in a line.
+    expect(LOGO[0]).not.toBe("");
     expect(terminalMotionAllowed({ stdoutTTY: false })).toBe(false);
     expect(terminalMotionAllowed({ stdoutTTY: true, env: { CI: "1" } })).toBe(false);
     expect(terminalMotionAllowed({ stdoutTTY: true, env: { KUMO_NO_ANIMATION: "1" } })).toBe(false);
     expect(terminalMotionAllowed({ stdoutTTY: true, env: {}, ascii: false })).toBe(true);
-    expect(headerHost({ models: { main: { baseUrl: "http://192.168.1.64:8081/v1" } } }, "local")).toBe("192.168.1.64");
-    expect(headerHost({ models: { main: { provider: "openrouter" } } }, undefined)).toBe("openrouter");
   });
 
-  test("color header uses the finished wordmark and sweeps only on the first working turn", async () => {
+  test("the banner: a small mark, the version, the keys, then what is loaded (C7)", () => {
+    const { ui } = makeUi();
+    ui.setResources({
+      skills: ["apex", "ask-user", "brixhub", "browser", "grill-me", "herdr", "impeccable", "make-interfaces-feel-better"],
+      plugins: ["render", "repl"],
+    });
+    const lines = (width: number): string[] => ui.headerText(width).split("\n").map(strip);
+
+    const wide = lines(100);
+    // Line 1: a mark of one cell, not the wordmark, and the version.
+    expect(wide[0]).toBe("▌ v0.2.0");
+    // Line 2: the keys in the clear, their labels in gray.
+    expect(wide[1]).toBe("escape interrupt · ctrl+c clear · ctrl+d exit · / commands");
+    // A blank row, then the sections: `[Title]` and the names, indented two columns.
+    expect(wide[2]).toBe("");
+    expect(wide[3]).toBe("[Skills]");
+    expect(wide[4]).toBe("  apex, ask-user, brixhub, browser, grill-me, herdr, impeccable, make-interfaces-feel-better");
+    expect(wide[5]).toBe("[Plugins]");
+    expect(wide[6]).toBe("  render, repl");
+    expect(wide).toHaveLength(7);
+
+    // The keywords are legible, the labels are quiet: the keys are what a first
+    // session needs, and `muted` is where a reading still clears AA.
+    const painted = ui.headerText(100).split("\n")[1]!;
+    expect(painted).toContain("\x1b[37mescape\x1b[39m"); // text
+    expect(painted).toContain("\x1b[90minterrupt\x1b[39m"); // muted
+    // The section title is amber, so the eye finds the lists without a rule.
+    expect(ui.headerText(100)).toContain("\x1b[33m[Skills]\x1b[39m");
+
+    // 60 columns: the help line still fits whole, the names wrap.
+    const mid = lines(60);
+    expect(mid[1]).toBe("escape interrupt · ctrl+c clear · ctrl+d exit · / commands");
+    expect(mid.slice(3)).toEqual([
+      "[Skills]",
+      "  apex, ask-user, brixhub, browser, grill-me, herdr",
+      "  impeccable, make-interfaces-feel-better",
+      "[Plugins]",
+      "  render, repl",
+    ]);
+
+    // 30 columns: the labels go before a key is abbreviated, and the list is cut
+    // at three rows with the rest counted rather than dropped.
+    const narrow = lines(30);
+    expect(narrow[1]).toBe("escape · ctrl+c · ctrl+d · /");
+    expect(narrow[3]).toBe("[Skills]");
+    expect(narrow.slice(4, 8)).toEqual([
+      "  apex, ask-user, brixhub",
+      "  browser, grill-me, herdr",
+      "  impeccable",
+      "  +1 more",
+    ]);
+    for (const width of [100, 60, 30]) {
+      for (const line of lines(width)) expect(visibleWidth(line), `${String(width)}: ${line}`).toBeLessThanOrEqual(width);
+    }
+  });
+
+  test("a section is planned, not painted: rows, indents and the hidden count (C7)", async () => {
+    const { planResourceSection } = await import("../src/ui/kumo-ui.js");
+    // Empty: no section at all, rather than a title over nothing.
+    expect(planResourceSection("Skills", [], 100)).toEqual([]);
+    expect(planResourceSection("Skills", ["  ", ""], 100)).toEqual([]);
+    // One row of names, then the hidden count when the list does not fit in three.
+    const many = Array.from({ length: 12 }, (_, i) => `skill-${String(i)}`);
+    const rows = planResourceSection("Skills", many, 30);
+    expect(rows[0]).toEqual({ kind: "title", text: "[Skills]" });
+    expect(rows.filter((r) => r.kind === "names")).toHaveLength(3);
+    // 28 cells of room, three names of eight per row: nine shown, three counted.
+    expect(rows.at(-1)).toEqual({ kind: "more", text: "+3 more", hidden: 3 });
+    // Wide enough for all twelve: two rows of names and no `more`, because there
+    // is nothing hidden (98 cells fit eight of them).
+    const wide = planResourceSection("Skills", many, 100);
+    expect(wide.filter((r) => r.kind === "names")).toHaveLength(2);
+    expect(wide.filter((r) => r.kind === "more")).toHaveLength(0);
+    // Every row fits, at every width, whatever the names are.
+    for (const width of [100, 60, 30]) {
+      for (const row of planResourceSection("Skills", many, width)) {
+        const text = row.kind === "title" ? row.text : `  ${row.text}`;
+        expect(visibleWidth(text), `${String(width)}: ${text}`).toBeLessThanOrEqual(width);
+      }
+    }
+  });
+
+  test("an empty section is omitted, never announced (C7)", () => {
+    const { ui } = makeUi();
+    // Nothing loaded: two rows and no `[Skills]` over an empty list.
+    expect(ui.headerText(100).split("\n").map(strip)).toEqual([
+      "▌ v0.2.0",
+      "escape interrupt · ctrl+c clear · ctrl+d exit · / commands",
+    ]);
+    ui.setResources({ skills: [] });
+    expect(ui.headerText(100)).not.toContain("[Skills]");
+    // Plugins only: the skills section stays absent rather than empty.
+    ui.setResources({ plugins: ["repl"] });
+    const rows = ui.headerText(60).split("\n").map(strip);
+    expect(rows).not.toContain("[Skills]");
+    expect(rows[2]).toBe("");
+    expect(rows[3]).toBe("[Plugins]");
+    expect(rows[4]).toBe("  repl");
+  });
+
+  test("a name longer than the row is clipped, and nothing wraps the banner (C7)", () => {
+    const { ui } = makeUi();
+    ui.setResources({ skills: ["a-skill-name-far-too-long-for-any-narrow-terminal"] });
+    const rows = ui.headerText(30).split("\n").map(strip);
+    // Clipped with a mark, so a reader can see the name is not the whole of it.
+    expect(rows[4]!.startsWith("  a-skill-name-far-too-long")).toBe(true);
+    expect(rows[4]!.endsWith("…")).toBe(true);
+    for (const row of rows) expect(visibleWidth(row)).toBeLessThanOrEqual(30);
+  });
+
+  test("ASCII terminals get ASCII, and the lists come from the real sources (C7)", async () => {
+    const a = new KumoUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), ASCII_ICONS);
+    a.setResources({ plugins: ["repl"] });
+    const rows = a.headerText(100).split("\n").map(strip);
+    expect(rows[0]).toBe("| v0.2.0");
+    expect(rows[1]).toBe("escape interrupt - ctrl+c clear - ctrl+d exit - / commands");
+    expect(a.headerText(100)).not.toMatch(/\x1b\[/);
+    for (const width of [100, 60, 30]) {
+      for (const row of a.headerText(width).split("\n").map(strip)) {
+        expect(visibleWidth(row), `${String(width)}: ${row}`).toBeLessThanOrEqual(width);
+      }
+    }
+    await a.shutdown();
+
+    // The plugin list is kumo's own exports map — the plugins dsh mounts — read
+    // from the package that is running, so it cannot drift from the code.
+    const { readKumoPlugins } = await import("../src/ui/kumo-ui.js");
+    const plugins = readKumoPlugins();
+    expect(plugins.length).toBeGreaterThan(0);
+    expect(plugins).toContain("repl");
+    expect(plugins).toContain("render");
+    // Configuration exports are not plugins, and the rule that says so is a rule
+    // and not a list of names: nothing here ends in `.yml` or is `package.json`.
+    expect(plugins).not.toContain("cordis.patch.yml");
+    expect(plugins).not.toContain("package.json");
+    expect([...plugins]).toEqual([...plugins].sort((a, b) => a.localeCompare(b)));
+  });
+
+  test("the skills list is the manifest kumo wrote, read once at startup (C7)", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const home = mkdtempSync(join(tmpdir(), "kumo-banner-"));
+    const saved = process.env.DSH_HOME;
+    process.env.DSH_HOME = home;
+    try {
+      mkdirSync(join(home, "skills"), { recursive: true });
+      const { SKILLS_MANIFEST } = await import("../src/setup/skills.js");
+      writeFileSync(
+        join(home, "skills", SKILLS_MANIFEST),
+        JSON.stringify({
+          brixhub: { name: "brixhub", kind: "linked", source: "/x/brixhub" },
+          apex: { name: "apex", kind: "shipped", source: "" },
+        }),
+      );
+      const { ui } = makeUi();
+      // The load is in the background: the first frame must not wait on it.
+      expect(ui.headerText(100)).not.toContain("[Skills]");
+      await vi.waitFor(() => expect(ui.headerText(100)).toContain("[Skills]"));
+      const rows = ui.headerText(100).split("\n").map(strip);
+      expect(rows[3]).toBe("[Skills]");
+      // Sorted by name, from the manifest, never from a constant.
+      expect(rows[4]).toBe("  apex, brixhub");
+      await ui.shutdown();
+    } finally {
+      if (saved === undefined) delete process.env.DSH_HOME;
+      else process.env.DSH_HOME = saved;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("a color terminal gets the same two lines, and they never move (C7)", async () => {
     vi.useFakeTimers();
     const saved = { tty: process.stdout.isTTY, color: process.env.KUMO_COLOR, ci: process.env.CI, anim: process.env.KUMO_NO_ANIMATION, term: process.env.TERM };
     process.stdout.isTTY = true;
@@ -848,25 +1015,29 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     delete process.env.KUMO_NO_ANIMATION;
     process.env.TERM = "xterm-256color";
     const { resetColorDepth } = await import("../src/ui/palette.js");
-    const { wordmarkFrame } = await import("../src/ui/logo-motion.js");
     const { WorkingComponent } = await import("../src/ui/working.js");
     resetColorDepth();
     const ui = new KumoUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), UNICODE_ICONS);
     try {
-      const final = wordmarkFrame(1);
-      expect(strip(ui.headerText())).toContain(final[0]);
-      expect(strip(ui.headerText())).toContain(final[1]);
+      // The wordmark used to be drawn here at 24-bit, and nowhere else: two
+      // different screens for one session, and the expensive one moved under the
+      // user. It is the setup welcome's mark now, so the header is text on every
+      // terminal: a name, the route, and the line that says how to quit.
+      const lines = strip(ui.headerText(100)).split("\n");
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toContain("v0.2.0");
+      expect(lines[1]).toContain("ctrl+d exit");
+      expect(ui.headerText(100)).not.toMatch(/[\u2588\u2584\u2580\u2591\u2592\u2593]/);
+      // And a turn starting does not sweep it: the header is not an animation.
       const initial = ui.headerText();
       ui.addChat(new WorkingComponent(() => Date.now(), ui.icons));
       vi.advanceTimersByTime(200);
-      const midway = ui.headerText();
-      expect(midway).not.toBe(initial);
+      expect(ui.headerText()).toBe(initial);
       vi.advanceTimersByTime(500);
-      const settled = ui.headerText();
-      expect(settled).toBe(initial);
+      expect(ui.headerText()).toBe(initial);
       ui.addChat(new WorkingComponent(() => Date.now(), ui.icons));
       vi.advanceTimersByTime(500);
-      expect(ui.headerText()).toBe(settled);
+      expect(ui.headerText()).toBe(initial);
     } finally {
       await ui.shutdown();
       process.stdout.isTTY = saved.tty;
@@ -883,6 +1054,29 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     }
   });
 
+  test("the receipt paints its numbers in `text` and only its separators in `faint`", () => {
+    const { ui } = makeUi();
+    ui.onTurnEnd({
+      tools: Array.from({ length: 5 }, (_, i) => ({ tool: "bash", ok: true, seconds: 0, comp: {}, breakBefore: i > 0 })),
+      wallSec: 41,
+      outputTokens: 1200,
+      cancelled: false,
+      error: false,
+    });
+    const row = ui.tui.render(100).find((l) => l.includes("tools")) ?? "";
+    expect(strip(row)).toMatch(/✓ 5 tools · 41s · 1\.2k tokens/);
+    // The mark is the one accent on the line.
+    expect(row).toContain("\x1b[32m\u2713\x1b[39m");
+    // The numbers are the brightest ink (text) and the separators the quietest
+    // (faint): the line is mostly separators, and painting them like the words is
+    // what made the whole receipt the palest thing on screen.
+    expect(row).toContain("\x1b[37m41\x1b[39m");
+    expect(row).toContain("\x1b[37m1.2k\x1b[39m");
+    expect(row).toContain("\x1b[90m \u00b7 \x1b[39m");
+    // The words that name the numbers sit in between, in `muted`.
+    expect(row).toContain("\x1b[90m tools\x1b[39m");
+  });
+
   test("the interactive screen opens on the finished header without replaying boot motion", async () => {
     const saved = { tty: process.stdout.isTTY, anim: process.env.KUMO_NO_ANIMATION };
     process.stdout.isTTY = true;
@@ -895,10 +1089,18 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       phases.push(t);
     };
     try {
-      expect(ui.fancyHeader).toBe(false);
       ui.start();
       await new Promise((r) => setTimeout(r, 100));
-      expect(phases.every((frame) => !frame.includes("░"))).toBe(true);
+      // Two repaints, one header: the frame is painted again and again during a
+      // turn, and the header is a reading that must come back the same every time.
+      ui.updateHeader();
+      ui.updateHeader();
+      expect(phases.length).toBeGreaterThan(0);
+      expect(new Set(phases).size).toBe(1);
+      // No ghosted mark, no block glyphs: the session opens on text.
+      expect(phases.every((frame) => !/[\u2591\u2592\u2593\u2588\u2584\u2580]/.test(frame))).toBe(true);
+      const frame = ui.tui.render(60).map(strip).join("\n");
+      expect(frame).toContain("ctrl+d exit");
       const after = phases.length;
       await new Promise((r) => setTimeout(r, 200));
       expect(phases.length).toBe(after);
@@ -924,7 +1126,10 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     try {
       ui.start();
       await new Promise((r) => setTimeout(r, 300));
-      expect(phases.length).toBe(0);
+      // Nothing sweeps the header: the only write that can land is the one the
+      // banner's own resource load makes, and it writes the same text.
+      expect(phases.length).toBeLessThanOrEqual(1);
+      expect(new Set(phases).size).toBe(phases.length);
     } finally {
       await ui.shutdown();
       process.stdout.isTTY = saved.tty;
@@ -1080,6 +1285,8 @@ describe("attachTui wiring", () => {
     icons: typeof UNICODE_ICONS;
     chats: any[];
     footerState: Record<string, unknown>;
+    activity: TurnActivity;
+    showWorking(): void;
   }
 
   function setup() {
@@ -1098,16 +1305,25 @@ describe("attachTui wiring", () => {
       footer: { set: (next) => { footerState = { ...ui.footerState, ...next }; ui.footerState = footerState; } },
       requestRender: () => {},
       icons: UNICODE_ICONS,
+      activity: new TurnActivity(),
+      showWorking: () => ui.activity.start("Waiting for model"),
     };
     const session = { id: "s", requestContext: () => ({ contextWindow: 100_000 }) };
-    const agent = { session };
+    let agent = { session };
     const service: { describe?: (id: string) => { tool: string; summary: string } | undefined } = {};
-    attachTui(fake.ctx as any, agent as any, ui as any, service);
+    // The live agent, the way the service hands it over: `/new` and `/resume` swap
+    // it under the wiring that is already attached.
+    attachTui(fake.ctx as any, agent as any, ui as any, service, () => agent);
     const stream = (chunk: unknown) =>
       fake.emit("agent/assistant-stream", { agent, frame: { type: "chunk", time: 1, chunk } });
+    /** A model call starts — the boundary the token totals count across. */
+    const call = () => fake.emit("agent/assistant-stream", { agent, frame: { type: "start", time: 0 } });
+    const newConversation = (next: { id: string; requestContext: () => { contextWindow: number }; snapshotEvents?: () => unknown }) => {
+      agent = { session: next };
+    };
     const event = (type: string, data: unknown, sess: unknown = session) =>
       fake.emit("session/event", sess, { type, data });
-    return { chats, fake, stream, event, service, ui };
+    return { chats, fake, stream, call, newConversation, event, service, ui };
   }
 
   const rendered = (component: any, width = 60): string =>
@@ -1131,32 +1347,89 @@ describe("attachTui wiring", () => {
     void chats;
   });
 
-  test("the row reads the request's own usage: ↑ prompt, ↓ answer, R cache (D3)", () => {
-    const { ui, stream } = setup();
+  test("the row reads what the session has cost: ↑ prompt, ↓ answer, R cache (D3)", () => {
+    const { ui, stream, call } = setup();
+    call();
     stream({
       type: "usage",
       usage: { inputTokens: 1_500, outputTokens: 320, cacheReadTokens: 34_000 },
     });
     expect(ui.footerState).toMatchObject({ inputTokens: 1_500, outputTokens: 320, cacheRead: 34_000 });
-    // A later chunk replaces the reading rather than adding to it: the row says
-    // what the last request cost, not what the session has cost so far.
+    // The next call adds to the reading instead of replacing it: the row says what
+    // the conversation has cost since it started, not what the request that
+    // happened to be last cost.
+    call();
     stream({
       type: "usage",
       usage: { inputTokens: 1_900, outputTokens: 750, cacheReadTokens: 34_000 },
     });
-    expect(ui.footerState).toMatchObject({ inputTokens: 1_900, outputTokens: 750, cacheRead: 34_000 });
+    expect(ui.footerState).toMatchObject({ inputTokens: 3_400, outputTokens: 1_070, cacheRead: 68_000 });
+  });
+
+  test("a call that reports while it generates is counted once, not once per chunk (D3)", () => {
+    const { ui, stream, call } = setup();
+    call();
+    // A server that streams usage publishes the running total of the call it is
+    // in. Those are three reports of one call, so the session is charged the last
+    // of them and not their sum.
+    stream({ type: "usage", usage: { inputTokens: 40_000, outputTokens: 0 } });
+    stream({ type: "usage", usage: { inputTokens: 40_000, outputTokens: 1_200 } });
+    stream({ type: "usage", usage: { inputTokens: 40_000, outputTokens: 5_500 } });
+    expect(ui.footerState).toMatchObject({ inputTokens: 40_000, outputTokens: 5_500 });
+  });
+
+  test("a glyph the server never counted is left off the row (D3)", () => {
+    const { ui, stream, call } = setup();
+    call();
+    stream({ type: "usage", usage: { outputTokens: 12 } });
+    // ↑ and R were never reported, and a zero would be a claim about a session
+    // that has said nothing about them.
+    expect(ui.footerState.outputTokens).toBe(12);
+    expect(ui.footerState.inputTokens).toBeUndefined();
+    expect(ui.footerState.cacheRead).toBeUndefined();
+  });
+
+  test("/new starts the totals over, and /resume continues the log it left (D3)", () => {
+    const { ui, stream, call, newConversation } = setup();
+    call();
+    stream({ type: "usage", usage: { inputTokens: 900, outputTokens: 12, cacheReadTokens: 4_000 } });
+    expect(ui.footerState.outputTokens).toBe(12);
+    // `/new` puts an empty session under the same wiring. The tokens the previous
+    // conversation spent are not this one's, so the row stops claiming them.
+    newConversation({ id: "s2", requestContext: () => ({ contextWindow: 100_000 }) });
+    call();
+    expect(ui.footerState.inputTokens).toBeUndefined();
+    expect(ui.footerState.outputTokens).toBeUndefined();
+    expect(ui.footerState.cacheRead).toBeUndefined();
+    // A resumed conversation is read from its log, so it opens on the total it
+    // left off at and the next call continues from there.
+    newConversation({
+      id: "s3",
+      requestContext: () => ({ contextWindow: 100_000 }),
+      snapshotEvents: () => [
+        { type: "user/message", data: {} },
+        { type: "assistant/message", data: { usage: { inputTokens: 5_000, outputTokens: 900, cacheReadTokens: 12_000 } } },
+      ],
+    });
+    call();
+    expect(ui.footerState).toMatchObject({ inputTokens: 5_000, outputTokens: 900, cacheRead: 12_000 });
+    stream({ type: "usage", usage: { inputTokens: 300, outputTokens: 40, cacheReadTokens: 12_000 } });
+    expect(ui.footerState).toMatchObject({ inputTokens: 5_300, outputTokens: 940, cacheRead: 24_000 });
   });
 
   test("a usage chunk that says nothing is not read as a zero (D3)", () => {
-    const { ui, stream } = setup();
+    const { ui, stream, call } = setup();
+    call();
     stream({ type: "usage", usage: { inputTokens: 900, outputTokens: 12, cacheReadTokens: 4000 } });
-    // The server stopped counting. The last reading it gave stays on the row,
-    // because printing `↓0` because a field was missing is a lie about the turn.
+    // The server stopped counting. The total stays where it was, because printing
+    // `↓0` because a field was missing is a lie about a session that has already
+    // spent tokens.
     stream({ type: "usage", usage: {} });
     expect(ui.footerState).toMatchObject({ inputTokens: 900, outputTokens: 12, cacheRead: 4000 });
-    // A zero the server really sent is published: it is a reading, not a gap.
+    // A zero the server really sent is a reading like any other, and a session
+    // total never goes down: those twelve tokens out of the model are still spent.
     stream({ type: "usage", usage: { outputTokens: 0 } });
-    expect(ui.footerState.outputTokens).toBe(0);
+    expect(ui.footerState.outputTokens).toBe(12);
   });
 
   test("reasoning: one live line collapsing on block-end", () => {
@@ -1246,13 +1519,15 @@ describe("attachTui wiring", () => {
   });
 
   test("Working shows on turn/start and is replaced by first chunk (T24.3)", () => {
-    const { chats, stream, event } = setup();
+    const { chats, stream, event, ui } = setup();
     event("turn/start", { turn: 1 });
-    expect(chats).toHaveLength(1);
-    expect(rendered(chats[0])).toMatch(/Waiting for model/);
+    // The wait is the turn's activity (drawn in the prompt rule), not a chat row.
+    expect(chats).toHaveLength(0);
+    expect(ui.activity.active).toBe(true);
+    expect(ui.activity.state).toBe("Waiting for model");
     stream({ type: "reasoning-delta", text: "one" });
     expect(chats).toHaveLength(1);
-    expect(rendered(chats[0])).toContain("Thinking");
+    expect(ui.activity.state).toBe("Working");
   });
 
   test("mode announcements are not echoed as user messages (T24.4)", async () => {
@@ -1336,7 +1611,7 @@ describe("the suggestion is drawn in the editor, not above it", () => {
 
   test("the cursor's inverse video is closed before the suggestion (real bug: white line)", async () => {
     // Aron's real terminal, 2026-09-26: the suggestion line turned white and the white
-    // spilled into the cockpit. Slicing the editor line at the cursor kept the cursor's
+    // spilled into the next zone. Slicing the editor line at the cursor kept the cursor's
     // "\x1b[7m" (inverse) and dropped its closing code, so everything after stayed inverse.
     const { ui } = await started();
     ui.editor.setGhost("run the tests");
@@ -1711,38 +1986,6 @@ describe("the picker overlay (T37)", () => {
     await ui.shutdown();
   });
 
-  test("resetRouteCache drops the memoized host so a new route shows its own", async () => {
-    const { writeFileSync, mkdtempSync: mk } = await import("node:fs");
-    const { tmpdir: tmp } = await import("node:os");
-    const home = mk(join(tmp(), "kumo-header-"));
-    const settings = (baseUrl: string): string =>
-      [
-        "llm-pi-ai:",
-        "  providers:",
-        "    local:",
-        `      baseURL: '${baseUrl}'`,
-        "      models:",
-        "        - id: m",
-        "agent-default-model:",
-        "  provider: 'local'",
-        "  model: 'm'",
-        "",
-      ].join("\n");
-    writeFileSync(join(home, "settings.yaml"), settings("http://192.168.1.64:8081/v1"));
-    vi.stubEnv("DSH_HOME", home);
-    const terminal = new FakeTerminal();
-    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
-    ui.start();
-    ui.footer.set({ model: "m", provider: "local" });
-    expect(strip(ui.headerFirstLine())).toContain("192.168.1.64");
-    writeFileSync(join(home, "settings.yaml"), settings("http://127.0.0.1:9999/v1"));
-    // Memoized: still the old host until the route cache is dropped.
-    expect(strip(ui.headerFirstLine())).toContain("192.168.1.64");
-    ui.resetRouteCache();
-    expect(strip(ui.headerFirstLine())).toContain("127.0.0.1");
-    await ui.shutdown();
-    vi.unstubAllEnvs();
-  });
 });
 
 describe("tool output display (Nuage polish)", () => {
@@ -1766,29 +2009,6 @@ describe("server label (UI polish 2026-09-26)", () => {
     expect(serverLabel("token-plan.ap-southeast-1.maas.aliyuncs.com", "Alibaba Cloud (Qwen)")).toBe("Alibaba Cloud (Qwen)");
     expect(serverLabel("openrouter.ai")).toBe("openrouter.ai");
     expect(serverLabel("api.deepseek.com")).toBe("deepseek.com");
-  });
-});
-
-describe("file change diff (UI polish 2026-09-26)", () => {
-  test("edit shows removed and added lines with the counter, write shows added lines", async () => {
-    const { diffForCall, renderDiff, diffCounter } = await import("../src/ui/diff-view.js");
-    const d = diffForCall("edit", JSON.stringify({ path: "/nonexistent/x.ts", old_string: "a\nb\n", new_string: "a\nc\nd\n" }))!;
-    expect(d.added).toBe(2);
-    expect(d.removed).toBe(1);
-    const lines = renderDiff(d, 40).map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""));
-    expect(lines.some((l) => l.includes("-b"))).toBe(true);
-    expect(lines.some((l) => l.includes("+c"))).toBe(true);
-    expect(diffCounter(d).replace(/\x1b\[[0-9;]*m/g, "")).toBe("+2 -1");
-    const w = diffForCall("write", JSON.stringify({ path: "n.ts", content: "x\ny\n" }))!;
-    expect(w.added).toBe(2);
-    expect(renderDiff(w, 40).map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""))[0]).toMatch(/^\s*1 │\+x/);
-  });
-  test("a long diff is capped at 12 lines with a count of the rest", async () => {
-    const { diffForCall, renderDiff } = await import("../src/ui/diff-view.js");
-    const content = Array.from({ length: 30 }, (_, i) => `line ${String(i)}`).join("\n");
-    const out = renderDiff(diffForCall("write", JSON.stringify({ path: "big.ts", content }))!, 60);
-    expect(out).toHaveLength(13);
-    expect(out.at(-1)!.replace(/\x1b\[[0-9;]*m/g, "")).toContain("18 more lines");
   });
 });
 

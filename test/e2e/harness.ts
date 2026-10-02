@@ -172,10 +172,10 @@ export class Harness {
     const rows = this.screen();
     // The context reading is the one cell range the turn row always has when the
     // window is known, and the cockpit never prints it in this shape. The window
-    // is written the way a person says one: `100k`, `1.0M`.
+    // is written the way a person says one: `100k`, `1.0M`, as `9.2%/100k` or `9.2% of 100k`.
     let turn = -1;
     for (let row = rows.length - 1; row >= 0; row -= 1) {
-      if (/\d%\/[\d.]+[kKmM]?\b/.test(rows[row]!)) { turn = row; break; }
+      if (/\d%(?:\/| of )[\d.]+[kKmM]?\b/.test(rows[row]!)) { turn = row; break; }
     }
     if (turn < 0) return { place: -1, turn: -1, speed: -1 };
     const below = rows[turn + 1] ?? "";

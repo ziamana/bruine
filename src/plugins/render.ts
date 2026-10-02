@@ -7,12 +7,14 @@ import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { TextStream } from "../render/text.js";
 import { ToolCallView } from "../render/tools.js";
 import { ReasoningComponent } from "../ui/reasoning-component.js";
-import { ToolCallComponent } from "../ui/tool-call-component.js";
+import { ToolCallComponent, type ChatToolCall } from "../ui/tool-call-component.js";
+import { QuestionCallComponent } from "../ui/question-call-component.js";
 import { AssistantTextComponent, userMessageComponent } from "../ui/assistant-text.js";
-import { WorkingComponent } from "../ui/working.js";
 import { gitStatus, turnChanges, type ChangedFile, type GitStatus } from "../ui/changes.js";
 import { MODE_ANNOUNCEMENTS } from "./modes.js";
 import { TpsMeter } from "../ui/tps.js";
+import type { TurnActivity } from "../ui/turn-activity.js";
+import { SessionSpend } from "../ui/spend.js";
 import { ansi } from "../ui/theme.js";
 import { TaskPanel, taskItems, type TaskItem } from "../ui/task-panel.js";
 import { readSettingsRoute } from "../ui/kumo-ui.js";
@@ -100,22 +102,23 @@ function reported(value: unknown): number | undefined {
 export function attachTui(
   ctx: DshContext,
   agent: { session: any },
-  ui: NonNullable<KumoRepl["ui"]>,
+  ui: NonNullable<KumoRepl["ui"]> & { activity?: TurnActivity; showWorking?: () => void },
   service: RenderService,
   getAgent?: () => { session: any },
 ): () => void {
   const tps = new TpsMeter();
-  const tools = new Map<string, ToolCallComponent>();
+  const tools = new Map<string, ChatToolCall>();
   const todoToolIds = new Set<string>();
   const setUiTasks = (tasks: TaskItem[]): void => {
     (ui as unknown as { setTasks?: (items: TaskItem[]) => void }).setTasks?.(tasks);
   };
   let reasoning: ReasoningComponent | undefined;
   let text: AssistantTextComponent | undefined;
-  let working: WorkingComponent | undefined;
   let lastInputTokens = 0;
   let lastOutputTokens = 0;
   let lastCacheTokens = 0;
+  /** D3: what the whole session has spent, as opposed to the request in flight. */
+  const spend = new SessionSpend(agent.session);
   let turnStartWall = Date.now();
   let turnOutput = 0;
   /** T59: the workspace as it was when this turn started, to diff against. */
@@ -138,32 +141,13 @@ export function attachTui(
   };
 
   const hideWorking = (): void => {
-    const chat = (ui as unknown as { chat?: { children: unknown[]; removeChild(c: unknown): void } }).chat;
-    if (chat !== undefined) {
-      for (const child of [...chat.children]) {
-        if ((child as { constructor?: { name?: string } }).constructor?.name === "WorkingComponent") {
-          chat.removeChild(child);
-        }
-      }
-    }
-    if (working !== undefined) {
-      (ui as unknown as { removeChat?: (c: unknown) => void }).removeChat?.(working);
-      working = undefined;
-    }
+    if (ui.activity?.state === "Waiting for model") ui.activity.setState("Working");
     ui.requestRender();
   };
 
   const showWorking = (): void => {
-    const chat = (ui as unknown as { chat?: { children: unknown[] } }).chat;
-    if (
-      chat !== undefined &&
-      chat.children.some((c) => (c as { constructor?: { name?: string } }).constructor?.name === "WorkingComponent")
-    ) {
-      return;
-    }
-    if (working === undefined && reasoning === undefined && text === undefined) {
-      working = new WorkingComponent(Date.now, ui.icons);
-      ui.addChat(working);
+    if (reasoning === undefined && text === undefined) {
+      ui.showWorking?.();
       ui.requestRender();
     }
   };
@@ -198,19 +182,21 @@ export function attachTui(
     return text;
   };
 
-  const ensureTool = (id: string, toolName: string): ToolCallComponent => {
+  const ensureTool = (id: string, toolName: string): ChatToolCall => {
     let comp = tools.get(id);
     if (comp === undefined) {
-      comp = new ToolCallComponent(toolName, Date.now, ui.icons);
+      // A question has a shape of its own: the call is drawn from its first byte, and
+      // the form's answers settle it (KumoUi hands them to the registered call).
+      const question = toolName === "ask_user_question" ? new QuestionCallComponent(Date.now, ui.icons) : undefined;
+      comp = question ?? new ToolCallComponent(toolName, Date.now, ui.icons);
       tools.set(id, comp);
       if (needBreak) {
         turnBreaks.add(id);
         needBreak = false;
       }
       turnToolIds.push(id);
-      // T28b.3: the question UI + echo line tell the story; never draw the
-      // ask_user_question tool header or its answers preview in the chat.
-      if (toolName !== "ask_user_question") ui.addChat(comp);
+      if (question !== undefined) (ui as unknown as { addQuestionCall?: (c: QuestionCallComponent) => void }).addQuestionCall?.(question);
+      else ui.addChat(comp);
     }
     return comp;
   };
@@ -287,6 +273,11 @@ export function attachTui(
     const now = typeof f.time === "number" ? f.time : Date.now();
     if (f.type === "start") {
       tps.startCall(now);
+      // `/new` and `/resume` swap the session under this wiring: a call is where
+      // the row notices, and the totals follow the conversation rather than the
+      // process — a new one at nothing, a resumed one at what its log recorded.
+      if (spend.follow(liveAgent().session)) ui.footer.set(spend.readings);
+      else spend.beginCall();
       ui.footer.set({ tps: 0, pp: undefined });
       closeLive();
       // T59: the workspace is read now so the end of the turn can be diffed
@@ -381,15 +372,12 @@ export function attachTui(
           ui.footer.set({ contextUsed: lastInputTokens + lastCacheTokens + lastOutputTokens, contextWindow: window });
         }
         // D3: the row's own readings — ↑ the prompt, ↓ the answer, R what the cache
-        // served — taken from this request's usage and published only when the
-        // server actually sent the number. A field that was missing is not a zero,
-        // and a number printed as fresh when it is stale is worse than no number:
-        // the previous reading stays on the row until the server replaces it.
-        const readings: Record<string, number> = {};
-        if (reported(u.inputTokens) !== undefined) readings.inputTokens = lastInputTokens;
-        if (reported(u.outputTokens) !== undefined) readings.outputTokens = lastOutputTokens;
-        if (reported(cached) !== undefined) readings.cacheRead = lastCacheTokens;
-        ui.footer.set({ ...readings, tps: tps.measuredTps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
+        // served — as the totals of the whole session, added to as the calls report.
+        // A field that was missing is not a zero: a glyph appears once the server
+        // has sent that count at least once, and until then the row says nothing
+        // about it rather than claiming the session spent nothing.
+        spend.add({ input: reported(u.inputTokens), output: reported(u.outputTokens), cacheRead: reported(cached) });
+        ui.footer.set({ ...spend.readings, tps: tps.measuredTps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
         ui.requestRender();
         return;
       }
@@ -418,18 +406,8 @@ export function attachTui(
         if (trimmed === "") return;
         if (MODE_ANNOUNCEMENTS.has(trimmed)) return;
         lastUser = trimmed;
-        {
-          // dsh emits turn/start before the durable user/message event, so Working may
-          // already be on screen: re-add it after the prompt so it sits below it.
-          const chat = (ui as unknown as { chat?: { children: unknown[] } }).chat;
-          const hadWorking =
-            working !== undefined ||
-            (chat?.children ?? []).some((c) => (c as { constructor?: { name?: string } }).constructor?.name === "WorkingComponent");
-          if (hadWorking) hideWorking();
-          // T55 P1b: the prompt opens a turn, so the shell numbers it.
-          ui.addUserPrompt(trimmed);
-          if (hadWorking) showWorking();
-        }
+        // The pinned activity stays in place when the durable prompt arrives.
+        ui.addUserPrompt(trimmed);
         return;
       }
       case "turn/start":
@@ -579,6 +557,8 @@ export function attachTui(
 
   const restored = restoreTasks(agent.session);
   if (restored !== undefined) setUiTasks(restored);
+  // A resumed conversation opens on the total it left off at, not on zero.
+  ui.footer.set(spend.readings);
 
   function suggestionsEnabled(): boolean {
     try {

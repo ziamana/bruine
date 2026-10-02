@@ -1,6 +1,3 @@
-import { Text } from "@earendil-works/pi-tui";
-import { dim } from "../render/reasoning.js";
-import { echoLine } from "../ui/questions.js";
 import type { DshContext, KumoRepl } from "./ctx.js";
 import type { KumoModesService } from "./modes.js";
 import type { RenderService } from "./render.js";
@@ -85,13 +82,7 @@ export function apply(ctx: DshContext): void {
           const resolved =
             answers ??
             request.questions.map((q) => ({ id: q.id, selected: [], custom: "skipped by the user" }));
-          for (const a of resolved) {
-            const q = request.questions.find((qq) => qq.id === a.id);
-            if (q === undefined) continue;
-            const label = a.selected[0] ?? a.custom ?? "skipped";
-            ui.addChat(new Text(dim(echoLine(q.question, label)), 1, 0));
-            ui.requestRender();
-          }
+          // The UI records what was asked and chosen itself (the question call in the chat).
           return { answers: resolved };
         });
       }

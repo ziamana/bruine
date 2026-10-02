@@ -1,4 +1,10 @@
-/** The permanent two-row KUMO wordmark. Every motion frame occupies these cells. */
+/**
+ * The permanent two-row KUMO wordmark. Every motion frame occupies these cells.
+ *
+ * C7: the mark belongs to the setup welcome now. The interactive screen says its
+ * name in a line of text instead, so the only place this is drawn is the one screen
+ * where the user is not reading anything yet.
+ */
 export const LOGO = ["█▄▀ █ █ █▀▄▀█ █▀█", "█ █ █▄█ █ ▀ █ █▄█"] as const;
 export const LOGO_STOPS = ["#7dcfff", "#b4a7ff", "#ff9ed2", "#7dcfff"] as const;
 
@@ -35,44 +41,6 @@ export function wordmarkFrame(phase: number): string[] {
   }
   return rows.map((row) => row.join(""));
 }
-
-/** The unlit half of the mark: the same block material, at a fifth of the ink. */
-const GHOST = "░";
-/** The cell just behind the head, so the wave has a shoulder and not an edge. */
-const SHOULDER = "▓";
-
-/**
- * How far the lit head has travelled, in cells. An exponential ease-out from a
- * seed that is already lit, and deliberately short of the end: while the
- * session is still unknown the tail stays ghosted, because a loading mark that
- * reaches 100% on a clock is telling the user a thing nobody has established.
- */
-export function litCells(phase: number): number {
-  const time = Number.isFinite(phase) ? Math.max(0, Math.min(1, phase)) : 0;
-  return Math.round((0.1 + 0.82 * (1 - Math.exp(-3.4 * time))) * LOGO[0].length);
-}
-
-/**
- * The mark being written: the whole wordmark stays legible from the first frame
- * as a ghost, and light travels left to right through it. Two rows, no extra
- * furniture, and the frame a user watches is already the frame the session
- * header keeps once the boot is over.
- */
-export function ignitionFrame(phase: number): string[] {
-  const head = litCells(phase) - 1;
-  return LOGO.map((line) =>
-    [...line]
-      .map((glyph, column) => {
-        if (glyph === " ") return glyph;
-        if (column > head + 1) return GHOST;
-        return column === head + 1 ? SHOULDER : glyph;
-      })
-      .join(""),
-  );
-}
-
-/** A small echo of the same material while the model has not replied yet. */
-export const WAITING_FRAMES = ["░   ", "▒░  ", "▓▒░ ", "█▓▒░", " ▓█▒", "  ▒▓", "   ░"] as const;
 
 export function terminalMotionAllowed(opts: {
   stdoutTTY?: boolean;

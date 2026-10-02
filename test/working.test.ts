@@ -17,5 +17,5 @@ test("reduced motion and ASCII keep a static recognizable status", () => {
   const working = new WorkingComponent(() => 0, ASCII_ICONS);
   expect(working.active).toBe(false);
   expect(working.line(30).replace(/\x1b\[[0-9;]*m/g, "")).toBe("| Waiting for model 0s");
-  working.docked = true; expect(working.render(30)).toEqual([]); expect(working.line(30)).toContain("Waiting for model");
+  expect(working.render(30)).toEqual([working.line(30)]);
 });

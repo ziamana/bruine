@@ -1,6 +1,7 @@
 import { Markdown, Text, type Component } from "@earendil-works/pi-tui";
 import { kumoIcons, withoutEmoji, type KumoIcons } from "../render/chars.js";
-import { ansi, markdownTheme } from "./theme.js";
+import { oneBlankBetween, shapeAnswer } from "../render/markdown.js";
+import { ansi, markdownThemeFor } from "./theme.js";
 import { pasteChip } from "./chat-layout.js";
 import { revealAllowed, Typewriter, type TypewriterOptions } from "./typewriter.js";
 
@@ -28,8 +29,12 @@ export class AssistantTextComponent implements Component {
   #tw: Typewriter;
 
   constructor(opts: AssistantTextOptions = {}) {
-    this.#md = new Markdown("", 0, 0, markdownTheme);
     const icons = opts.icons ?? kumoIcons();
+    this.#md = new Markdown("", 0, 0, markdownThemeFor(icons), undefined, {
+      // Prose is read at a fixed measure and code keeps the width it needs, so a
+      // wide terminal gains air around the answer instead of lines through it.
+      transform: shapeAnswer,
+    });
     const animate = opts.animate ?? revealAllowed(icons);
     const repaint = opts.onTick;
     this.#tw = new Typewriter({
@@ -59,7 +64,9 @@ export class AssistantTextComponent implements Component {
   }
 
   render(width: number): string[] {
-    return this.#md.render(width);
+    // One blank line between two blocks: the renderer leaves three around a
+    // fence, and a screen where every block is floating has no rhythm at all.
+    return oneBlankBetween(this.#md.render(width));
   }
 
   invalidate(): void {

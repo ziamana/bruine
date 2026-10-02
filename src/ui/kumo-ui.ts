@@ -16,22 +16,24 @@ import {
   type TUI,
   type Terminal,
   type TuiInputListener,
+  truncateToWidth,
+  visibleWidth,
 } from "@earendil-works/pi-tui";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi, editorTheme, selectListTheme } from "./theme.js";
-import { bgEnabled, colorDepth, gradientStops, setTerminalBackdrop } from "./palette.js";
-import { LOGO_STOPS, terminalMotionAllowed, wordmarkFrame } from "./logo-motion.js";
-import { ChatTranscript, ConsoleBand, Gap, Margin, PlainGlyphEditor } from "./chat-layout.js";
+import { bgEnabled, paint, setTerminalBackdrop, type PaletteRole } from "./palette.js";
+import { ChatTranscript, Gap, Margin, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
 import { displayModel } from "./footer.js";
 import { JumpToLatest } from "./jump-latest.js";
+import { readInstalledSkills } from "../setup/skills.js";
 import { Shell } from "./shell.js";
-import { QuestionForm } from "./questions.js";
-import { ReasoningComponent } from "./reasoning-component.js";
+import { echoLine, QuestionForm } from "./questions.js";
+import type { QuestionCallComponent } from "./question-call-component.js";
+import type { ReasoningComponent } from "./reasoning-component.js";
 import { PromptFrame } from "./prompt-frame.js";
-import { WorkingComponent } from "./working.js";
+import { TurnActivity } from "./turn-activity.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
-import { DashboardPanel, DockRow } from "./dock.js";
 import { createAutocomplete } from "./file-complete.js";
 import {
   CollapsedToolsComponent,
@@ -78,7 +80,7 @@ export interface KumoUiHandlers {
   onUserActivity?: () => void;
   /** Escape: interrupt the running turn, never the app. */
   onEscape(): void;
-  /** Quit request: ctrl+d, or ctrl+c twice within 500 ms. */
+  /** Quit request: ctrl+d, or ctrl+c on an empty editor. */
   onQuit(): void;
   /** Shift+Tab: toggle Plan/Build (T31.4). */
   onShiftTab?: () => void;
@@ -110,6 +112,121 @@ class ChoiceOverlay implements Component {
   }
 }
 
+/** What the banner says is loaded: the real skills and plugins of this session. */
+export interface SessionResources {
+  skills?: readonly string[];
+  plugins?: readonly string[];
+}
+
+/** The keys the help line names, in the order a first session meets them. */
+const HELP_KEYS: ReadonlyArray<readonly [string, string]> = [
+  ["escape", "interrupt"],
+  ["ctrl+c", "clear"],
+  ["ctrl+d", "exit"],
+  ["/", "commands"],
+];
+
+/** How a key is written when there is no room for its full spelling. */
+const SHORT_KEYS: Record<string, string> = { escape: "esc", "ctrl+c": "^c", "ctrl+d": "^d" };
+
+/**
+ * The help line, from the longest reading that fits to the shortest.
+ *
+ * The keys are the part a first session cannot do without, so they are the last to
+ * go: the labels ("interrupt", "clear", "exit") are dropped before a key is
+ * abbreviated, and a key is abbreviated before any of them is dropped. A line that
+ * does not fit is cut by the terminal into two rows, which would move the banner
+ * under itself — the one thing a fixed frame must not do.
+ */
+export function helpLineParts(width: number, sep = "\u00b7"): Array<[string, string | undefined]> {
+  const keys = HELP_KEYS.map(([key, label]) => [key, label] as [string, string]);
+  const bare = HELP_KEYS.map(([key]) => [key, undefined] as [string, undefined]);
+  const short = HELP_KEYS.map(([key]) => [SHORT_KEYS[key] ?? key, undefined] as [string, undefined]);
+  const cells = (row: Array<[string, string | undefined]>): number =>
+    row.reduce((n, [key, label]) => n + visibleWidth(key) + (label === undefined ? 0 : visibleWidth(label) + 1), 0) +
+    (row.length - 1) * (sep.length + 2);
+  for (const row of [keys, bare, short]) if (cells(row) <= width) return row.map(([k, l]) => [k, l] as [string, string | undefined]);
+  return short.map(([k, l]) => [k, l] as [string, string | undefined]);
+}
+
+/** One row of a resource section, uncoloured: the renderer paints it by kind. */
+export interface ResourceRow {
+  kind: "title" | "names" | "more";
+  text: string;
+  /** How many names the section did not have room for (`more` rows only). */
+  hidden?: number;
+}
+
+/**
+ * A `[Skills]` / `[Plugins]` section: names indented two columns, comma-separated,
+ * wrapped at the width and cut at three rows.
+ *
+ * Pure, and it returns nothing at all for an empty list: a session that loaded no
+ * skills must not be told it loaded none, and a header that grows a `[Skills]` title
+ * over an empty section teaches the user to ignore the sections that matter.
+ *
+ * The names are counted, not truncated mid-word: `+4 more` says there are four, so
+ * the list never claims to be complete when it is not.
+ */
+export function planResourceSection(
+  title: string,
+  names: readonly string[],
+  width: number,
+  maxRows = 3,
+): ResourceRow[] {
+  const clean = names.map((n) => n.trim()).filter((n) => n !== "");
+  if (clean.length === 0) return [];
+  const room = Math.max(8, width - 2);
+  const rows: Array<{ text: string; count: number }> = [];
+  let current = "";
+  let count = 0;
+  for (const name of clean) {
+    const candidate = current === "" ? name : `${current}, ${name}`;
+    if (current !== "" && visibleWidth(candidate) > room) {
+      rows.push({ text: current, count });
+      current = name;
+      count = 1;
+      continue;
+    }
+    current = candidate;
+    count += 1;
+  }
+  rows.push({ text: current, count });
+  const kept = rows.slice(0, Math.max(1, maxRows));
+  const shown = kept.reduce((n, row) => n + row.count, 0);
+  const hidden = clean.length - shown;
+  const out: ResourceRow[] = [
+    { kind: "title", text: `[${title}]` },
+    // A single name longer than the row is the one case a word wrap cannot save:
+    // it is clipped rather than allowed to wrap the banner onto another line.
+    ...kept.map((row) => ({ kind: "names" as const, text: truncateToWidth(row.text, room, "\u2026") })),
+  ];
+  if (hidden > 0) out.push({ kind: "more", text: `+${String(hidden)} more`, hidden });
+  return out;
+}
+
+/**
+ * The plugin entry points kumo itself declares.
+ *
+ * dsh mounts a bundle by its package exports, so this map IS the list of kumo's
+ * plugins: an export that is not a module (`./cordis.patch.yml`, `./package.json`)
+ * is configuration, not a plugin, and is left out by the rule rather than by name.
+ * Read from the package that is running, so it cannot drift from the code.
+ */
+export function readKumoPlugins(): string[] {
+  try {
+    const raw = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
+      exports?: Record<string, string>;
+    };
+    return Object.entries(raw.exports ?? {})
+      .filter(([, target]) => typeof target === "string" && target.endsWith(".js"))
+      .map(([name]) => name.replace(/^\.\//, ""))
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
+}
+
 /** Notice area directly above the editor (T24.4): one empty line when idle. */
 class NoticeBox extends Container {
   override render(width: number): string[] {
@@ -118,7 +235,7 @@ class NoticeBox extends Container {
   }
 }
 
-/** Host for header: base URL hostname, or provider for cloud (pure; tested). */
+/** The server or provider a route talks to, for the header: a host, else a provider name. */
 export function headerHost(
   kumoJson?: { models?: { main?: { baseUrl?: string; provider?: string } } },
   fallbackProvider?: string,
@@ -132,10 +249,7 @@ export function headerHost(
     }
   }
   if (typeof main?.provider === "string" && main.provider !== "") return main.provider;
-  if (typeof fallbackProvider === "string" && fallbackProvider !== "") {
-    if (fallbackProvider === "local") return "local";
-    return fallbackProvider;
-  }
+  if (typeof fallbackProvider === "string" && fallbackProvider !== "") return fallbackProvider;
   return "?";
 }
 
@@ -314,24 +428,22 @@ export class KumoUi {
   readonly mouse: MouseFeature;
   readonly noticeBox: NoticeBox;
   readonly taskPanel: TaskPanel;
-  readonly dock: DockRow;
   readonly promptFrame: PromptFrame;
+  readonly activity = new TurnActivity();
+  #animatedComponents = new Set<Component>();
   readonly header: Text;
   readonly version: string;
   /** T29: the images the `[Image N]` chips in the editor stand for. */
   readonly pendingImages = new PendingImages();
-  #lastCtrlC = 0;
   #animation: ReturnType<typeof setInterval> | undefined;
-  #headerSweep: ReturnType<typeof setInterval> | undefined;
-  #headerSweepPhase = 0;
-  #headerSweepStarted = false;
   #closed = false;
   #noticeTimer: ReturnType<typeof setTimeout> | undefined;
   #persistentNotice: Component | undefined;
   /** A notice that arrived while a question form owned the box. */
   #pendingNotice: { text: string; red: boolean; persistent?: boolean } | undefined;
   #confirming = false;
-  #cachedHost: string | undefined;
+  /** The banner's lists, read once at startup (see `#loadResources`). */
+  #resources: { skills: string[]; plugins: string[] } = { skills: [], plugins: [] };
   /** T56: the frame, with the mouse selection painted on top of it. */
   #layer: SelectionLayer;
   /** T55 P1b: turns run so far, shared by the band label and the turn receipt. */
@@ -429,39 +541,25 @@ export class KumoUi {
         },
       },
     });
-    // Cockpit (Nuage + Cockpit mix): live speed/cache/context next to the editor on
-    // wide color terminals; ctrl+b hides it. Basic/ASCII terminals keep the plain editor.
-    this.dock = new DockRow(
-      this.editor,
-      new DashboardPanel(
-        () => this.footer.state,
-        this.footer.speed,
-        () => {
-          const cur = this.taskPanel.tasks.find((t) => t.status === "in_progress");
-          return { done: this.taskPanel.done, total: this.taskPanel.tasks.length, ...(cur !== undefined ? { current: cur.content } : {}) };
-        },
-        () => {
-          this.headerFirstLine();
-          return this.#cachedHost ?? "";
-        },
-      ),
-    );
-    this.promptFrame = new PromptFrame(this.dock, this.editor, () => {
-      if (this.chat.children.some(c => c instanceof WorkingComponent)) return "Waiting for model";
-      if (this.chat.children.some(c => c instanceof ReasoningComponent && c.active)) return "Thinking";
-      return "Working";
-    }, icons);
-    // The cockpit is opt-in (ctrl+b): by default the footer owns the readings, as one
-    // quiet three-row status bar, and the editor is not shouldering a side panel.
-    this.dock.visible = false;
-    this.footer.compact = (w) => this.dock.shown(w);
-    // The editor, the place, the cockpit and the footer share one painted surface (T40).
-    // The shell owns the order so the transcript can be windowed: scrolled back, the
-    // band below it has to stay on the last row, and only the layout knows that.
+    // C6: no cockpit. The readings live in the status bar under the editor, and a
+    // side panel that says the same three numbers was a second place to keep them
+    // honest. The prompt frame wraps the editor itself.
+    // The editor is both what the frame draws and the thing it reads focus from:
+    // there is no panel between them any more.
+    this.promptFrame = new PromptFrame(this.editor, this.editor, this.activity, icons);
+    // The editor, the place and the footer share one margin. The shell
+    // owns the order so the transcript can be windowed: scrolled back, the band
+    // below it has to stay on the last row, and only the layout knows that.
+    // The bottom zone keeps the terminal's own background — the editor is framed by
+    // its two rules and the status bar is plain text under it, so nothing there is a
+    // painted slab.
+    const bottomZones = new Container();
+    bottomZones.addChild(this.promptFrame);
+    bottomZones.addChild(this.footer);
     this.shell = new Shell(
       [this.header],
       this.chat,
-      [new Margin(new Gap(this.taskPanel)), new Margin(this.noticeBox), new ConsoleBand([this.promptFrame, this.footer])],
+      [new Margin(new Gap(this.taskPanel)), new Margin(this.noticeBox), new Margin(bottomZones)],
       () => this.terminal.rows,
       this.jumpLatest,
     );
@@ -472,6 +570,10 @@ export class KumoUi {
     // session only reads its cached result — never any network here, never
     // any delay.
     void this.#maybeUpdateNotice(version);
+
+    // The banner's `[Skills]` / `[Plugins]` lists, read once, in the background:
+    // the first frame must not wait on a manifest.
+    void this.#loadResources();
 
     this.tui.addInputListener((data: string) => this.#onInput(data, handlers));
   }
@@ -517,12 +619,6 @@ export class KumoUi {
     if (matchesKey(data, "ctrl+t")) {
       if (this.#confirming) return { consume: true };
       this.taskPanel.toggleExpanded();
-      this.requestRender();
-      return { consume: true };
-    }
-    if (matchesKey(data, "ctrl+b")) {
-      if (this.#confirming) return { consume: true };
-      this.dock.visible = !this.dock.visible;
       this.requestRender();
       return { consume: true };
     }
@@ -577,14 +673,14 @@ export class KumoUi {
       return { consume: true };
     }
     if (matchesKey(data, "ctrl+c")) {
-      const now = Date.now();
-      if (this.#lastCtrlC !== 0 && now - this.#lastCtrlC < 500) {
-        handlers.onQuit();
-      } else {
+      // With text in the editor, ctrl+c only clears it. With nothing to clear it
+      // quits, the way ctrl+d does: the same key never does both in one press.
+      if (this.editor.getText() !== "") {
         this.editor.setText("");
         this.requestRender();
+      } else {
+        handlers.onQuit();
       }
-      this.#lastCtrlC = now;
       return { consume: true };
     }
     if (matchesKey(data, "ctrl+d")) {
@@ -672,7 +768,7 @@ export class KumoUi {
   }
 
   start(): void {
-    this.tui.setFocus(this.editor);
+    this.tui.setFocus(this.promptFrame);
     this.tui.start();
     // T56: ask for the mouse, so a drag can be seen and copied. KUMO_MOUSE_SELECT=0
     // and a form both keep the terminal's.
@@ -709,7 +805,10 @@ export class KumoUi {
     if (this.#closed) return;
     this.updateHeader();
     this.tui.requestRender();
-    const active = this.promptFrame.active || this.taskPanel.active || this.chat.children.some((c) => (c as Component & { active?: boolean }).active);
+    for (const component of this.#animatedComponents) {
+      if (!("active" in component) || !component.active) this.#animatedComponents.delete(component);
+    }
+    const active = this.promptFrame.active || this.taskPanel.active || this.#animatedComponents.size > 0;
     if (active && this.#animation === undefined) {
       this.#animation = setInterval(() => this.requestRender(), 100);
       this.#animation.unref();
@@ -719,30 +818,24 @@ export class KumoUi {
     }
   }
 
-  addChat(component: Component): void {
-    this.chat.addChild(component);
-    if (component instanceof WorkingComponent) {
-      component.docked = true;
-      this.promptFrame.start();
-      this.#startHeaderSweep();
-    }
-    this.requestRender();
+  /** Components cross independently bundled plugins; use their stable display marker. */
+  private isReasoning(component: Component): component is Component & Pick<ReasoningComponent, "active" | "onActivityChange"> {
+    return "transcriptStyle" in component && component.transcriptStyle === "reasoning";
   }
 
-  #startHeaderSweep(): void {
-    if (this.#headerSweepStarted || this.#turn > 1 || !this.fancyHeader || !terminalMotionAllowed()) return;
-    this.#headerSweepStarted = true;
-    const started = Date.now();
-    this.#headerSweep = setInterval(() => {
-      this.#headerSweepPhase = Math.min(1, (Date.now() - started) / 420);
-      if (this.#headerSweepPhase >= 1) {
-        clearInterval(this.#headerSweep);
-        this.#headerSweep = undefined;
-        this.#headerSweepPhase = 0;
-      }
-      this.requestRender();
-    }, 32);
-    this.#headerSweep.unref?.();
+  addChat(component: Component): void {
+    this.chat.addChild(component);
+    if ("active" in component) this.#animatedComponents.add(component);
+    if (this.isReasoning(component)) {
+      component.onActivityChange = active => {
+        if (active) this.#animatedComponents.add(component);
+        else this.#animatedComponents.delete(component);
+        if (this.activity.active && this.activity.state !== "Waiting for model") this.activity.setState(active ? "Thinking" : "Working");
+        this.requestRender();
+      };
+      if (component.active && this.activity.active && this.activity.state !== "Waiting for model") this.activity.setState("Thinking");
+    }
+    this.requestRender();
   }
 
   /**
@@ -764,6 +857,8 @@ export class KumoUi {
 
   removeChat(component: Component): void {
     this.chat.removeChild(component);
+    if (this.isReasoning(component)) component.onActivityChange = undefined;
+    this.#animatedComponents.delete(component);
     this.requestRender();
   }
 
@@ -859,8 +954,12 @@ export class KumoUi {
   /** Fresh conversation view (T31.2): empty chat, no groups, no ghost/notice. */
   clearChat(): void {
     if (this.#closed) return;
-    this.promptFrame.stop();
+    this.activity.stop();
     this.chat.clear();
+    for (const component of this.#animatedComponents) {
+      if (this.isReasoning(component)) component.onActivityChange = undefined;
+    }
+    this.#animatedComponents.clear();
     this.#collapsedGroups = [];
     this.#toolsCollapsed = true;
     this.editor.clearGhost();
@@ -882,15 +981,10 @@ export class KumoUi {
     this.requestRender();
   }
 
-  /** Show Working immediately on submit (T27b.5), removed on first chunk. */
+  /** Show the waiting state immediately on submit; content advances the activity. */
   showWorking(): void {
     if (this.#closed) return;
-    const has = this.chat.children.some(
-      (c) => (c as { constructor?: { name?: string } }).constructor?.name === "WorkingComponent",
-    );
-    if (has) return;
-    this.addChat(new WorkingComponent(Date.now, this.icons));
-    this.#startHeaderSweep();
+    this.activity.start("Waiting for model");
     this.requestRender();
   }
 
@@ -898,24 +992,19 @@ export class KumoUi {
    * T37: the route changed under us, so the memoized header host is stale.
    * The vision answer is keyed by route and re-probes on its own.
    */
-  resetRouteCache(): void {
-    this.#cachedHost = undefined;
-  }
-
   /**
    * `/reload`: re-read what the terminal and `settings.yaml` say, in place, and
    * redraw. It is deliberately not a code reload: the modules are already loaded,
    * so a change in `src/` still needs a build and a restart. What it does cover is
    * everything kumo memoized at startup and would otherwise show stale for the
-   * whole session: the header's host, the route behind the footer, and the painted
-   * surfaces (the terminal background, re-probed with OSC 11).
+   * whole session: the route behind the status bar, and the painted surfaces (the
+   * terminal background, re-probed with OSC 11).
    *
    * The route is never swapped from here. The agent is bound to the route it
    * started on, and a header that advertised a route the session is not on would
    * be a lie; a moved route is reported instead, with the command that does move.
    */
   async reload(): Promise<ReloadReport> {
-    this.resetRouteCache();
     const report: ReloadReport = { route: "unchanged", live: this.liveRouteLabel(), moved: undefined, background: "kept" };
     try {
       const route = readSettingsRoute();
@@ -945,10 +1034,94 @@ export class KumoUi {
     return routeLabel({ provider: st.provider, model: st.model, name: st.modelName });
   }
 
-  /** Header first line (T27.4, T28b.1): settings route first, kumo.json fallback. */
-  headerFirstLine(includeBrand = true): string {
-    const st = this.footer.state;
-    const model = displayModel(st.model, st.modelName);
+  /**
+   * The banner: a small mark and the version, the way out, then what is loaded.
+   *
+   * The wordmark was drawn here at 24-bit and 256 colors and collapsed to nothing
+   * anywhere else, so the session a user reads was two different screens depending
+   * on what their terminal could do — and the expensive one was the one that moved
+   * under them. One cell of the accent is the mark now, and the big one is the
+   * setup welcome's, which is the only screen where nothing is being read yet.
+   *
+   * The route left the header with them: the status bar's own row already names the
+   * model and its effort, and a first screen that says it twice is a screen with
+   * less room for what it does not say.
+   */
+  headerText(width = this.terminal.columns): string {
+    const ascii = this.icons.think === "*";
+    const sep = ascii ? "-" : "\u00b7";
+    const mark = ascii ? "|" : "\u258c";
+    const rows: string[] = [
+      `${this.#ink("sky")(mark)} ${this.#ink("muted")(`v${this.version}`)}${this.#hostCell(sep)}`,
+      helpLineParts(width, sep)
+        .map(([key, label]) =>
+          label === undefined ? this.#ink("text")(key) : `${this.#ink("text")(key)} ${this.#ink("muted")(label)}`,
+        )
+        .join(this.#ink("faint")(` ${sep} `)),
+    ];
+    const sections: ResourceRow[] = [
+      ...planResourceSection("Skills", this.#resources.skills, width),
+      ...planResourceSection("Plugins", this.#resources.plugins, width),
+    ];
+    if (sections.length === 0) return rows.join("\n");
+    // The blank row is what makes the sections read as a list rather than as more
+    // chrome: the eye needs a gap to change register.
+    rows.push("");
+    for (const row of sections) {
+      const text = row.kind === "title" ? this.#ink("amber")(row.text) : this.#ink(row.kind === "more" ? "faint" : "muted")(row.text);
+      rows.push(row.kind === "title" ? text : `  ${text}`);
+    }
+    return rows.join("\n");
+  }
+
+  /** Paint in a palette role, unless the terminal cannot read colour. */
+  #ink(role: PaletteRole): (s: string) => string {
+    return this.icons.think === "*" ? (s) => s : (s) => paint(role, s);
+  }
+
+  /**
+   * What the session loaded, told once and drawn many times.
+   *
+   * The startup load reads the real sources (the skills manifest kumo wrote, the
+   * plugin entry points of the package that is running); a caller that knows better
+   * — a plugin mounting something extra — replaces the list it owns.
+   */
+  setResources(next: SessionResources): void {
+    if (next.skills !== undefined) this.#resources.skills = [...next.skills];
+    if (next.plugins !== undefined) this.#resources.plugins = [...next.plugins];
+    this.requestRender();
+  }
+
+  /**
+   * The banner's list, read once at startup and never during a render.
+   *
+   * A render happens on every keystroke; reading a manifest there is how a header
+   * becomes the slowest thing in the app. Both sources are best effort: a profile
+   * with no skills, or a package that cannot be read, simply has no section.
+   */
+  async #loadResources(): Promise<void> {
+    const plugins = readKumoPlugins();
+    let skills: string[] = [];
+    try {
+      const home = process.env.DSH_HOME ?? join(homedir(), ".kumo");
+      skills = (await readInstalledSkills(join(home, "skills"))).map((entry) => entry.name);
+    } catch {
+      skills = [];
+    }
+    if (plugins.length === 0 && skills.length === 0) return;
+    this.#resources = { plugins, skills };
+    this.requestRender();
+  }
+
+  updateHeader(): void {
+    if (this.#closed) return;
+    this.header.setText(this.headerText());
+  }
+
+  /** The host or provider of the live route, read once: the header is repainted often. */
+  #cachedHost: string | undefined;
+
+  #host(): string {
     if (this.#cachedHost === undefined) {
       let host: string | undefined;
       try {
@@ -961,39 +1134,21 @@ export class KumoUi {
       } catch {
         host = undefined;
       }
-      this.#cachedHost = host ?? headerHost(readKumoJsonForHeader(), st.provider);
+      this.#cachedHost = host ?? headerHost(readKumoJsonForHeader(), this.footer.state.provider);
     }
-    const host = this.#cachedHost ?? "?";
-    const sep = this.icons.think === "*" ? "-" : "·";
-    const details = `${ansi.text(model)}  ${ansi.faint(sep)}  ${ansi.gray(host)}  ${ansi.faint(`v${this.version}`)}`;
-    return includeBrand ? `${ansi.bold("kumo")}  ${ansi.faint(sep)}  ${details}` : details;
+    return this.#cachedHost;
   }
 
-  /** The big gradient wordmark is for color terminals; basic/ASCII keep one line. */
-  get fancyHeader(): boolean {
-    const d = colorDepth();
-    return this.icons.think !== "*" && (d === "truecolor" || d === "256");
+  /** `  ·  127.0.0.1`: where the model is served, so the first screen says which server answers. */
+  #hostCell(sep: string): string {
+    const host = this.#host();
+    return host === "" || host === "?" ? "" : `  ${this.#ink("faint")(sep)}  ${this.#ink("muted")(host)}`;
   }
 
-  headerText(): string {
-    // The line that says how to quit has to be readable, not decorative. It used
-    // to be `faint` on a color terminal while the plain terminal got `muted`, so
-    // the words a first-time user needs were the hardest ones to read.
-    const help = ansi.gray("escape interrupt · ctrl+c clear · ctrl+d exit · / commands");
-    if (!this.fancyHeader) return `${this.headerFirstLine()}\n${help}`;
-    const mark = wordmarkFrame(1);
-    return [
-      "",
-      ` ${gradientStops(mark[0]!, [...LOGO_STOPS], this.#headerSweepPhase)}`,
-      ` ${gradientStops(mark[1]!, [...LOGO_STOPS], this.#headerSweepPhase)}   ${this.headerFirstLine(false)}`,
-      "",
-      ` ${help}`,
-    ].join("\n");
-  }
-
-  updateHeader(): void {
-    if (this.#closed) return;
-    this.header.setText(this.headerText());
+  /** T37: the route changed under us, so the memoized header host is stale. */
+  resetRouteCache(): void {
+    this.#cachedHost = undefined;
+    this.updateHeader();
   }
 
   get toolsCollapsed(): boolean {
@@ -1028,20 +1183,24 @@ export class KumoUi {
   }
 
   /** Turn end from render (T27.2+3): collapse groups + summary line. */
-  /**
-   * Paint a receipt segment (T55). The numbers get `muted`, which is 5.10:1 on the
-   * surface; the labels and separators get `faint` at 3.20:1; the mark is the one
-   * accent. The line used to be a single raw `dim`, which is not a palette role
-   * at all, so the only record of what a turn cost was the least legible ink in
-   * the transcript.
+   /**
+   * Paint a receipt segment. The numbers are `text` (12.14:1 on the surface), the
+   * words that name them `muted` (5.10:1), the separators `faint` (3.20:1), and the
+   * mark is the one accent.
+   *
+   * The line is the most important text a turn prints, and it is mostly separators
+   * and unit words: painting those as low as possible left the whole receipt reading
+   * as the palest thing on screen, with the numbers one step above it. It used to be
+   * worse, a single raw `dim`, which is not a palette role at all.
    */
   #paintReceipt(segments: ReceiptSegment[]): string {
     return segments
       .map((s) => {
-        if (s.role === "value") return ansi.gray(s.text);
+        if (s.role === "value") return ansi.text(s.text);
+        if (s.role === "sep") return ansi.faint(s.text);
         if (s.role === "ok") return ansi.green(s.text);
         if (s.role === "fail") return ansi.red(s.text);
-        return ansi.faint(s.text);
+        return ansi.gray(s.text);
       })
       .join("");
   }
@@ -1068,7 +1227,7 @@ export class KumoUi {
     error: boolean;
   }): void {
     if (this.#closed) return;
-    this.promptFrame.stop();
+    this.activity.stop();
     const ascii = this.icons.think === "*";
     if (info.cancelled) {
       this.addChat(new Text(this.#paintReceipt(turnReceipt({
@@ -1238,7 +1397,7 @@ export class KumoUi {
       const finish = (ok: boolean) => {
         this.#setConfirming(false);
         this.clearNoticeBox();
-        this.tui.setFocus(this.editor);
+        this.tui.setFocus(this.promptFrame);
         this.requestRender();
         resolve(ok);
       };
@@ -1271,7 +1430,7 @@ export class KumoUi {
       const finish = (index: number) => {
         this.#setConfirming(false);
         this.clearNoticeBox();
-        this.tui.setFocus(this.editor);
+        this.tui.setFocus(this.promptFrame);
         this.requestRender();
         resolve(index);
       };
@@ -1280,6 +1439,15 @@ export class KumoUi {
       this.tui.setFocus(list);
       this.requestRender();
     });
+  }
+
+  /** The question call in the chat that the next form answers; one is open at a time. */
+  #questionCall: QuestionCallComponent | undefined;
+
+  /** Draw the model's question call and remember it: the form's answers settle it. */
+  addQuestionCall(call: QuestionCallComponent): void {
+    this.#questionCall = call;
+    this.addChat(call);
   }
 
   /**
@@ -1298,14 +1466,25 @@ export class KumoUi {
     if (this.#closed) return Promise.resolve(undefined);
     this.clearNoticeBox();
     this.#setConfirming(true);
-    const form = new QuestionForm(questions, this.icons);
+    const form = new QuestionForm(questions, this.icons, this.version);
     this.noticeBox.addChild(form);
     this.requestRender();
     return new Promise((resolve) => {
       const finish = (answers: Array<{ id: string; selected: string[]; custom?: string }> | undefined) => {
         this.#setConfirming(false);
         this.clearNoticeBox();
-        this.tui.setFocus(this.editor);
+        this.tui.setFocus(this.promptFrame);
+        const resolved = answers ?? questions.map((q) => ({ id: q.id, selected: [], custom: "skipped by the user" }));
+        if (this.#questionCall !== undefined) this.#questionCall.answer(resolved);
+        else {
+          // No call was drawn for these questions (an agent whose stream this UI is
+          // not showing): the record of what was asked and chosen is one line each.
+          for (const a of resolved) {
+            const q = questions.find((qq) => qq.id === a.id);
+            if (q !== undefined) this.addChat(new Text(ansi.dim(echoLine(q.question, a.selected[0] ?? a.custom ?? "skipped")), 1, 0));
+          }
+        }
+        this.#questionCall = undefined;
         this.requestRender();
         // Whatever arrived while the form was up is shown now, not swallowed.
         const pending = this.#pendingNotice;
@@ -1327,8 +1506,6 @@ export class KumoUi {
     this.#closed = true;
     clearInterval(this.#animation);
     this.#animation = undefined;
-    if (this.#headerSweep !== undefined) clearInterval(this.#headerSweep);
-    this.#headerSweep = undefined;
     // T56: give the mouse back, whatever was in flight.
     this.mouse.stop();
     if (this.#noticeTimer !== undefined) {

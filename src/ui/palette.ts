@@ -65,15 +65,23 @@ export const NUAGE = {
   railErrorEnd: { hex: "#c04a5e", basic: 31 },
   edge: { hex: "#4aa8e0", basic: 34 },
   onSky: { hex: "#0c2b3d", basic: 30 },
-  // Diff backgrounds: a quiet green and red band behind added and removed lines.
-  addBg: { hex: "#16301f", basic: 40 },
+  // The two diff bands, on a NEUTRAL block: an added line and a removed line are
+  // the same kind of fact, so they get the same weight. The green is as strong as
+  // the red (it used to be so quiet it vanished into a green card).
+  addBg: { hex: "#17361f", basic: 40 },
   delBg: { hex: "#3a1820", basic: 40 },
   addFg: { hex: "#b8f0c6", basic: 32 },
   delFg: { hex: "#ffb3c0", basic: 31 },
 } satisfies Record<string, Swatch>;
 
-/** The roles setTerminalBackdrop is allowed to override. */
-const PROBED_ROLES = ["surface", "chip", "edge", "userBlock", "toolOk", "toolPending", "toolErr"] as const;
+/**
+ * The roles setTerminalBackdrop is allowed to override.
+ *
+ * The two diff bands are in it because they are the loudest surfaces in a
+ * transcript: a band that was tuned for a dark terminal and is painted on a light
+ * one turns into a bruise.
+ */
+const PROBED_ROLES = ["surface", "chip", "edge", "userBlock", "toolOk", "toolPending", "toolErr", "addBg", "delBg"] as const;
 type ProbedRole = (typeof PROBED_ROLES)[number];
 
 export type PaletteRole = keyof typeof NUAGE;
@@ -137,6 +145,37 @@ export function blendHex(from: string, to: string, t: number): string {
 /** What a background role resolves to once the terminal has been asked. */
 export type Backdrop = Record<ProbedRole, string>;
 
+/** Where a probed role is pulled from the terminal's background, and how far (0..1). */
+type Tint = readonly [target: [number, number, number], strength: number];
+
+/** A cool veil just above a dark background; the transcript blocks keep their authored hue. */
+const DARK_TINTS: Record<ProbedRole, Tint> = {
+  surface: [[43, 52, 82], 0.62],
+  chip: [[58, 68, 102], 0.62],
+  edge: [[74, 168, 224], 0.9],
+  userBlock: [[24, 52, 70], 0.9],
+  toolOk: [[24, 54, 36], 0.9],
+  toolPending: [[48, 52, 64], 0.9],
+  toolErr: [[74, 28, 38], 0.9],
+  // Mirrored: same strength, opposite hue, so a diff reads as two halves of one
+  // statement rather than as a deletion with an addition behind it.
+  addBg: [[30, 78, 46], 0.9],
+  delBg: [[74, 28, 38], 0.9],
+};
+
+/** A pale panel just below a light background; the blocks are a light wash of their hue. */
+const LIGHT_TINTS: Record<ProbedRole, Tint> = {
+  surface: [[214, 221, 238], 0.78],
+  chip: [[255, 255, 255], 0.45],
+  edge: [[40, 104, 160], 0.85],
+  userBlock: [[120, 190, 230], 0.26],
+  toolOk: [[110, 200, 140], 0.26],
+  toolPending: [[150, 155, 175], 0.24],
+  toolErr: [[235, 110, 130], 0.24],
+  addBg: [[110, 200, 140], 0.24],
+  delBg: [[235, 110, 130], 0.24],
+};
+
 /**
  * The surfaces to paint over a terminal whose background is `bg`. On a dark
  * terminal they are a cool veil just above the background; on a light one they
@@ -145,29 +184,17 @@ export type Backdrop = Record<ProbedRole, string>;
  */
 export function deriveBackdrop(bg: { r: number; g: number; b: number }): Backdrop {
   const base: [number, number, number] = [bg.r, bg.g, bg.b];
-  if (brightness(toHex(base)) > 0.5) {
-    const surface = toHex(mix(base, [214, 221, 238], 0.78));
-    return {
-      surface,
-      chip: toHex(mix(rgb(surface), [255, 255, 255], 0.45)),
-      edge: toHex(mix(base, [40, 104, 160], 0.85)),
-      userBlock: toHex(mix(base, [120, 190, 230], 0.26)),
-      toolOk: toHex(mix(base, [110, 200, 140], 0.26)),
-      toolPending: toHex(mix(base, [150, 155, 175], 0.24)),
-      toolErr: toHex(mix(base, [235, 110, 130], 0.24)),
-    };
+  const light = brightness(toHex(base)) > 0.5;
+  const tints = light ? LIGHT_TINTS : DARK_TINTS;
+  const out = {} as Backdrop;
+  for (const role of PROBED_ROLES) {
+    const [target, strength] = tints[role];
+    // On a light terminal the chip is a brighter panel laid over the surface, not
+    // over the background; `surface` is derived first, so it is already in `out`.
+    const under = light && role === "chip" ? rgb(out.surface) : base;
+    out[role] = toHex(mix(under, target, strength));
   }
-  return {
-    surface: toHex(mix(base, [43, 52, 82], 0.62)),
-    chip: toHex(mix(base, [58, 68, 102], 0.62)),
-    edge: toHex(mix(base, [74, 168, 224], 0.9)),
-    // The transcript blocks: the same tints as the authored values, laid over the
-    // real background so they stay a veil on a terminal that is not pure black.
-    userBlock: toHex(mix(base, [24, 52, 70], 0.9)),
-    toolOk: toHex(mix(base, [24, 54, 36], 0.9)),
-    toolPending: toHex(mix(base, [48, 52, 64], 0.9)),
-    toolErr: toHex(mix(base, [74, 28, 38], 0.9)),
-  };
+  return out;
 }
 
 /** Backgrounds probed from the terminal; empty until a reply lands. */

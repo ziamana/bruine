@@ -15,12 +15,11 @@ import {
   setTerminalBackdrop,
   to256,
 } from "../src/ui/palette.js";
-import { ChatTranscript, ConsoleBand, pasteChip, railPaint } from "../src/ui/chat-layout.js";
+import { ChatTranscript, Margin, pasteChip, railPaint } from "../src/ui/chat-layout.js";
 import { userMessageComponent } from "../src/ui/assistant-text.js";
 import { kumoIcons } from "../src/render/chars.js";
-import { DashboardPanel, DockRow, meter, SpeedHistory, sparkline } from "../src/ui/dock.js";
 import { NUAGE } from "../src/ui/palette.js";
-import type { Component } from "@earendil-works/pi-tui";
+import { Container, type Component } from "@earendil-works/pi-tui";
 
 describe("Nuage palette", () => {
   afterEach(() => {
@@ -93,6 +92,25 @@ describe("painted surfaces (T40)", () => {
       expect(s.surface).toMatch(/^#[0-9a-f]{6}$/);
       expect(s.edge).toMatch(/^#[0-9a-f]{6}$/);
     }
+  });
+
+  test("the two diff bands are probed too: they are the loudest surfaces in a block", () => {
+    // A band tuned for a dark terminal and painted on a light one reads as a bruise,
+    // and a diff is where the eye goes after a turn changed something.
+    const dark = deriveBackdrop({ r: 0, g: 0, b: 0 });
+    const light = deriveBackdrop({ r: 255, g: 255, b: 255 });
+    for (const role of ["addBg", "delBg"] as const) {
+      expect(dark[role]).toMatch(/^#[0-9a-f]{6}$/);
+      expect(light[role]).toMatch(/^#[0-9a-f]{6}$/);
+      expect(light[role]).not.toBe(dark[role]);
+      // And each one keeps its own hue: the two bands are never the same colour.
+      expect(light[role]).not.toBe(light[role === "addBg" ? "delBg" : "addBg"]);
+    }
+    // On a light terminal both are a pale wash of their own hue, the way every other
+    // painted surface is: they sit just below the terminal's own white, not above it.
+    expect(contrastRatio("#ffffff", light.addBg)).toBeLessThan(1.3);
+    expect(contrastRatio("#ffffff", light.delBg)).toBeLessThan(1.3);
+    expect(contrastRatio("#ffffff", dark.addBg)).toBeGreaterThan(1.3);
   });
 
   test("the probe overrides the authored surfaces, and reset puts them back", () => {
@@ -180,7 +198,7 @@ describe("painted surfaces (T40)", () => {
   });
 });
 
-describe("console band (T40)", () => {
+describe("the bottom zone keeps its margin and the terminal's background (T40)", () => {
   const zone = (lines: string[]): Component => ({
     render: () => lines,
     invalidate: () => {},
@@ -190,41 +208,29 @@ describe("console band (T40)", () => {
     render: (w: number) => [`L${String(w)}`],
     invalidate: () => {},
   };
+  /** The bottom zone as the shell builds it: its zones behind one margin. */
+  const bottom = (...zones: Component[]): string[] => {
+    const inner = new Container();
+    for (const z of zones) inner.addChild(z);
+    return new Margin(inner).render(40);
+  };
   afterEach(() => {
     process.env.KUMO_COLOR = "basic";
     delete process.env.KUMO_BG;
     resetColorDepth();
   });
 
-  test("keeps the 2-column margin it had under Margin, so nothing reflows", () => {
-    const plain = new ConsoleBand([echo]).render(40)[0]!.replace(/\x1b\[[0-9;]*m/g, "");
-    // Margin also handed its inner component width - 4 and prefixed 2 columns;
-    // the accent spends the first of those two, so the body still starts at 2.
-    expect(plain).toBe("  L36");
-  });
-
-  test("the band keeps the terminal's own background: no accent, no painted slab", () => {
+  test("2 columns of margin on both sides, and never a painted background", () => {
     process.env.KUMO_COLOR = "truecolor";
     resetColorDepth();
-    const line = new ConsoleBand([zone(["ab"])]).render(40)[0]!;
-    // Pi-style bottom area: the editor is framed by its rules and the status bar is
-    // plain text, so even on a truecolor terminal nothing here sets a background.
-    expect(line).toBe("  ab");
-    expect(line).not.toContain("\x1b[48");
-  });
-
-  test("without a paintable background the band is the margin it replaced", () => {
-    // No surface, no accent: 16 colors must render exactly what Margin did.
-    expect(new ConsoleBand([zone(["ab"])]).render(40)[0]).toBe("  ab");
-  });
-
-  test("KUMO_BG=0 keeps the layout and drops every background", () => {
-    process.env.KUMO_COLOR = "truecolor";
-    process.env.KUMO_BG = "0";
-    resetColorDepth();
-    const line = new ConsoleBand([zone(["ab"])]).render(40)[0]!;
-    expect(line).toBe("  ab");
-    expect(line).not.toContain("\x1b[48;");
+    // Margin hands its inner component width - 4 and prefixes 2 columns, so the
+    // zones keep the body exactly where it was.
+    expect(bottom(echo)[0]).toBe("  L36");
+    const lines = bottom(zone(["ab"]), zone(["cd"]));
+    expect(lines).toEqual(["  ab", "  cd"]);
+    // The editor is framed by its two rules and the status bar is plain text, so
+    // even on a truecolor terminal nothing in the bottom zone sets a background.
+    expect(lines.join("")).not.toContain("\x1b[48");
   });
 });
 
@@ -262,94 +268,6 @@ describe("painted transcript (T40)", () => {
   });
 });
 
-describe("cockpit dock", () => {
-  test("sparkline and meter", () => {
-    // T55 P4: floor, not round. With round the bottom rung was unreachable, so a
-    // tenth of the peak still read as "▂" and nothing ever looked slow.
-    expect(sparkline([1, 2, 4, 8], 10)).toBe("▁▂▄█");
-    expect(sparkline([], 10)).toBe("");
-    expect(meter(97)).toEqual({ filled: "██████████", empty: "" });
-    expect(meter(5)).toEqual({ filled: "█", empty: "░░░░░░░░░" });
-  });
-  test("the sparkline is scaled against a sticky peak, not against its own window (T55 P4)", () => {
-    // The defect: sparkline divided by the max of the window it was handed, so a
-    // steady 5 tok/s filled the whole graph and looked identical to a steady 50.
-    // The cockpit said "everything is fine" for a model that had slowed 10x.
-    expect(sparkline([5, 5, 5, 5], 4, 50)).toBe("▁▁▁▁");
-    expect(sparkline([50, 5, 5, 5], 4, 50)).toBe("█▁▁▁");
-    // With no reference at all the series scales to itself. That is the honest
-    // answer when nothing has been seen yet, and it is why the peak is sticky:
-    // the graph corrects itself the first time anything faster arrives.
-    expect(sparkline([5, 5, 5, 5], 4)).toBe("████");
-    expect(sparkline([1, 2, 4, 8], 10)).toBe("▁▂▄█");
-
-    // A moving clock, or the 250 ms throttle folds both pushes into one sample.
-    let t = 0;
-    const h = new SpeedHistory(() => (t += 300), 8);
-    h.push(50);
-    h.push(5);
-    expect(h.peak).toBe(50);
-    // 50 then 5: the drop is the whole point, and it is visible.
-    expect(sparkline(h.values, 2, h.peak)).toBe("█▁");
-    // A burst inside one throttle window still raises the peak, or a single fast
-    // sample would be lost from the scale entirely.
-    const fast = new SpeedHistory(() => 7, 8);
-    fast.push(5);
-    fast.push(50);
-    expect(fast.peak).toBe(50);
-  });
-
-  test("the cockpit marks the context like the footer does (T55)", () => {
-    const speed = new SpeedHistory(() => 0, 8);
-    const panel = new DashboardPanel(
-      () => ({ contextUsed: 259_000, contextWindow: 1_036_000 }),
-      speed,
-      () => ({ done: 0, total: 0 }),
-    );
-    const row = panel.render(40).join("\n");
-    // The meter says how full; the number says what it costs. Same marking as the
-    // footer, so the two never tell different stories.
-    expect(row).toContain("259.0K (25%)");
-  });
-
-  test("the cockpit prints the number next to the graph, so a full graph cannot lie (T55 P4)", () => {
-    // A moving clock: SpeedHistory keeps one sample per 250 ms, so a frozen clock
-    // would collapse four pushes into one cell.
-    let t = 0;
-    const speed = new SpeedHistory(() => (t += 300), 8);
-    for (const v of [5, 5, 5, 5]) speed.push(v);
-    const panel = new DashboardPanel(
-      () => ({ tps: 5, cachePct: 10, contextUsed: 1, contextWindow: 100 }),
-      speed,
-      () => ({ done: 0, total: 0 }),
-    );
-    const row = panel.render(40).join("\n");
-    // The graph is full (nothing faster has been seen) but the exact value is
-    // right there, which is the real guard against a self-scaled graph lying.
-    expect(row).toContain("████");
-    expect(row).toContain("5 tok/s");
-  });
-
-  test("speed history throttles to one sample per 250 ms and caps", () => {
-    let t = 0;
-    const h = new SpeedHistory(() => t, 3);
-    h.push(10); t = 100; h.push(20); t = 300; h.push(30); t = 600; h.push(40); t = 900; h.push(50);
-    expect(h.values).toEqual([30, 40, 50]);
-    h.push(0);
-    expect(h.values).toEqual([30, 40, 50]);
-  });
-  test("dock only below the threshold width shows the editor alone", () => {
-    const left = { render: (w: number) => [`L${String(w)}`], invalidate() {} };
-    const panel = { render: () => ["P1", "P2"], invalidate() {} };
-    const d = new DockRow(left, panel);
-    expect(d.render(100)).toEqual(["L100"]);
-    const wide = d.render(130).map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""));
-    expect(wide).toHaveLength(2);
-    expect(wide[0]).toMatch(/^L93 +│ P1$/);
-    d.visible = false;
-    expect(d.render(130)).toEqual(["L130"]);
-  });
-});
 
 describe("prompt band keeps its columns (T40)", () => {
   afterEach(() => {

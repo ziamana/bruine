@@ -1,36 +1,49 @@
 import { visibleWidth, type Component } from "@earendil-works/pi-tui";
+import { formatElapsed } from "../render/elapsed.js";
 import { clipCells, spinnerFrame } from "../render/reasoning.js";
-import { kumoIcons, type KumoIcons } from "../render/chars.js";
+import { kumoIcons, isAscii, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 import { terminalMotionAllowed } from "./logo-motion.js";
 
-export type WorkingState = "Working" | "Waiting for model" | "Thinking";
+import { TurnActivity, type WorkingState } from "./turn-activity.js";
+export type { WorkingState } from "./turn-activity.js";
 
-/** One activity row, shared by the prefill marker and the pinned composer. */
+/** Paint the pinned activity row from the turn's shared clock. */
 export class WorkingComponent implements Component {
-  #startTime: number;
   #animate: boolean;
-  /** The composer paints this marker; keep it in chat for the stream lifecycle. */
-  docked = false;
-  state: WorkingState = "Waiting for model";
+  private activity: TurnActivity;
   constructor(
-    private now: () => number = Date.now,
+    now: () => number = Date.now,
     private icons: KumoIcons = kumoIcons(),
+    activity?: TurnActivity,
   ) {
-    this.#startTime = now();
-    this.#animate = terminalMotionAllowed({ ascii: icons.think === "*" });
+    this.activity = activity ?? new TurnActivity(now);
+    if (!activity) this.activity.start();
+    // ASCII suppresses decorative logo motion, but its activity spinner still ticks.
+    this.#animate = terminalMotionAllowed({ env: { ...process.env, KUMO_ASCII: "0" } });
   }
+  get state(): WorkingState { return this.activity.state; }
+  set state(state: WorkingState) { this.activity.setState(state); }
   get active(): boolean { return this.#animate; }
+  private status(): { label: string; elapsed: string } {
+    const elapsed = this.activity.elapsed;
+    const frame = this.#animate ? spinnerFrame(elapsed, this.icons) : isAscii(this.icons) ? "|" : "⋮";
+    return { label: `${frame} ${this.state}`, elapsed: formatElapsed(elapsed) };
+  }
+  /** Compact label for the composer rule; time has its own muted color. */
+  label(): string {
+    const status = this.status();
+    return `${ansi.violet(status.label)} ${ansi.gray(status.elapsed)}`;
+  }
   line(width: number): string {
-    const elapsed = Math.max(0, this.now() - this.#startTime);
-    const ascii = this.icons.think === "*";
-    const frame = this.#animate ? spinnerFrame(elapsed, this.icons) : ascii ? "|" : "⋮";
-    const label = `${frame} ${this.state} ${Math.floor(elapsed / 1000)}s`;
+    const status = this.status();
+    const ascii = isAscii(this.icons);
+    const label = `${status.label} ${status.elapsed}`;
     const hint = "Esc to interrupt";
     const gap = width - visibleWidth(label) - hint.length;
     if (gap >= 3) return `${ansi.violet(label)}${" ".repeat(gap)}${ansi.gray(hint)}`;
     return ansi.violet(clipCells(label, width, ascii ? "..." : "…"));
   }
-  render(width: number): string[] { return this.docked ? [] : [this.line(width)]; }
+  render(width: number): string[] { return [this.line(width)]; }
   invalidate(): void {}
 }

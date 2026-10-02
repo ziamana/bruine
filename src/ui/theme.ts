@@ -1,5 +1,6 @@
 import type { EditorTheme, MarkdownTheme, SelectListTheme } from "@earendil-works/pi-tui";
 
+import { isAscii, kumoIcons, type KumoIcons } from "../render/chars.js";
 import { bgEnabled, onBg, paint } from "./palette.js";
 import { highlightCode } from "./highlight.js";
 
@@ -48,26 +49,33 @@ export const editorTheme: EditorTheme = {
   selectList: selectListTheme,
 };
 
-export const markdownTheme: MarkdownTheme = {
-  heading: (s) => ansi.bold(ansi.cyan(s)),
-  link: (s) => ansi.cyan(s),
-  linkUrl: (s) => ansi.gray(s),
-  code: (s) => ansi.yellow(s),
-  codeBlock: (s) => s,
-  // Fences are not shown as "```": the opening one becomes the language label, the
-  // closing one a blank line. Code lines sit behind a faint bar, highlighted.
-  codeBlockBorder: (s) => {
-    const lang = s.replace(/^```/, "").trim();
-    return lang === "" ? "" : ansi.faint(lang);
-  },
-  codeBlockIndent: ansi.faint("▏") + " ",
-  highlightCode,
-  quote: (s) => ansi.gray(s),
-  quoteBorder: (s) => ansi.gray(s),
-  hr: (s) => ansi.gray(s),
-  listBullet: (s) => ansi.violet(s),
-  bold: (s) => ansi.bold(ansi.text(s)),
-  italic: (s) => ansi.italic(s),
-  strikethrough: (s) => ansi.gray(s),
-  underline: (s) => ansi.cyan(s),
+export const markdownThemeFor = (icons: KumoIcons = kumoIcons()): MarkdownTheme => {
+  // One gutter for every code block, on every line of it: the language label
+  // when the fence carries one, and the same bare rule when it does not, so a
+  // block without a language is not a block of another kind.
+  const rule = isAscii(icons) ? "|" : "\u258f";
+  const gutter = `${ansi.faint(rule)} `;
+  return {
+    // skyDeep, and not the sky the links wear: a title and a link are different
+    // jobs, and one accent at a time is what keeps a screen readable.
+    heading: (s) => ansi.bold(ansi.blue(s)),
+    link: (s) => ansi.cyan(s),
+    linkUrl: (s) => ansi.gray(s),
+    code: (s) => ansi.yellow(s),
+    codeBlock: (s) => s,
+    codeBlockBorder: (s) => {
+      const lang = s.replace(/^```/, "").trim();
+      return lang === "" ? gutter : `${gutter}${ansi.faint(lang)}`;
+    },
+    codeBlockIndent: gutter,
+    highlightCode,
+    quote: (s) => ansi.gray(s),
+    quoteBorder: (s) => ansi.gray(s),
+    hr: (s) => ansi.gray(s),
+    listBullet: (s) => ansi.violet(s),
+    bold: (s) => ansi.bold(ansi.text(s)),
+    italic: (s) => ansi.italic(s),
+    strikethrough: (s) => ansi.gray(s),
+    underline: (s) => ansi.cyan(s),
+  };
 };

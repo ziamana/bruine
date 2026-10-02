@@ -81,7 +81,14 @@ export class ChatTranscript extends Container {
       // and 2 more to the right margin, so a line that ends in a measurement
       // (the duration, the diff counter) has 2 cells of gray after it instead of
       // finishing on the card border.
-      const role = rail === "active" ? "toolPending" : rail === "red" ? "toolErr" : "toolOk";
+      // A call that shows a diff gets the neutral block: the two bands inside it are
+      // the only colour that should mean anything here (see ToolCallComponent.diffCard).
+      const role =
+        rail === "active" || (child as { diffCard?: boolean }).diffCard === true
+          ? "toolPending"
+          : rail === "red"
+            ? "toolErr"
+            : "toolOk";
       const showRail = !bgEnabled();
       const block = child.render(rail === undefined ? inner : Math.max(1, width - 8));
       if (!block.length) continue;
@@ -146,6 +153,14 @@ export class ChatTranscript extends Container {
  * width, so a long suggestion spilled over the line below it.
  */
 export class PlainGlyphEditor extends Editor {
+  #bottomBorder = "";
+  #frameBottomRow = 0;
+  /** Boundary between editable rows and autocomplete, from the last render. */
+  get frameBottomRow(): number { return this.#frameBottomRow; }
+  protected override renderBottomBorder(width: number, hiddenLineCount: number): string {
+    this.#bottomBorder = super.renderBottomBorder(width, hiddenLineCount);
+    return this.#bottomBorder;
+  }
   #ghost = "";
   setGhost(text: string): void {
     this.#ghost = text;
@@ -157,7 +172,9 @@ export class PlainGlyphEditor extends Editor {
     return this.#ghost;
   }
   render(width: number): string[] {
-    const lines = super.render(width).map((line) => chipMarkers(withoutEmoji(line)));
+    const rendered = super.render(width);
+    this.#frameBottomRow = rendered.indexOf(this.#bottomBorder, 1);
+    const lines = rendered.map((line) => chipMarkers(withoutEmoji(line)));
     if (this.#ghost === "" || this.getText().trim() !== "") return lines;
     return this.#withGhost(lines, width);
   }
@@ -198,43 +215,6 @@ export class Margin extends Container {
   }
   override invalidate(): void {
     this.inner.invalidate();
-  }
-}
-
-/**
- * The console band: the whole interactive bottom zone (editor, cockpit, footer)
- * on one painted surface, edge to edge, opening on a 1-column sky accent that
- * echoes the tool rail above it.
- *
- * Painting only this zone, and never the transcript, is what makes a background
- * safe here. kumo renders on the main screen, so the scrollback belongs to the
- * terminal and keeps its own background: a band that starts where the app
- * starts and ends at the bottom of the live area can never show a seam, while a
- * full-bleed fill would leave a hard horizontal line the moment you scroll up.
- *
- * The content keeps the 2-column margin it had under `Margin` (the accent takes
- * the first of those two columns, so nothing reflows); only the surface runs to
- * the right edge.
- */
-export class ConsoleBand extends Container {
-  constructor(private zones: Component[]) {
-    super();
-  }
-  override render(width: number): string[] {
-    const inner = Math.max(1, width - MARGIN * 2);
-    const lines: string[] = [];
-    for (const zone of this.zones) {
-      for (const raw of zone.render(inner)) {
-        // The bottom area keeps the terminal's own background: the editor is framed
-        // by its two rules and the status bar is plain text under it, so nothing
-        // here is a painted slab. Same 2-column margin as before.
-        lines.push(`${" ".repeat(MARGIN)}${truncateToWidth(raw, inner)}`);
-      }
-    }
-    return lines;
-  }
-  override invalidate(): void {
-    for (const zone of this.zones) zone.invalidate();
   }
 }
 

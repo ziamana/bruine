@@ -16,9 +16,8 @@ import { strip } from "./fakes.js";
 
 const HOME = "/home/tu44";
 /** A working directory the test owns, so no assertion depends on where it runs. */
-const at = (over: Parameters<FooterComponent["set"]>[0] = {}, compact = false): FooterComponent => {
+const at = (over: Parameters<FooterComponent["set"]>[0] = {}): FooterComponent => {
   const f = new FooterComponent(UNICODE_ICONS, { cwd: `${HOME}/Bureau`, home: HOME });
-  f.compact = () => compact;
   f.set(over);
   return f;
 };
@@ -43,7 +42,7 @@ describe("the three rows (D3)", () => {
     });
     expect(rows(f, 100)).toEqual([
       expect.stringContaining("~/Bureau  ⎇ main"),
-      expect.stringContaining("↑17k ↓749 R34k CH99.9% 12%/131k"),
+      expect.stringContaining("↑17k ↓749  ·  cached 34k · hit 99.9%  ·  ctx 12% of 131k"),
       expect.stringContaining("↯ TPS: 78.0 tok/s"),
     ]);
     // The row the eye lands on: the route at the right edge, the metrics at the margin.
@@ -51,6 +50,36 @@ describe("the three rows (D3)", () => {
     expect(turn.trimEnd().endsWith("(local) Ornith-1.5-9B-Q4_K_M • high")).toBe(true);
     expect(turn.indexOf("↑17k")).toBe(0);
     expect(turn.indexOf("(local)")).toBeGreaterThan(turn.indexOf("131k"));
+  });
+
+  test("the words name what the number is, and the letters come back when the row is narrow", () => {
+    // The same four facts, written two ways. The long form is what a reader who
+    // has not seen the bar for a month needs; the short form is the letters one
+    // who has read it for an hour knows, and it is the one a narrow row keeps.
+    const f = at({
+      inputTokens: 17_000,
+      outputTokens: 749,
+      cacheRead: 34_000,
+      cachePct: 99.9,
+      contextUsed: 15_800,
+      contextWindow: 131_072,
+      model: "m",
+    });
+    expect(rows(f, 100)[1]).toContain("cached 34k · hit 99.9%");
+    expect(rows(f, 100)[1]).toContain("ctx 12% of 131k");
+    const narrow = rows(f, 60)[1]!;
+    expect(narrow).toContain("↑17k ↓749 R34k CH99.9% 12%/131k");
+    expect(narrow).not.toContain("cached");
+    expect(narrow).not.toContain("ctx");
+  });
+
+  test("a reading is grouped by a discreet dot, and the dot is structure, not text", () => {
+    const turn = at({ inputTokens: 1, outputTokens: 2, cacheRead: 3, cachePct: 99, contextUsed: 4, contextWindow: 100, model: "m" })
+      .render(100)[1]!;
+    // Faint is the structure role (palette.ts); a separator in the text role
+    // would read as a reading.
+    expect(turn).toContain("\x1b[90m\u00b7\x1b[39m");
+    expect(strip(turn)).toContain("↑1 ↓2  ·  cached 3 · hit 99.0%  ·  ctx 4.0% of 100");
   });
 
   test("the first row ends on the badge, and the badge is the mode the session is in", () => {
@@ -86,7 +115,7 @@ describe("the three rows (D3)", () => {
     expect(line).not.toMatch(/NaN|Infinity/);
     // Known window, unknown fill: the honest `0%` rather than a blank that reads
     // like a missing metric.
-    expect(rows(at({ model: "m", contextWindow: 100_000 }), 100)[1]).toContain("0%/100k");
+    expect(rows(at({ model: "m", contextWindow: 100_000 }), 100)[1]).toContain("ctx 0% of 100k");
   });
 });
 
@@ -201,7 +230,7 @@ describe("widths, ASCII and no colour (D3)", () => {
     const lines = a.render(100);
     expect(lines.join("")).not.toMatch(/\x1b\[/);
     expect(lines[0]).toContain("~/Bureau  # main");
-    expect(lines[1]).toContain("^17k v749 R34k CH99.9% 12%/131k");
+    expect(lines[1]).toContain("^17k v749  -  cached 34k - hit 99.9%  -  ctx 12% of 131k");
     expect(lines[1].trimEnd().endsWith("(local) Ornith-1.5-9B-Q4_K_M - high")).toBe(true);
     expect(lines[2]).toContain("* TPS: 78.0 tok/s");
     expect(lines[0].trimEnd().endsWith("FULL ACCESS  plan")).toBe(true);
@@ -211,24 +240,28 @@ describe("widths, ASCII and no colour (D3)", () => {
   });
 
   test("the readings keep their colour: rose from 75%, amber from 60%, mint below", () => {
-    const ctx = (used: number): string => at({ contextUsed: used, contextWindow: 100 }).render(100)[1]!;
-    expect(ctx(40)).toContain("\x1b[32m40%/100");
-    expect(ctx(70)).toContain("\x1b[33m70%/100");
-    expect(ctx(78)).toContain("\x1b[31m78%/100");
+    const ctx = (used: number): string => at({ contextUsed: used, contextWindow: 100, model: "m" }).render(100)[1]!;
+    // The label is quiet (muted) and the number carries the meaning, so the row
+    // reads as a reading and not as a string of grey symbols.
+    expect(ctx(40)).toContain("\x1b[90mctx\x1b[39m \x1b[32m40% of 100");
+    expect(ctx(70)).toContain("\x1b[33m70% of 100");
+    expect(ctx(78)).toContain("\x1b[31m78% of 100");
     // A cache that has not answered yet is gray (T27.1), not a reading of zero.
-    expect(at({ cachePct: 99, cacheFirst: true }).render(100)[1]!).toContain("\x1b[90mCH99.0%");
-    expect(at({ cachePct: 10 }).render(100)[1]!).toContain("\x1b[31mCH10.0%");
+    expect(at({ cachePct: 99, cacheFirst: true }).render(100)[1]!).toContain("\x1b[90mhit\x1b[39m \x1b[90m99.0%");
+    expect(at({ cachePct: 10 }).render(100)[1]!).toContain("\x1b[31m10.0%");
     // The throughput is sky: it is a rate, not a verdict.
     expect(at({ tps: 78 }).render(100)[2]!).toContain("\x1b[36m");
   });
 
-  test("the cockpit takes the metrics over: place and route stay, the numbers go", () => {
-    const f = at(busy, true);
-    const lines = rows(f, 120);
-    expect(lines).toHaveLength(2);
+  test("there is no cockpit to hand the metrics to: every reading is here (C6)", () => {
+    // The bar used to be able to say "the panel next to the editor has the numbers",
+    // and then the row it was on was a second, quieter copy that could disagree.
+    const lines = rows(at(busy), 120);
+    expect(lines).toHaveLength(3);
     expect(lines[0]).toContain("~/Bureau");
+    expect(lines[1]).toContain("↑17k ↓749  ·  cached 34k · hit 99.9%");
     expect(lines[1]!.trimEnd().endsWith("(local) Ornith-1.5-9B-Q4_K_M • high")).toBe(true);
-    expect(lines.join("")).not.toContain("CH");
+    expect(lines[2]).toContain("TPS");
   });
 
   test("the prefill rate rides with the throughput, and leaves with it", () => {
@@ -335,11 +368,12 @@ describe("the branch it names (D3)", () => {
     expect(rows(f, 100)[0]).not.toContain("#");
   });
 
-  test("the row still shows ↑ ↓ R when there is no branch (D3 readings)", () => {
+  test("the row still shows ↑ ↓ and the cache when there is no branch (D3 readings)", () => {
     const f = new FooterComponent(UNICODE_ICONS, { cwd: repo("main"), home: HOME });
     f.set({ inputTokens: 17_000, outputTokens: 749, cacheRead: 34_000, cachePct: 99.9 });
     const line = rows(f, 100)[1]!;
-    expect(line).toContain("↑17k ↓749 R34k CH99.9%");
+    expect(line).toContain("↑17k ↓749");
+    expect(line).toContain("cached 34k · hit 99.9%");
     expect(rows(f, 100)[0]).toContain("⎇ main");
   });
 });

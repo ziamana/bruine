@@ -43,15 +43,28 @@ const badges = (h: Harness) => placeRow(h).trim().split(/\s+/).slice(1).join(" "
 /** The effort slot: the last cell of the route, after the dot (`-` in ASCII). */
 const effortOf = (h: Harness) => turnRow(h).trim().match(/[•-] ?(\S+)$/)?.[1] ?? "";
 
+/**
+ * A reading of the turn row, in either of the two spellings it is written in:
+ * named (`cached 34k`, `hit 98.9%`, `ctx 9.2% of 100k`) when the row has room
+ * for the words, and in letters (`R34k`, `CH98.9%`, `9.2%/100k`) when it does
+ * not. Only the spelling is accepted in both: the number each reading carries is
+ * still pinned, so a bar that invented or dropped a fact still fails here.
+ */
+const reading = (turnText: string, named: string, letters: string, value: string): void => {
+  const shape = turnText.includes(named) ? named : letters;
+  expect(turnText, `no ${named} reading in ${JSON.stringify(turnText)}`).toContain(`${shape}${value}`);
+};
+
 function expectContextMarking(turnText: string): void {
-  // The bar reads `9.2%/100k`: the share of the window spent, and the window
-  // itself. The share is the honest part — a session that has spent nothing says
-  // `0%` rather than claiming a window it has not filled.
-  const mark = /([\d.]+)%\/([\d.]+)([kKmM]?)/.exec(turnText);
+  // The bar reads `ctx 9.2% of 100k`, or `9.2%/100k` when the row is too narrow
+  // for the words: the share of the window spent, and the window itself. The
+  // share is the honest part — a session that has spent nothing says `0%` rather
+  // than claiming a window it has not filled.
+  const mark = /([\d.]+)%(?: of |\/)([\d.]+)([kKmM]?)/.exec(turnText);
   expect(mark, `no context reading in ${JSON.stringify(turnText)}`).not.toBeNull();
   const window = Number(mark![2]) * (mark![3] === "M" ? 1e6 : mark![3] === "k" ? 1e3 : 1);
   expect(window).toBeGreaterThan(0);
-  if (Number(mark![1]) === 0) expect(turnText).toContain("0%/");
+  if (Number(mark![1]) === 0) expect(mark![0]).toMatch(/^0%/);
   // And it is a share of the window, not a number of tokens in a bar of blocks.
   expect(Number(mark![1])).toBeLessThan(100);
 }
@@ -381,7 +394,8 @@ test("startup: header host and window known before first answer, pretty name (T2
     expect(head).not.toContain("Starting session");
     expect(head).toContain("127.0.0.1");
     expect(head).toContain("e2e-model Pretty");
-    // The turn row reads `0%/100k`: the share of the window spent, and the window.
+    // The turn row reads `ctx 0% of 100k`: the share of the window spent, and
+    // the window.
     // The `?` this line used to forbid is gone by construction — a reading with an
     // unknown window is not one the bar can print.
     expect(turnRow(h)).not.toContain("?");
@@ -399,14 +413,14 @@ test("cache-context: cached 9000/input 100 counts cached in ctx (T27b.2)", async
     await h.waitStable(400, 2000);
     // 100 + 9000 + 50 = 9150 / 100k ≈ 9.1-9.2% (old input+output only would show 0.1%)
     // The turn row carries the cache hit and the context share, longest reading
-    // first: `CH98.9% 9.2%/100k`.
-    expect(turnRow(h)).toMatch(/CH9[0-9]\.\d%/);
-    expect(turnRow(h)).toMatch(/9\.\d%\/100k/);
+    // first: `hit 98.9%` and `ctx 9.2% of 100k`, or the same two in letters.
+    expect(turnRow(h)).toMatch(/(?:CH|hit )9[0-9]\.\d%/);
+    expect(turnRow(h)).toMatch(/(?:ctx )?9\.\d%(?: of 100k|\/100k)/);
     expectContextMarking(turnRow(h));
   });
 });
 
-test("the row reads what the request really cost: ↑ ↓ R CH% (D3)", async () => {
+test("the row reads what the request really cost: ↑ ↓ cache hit (D3)", async () => {
   await scenario("barreadings", [
     {
       chunks: [
@@ -423,7 +437,9 @@ test("the row reads what the request really cost: ↑ ↓ R CH% (D3)", async () 
     await h.waitStable(400, 2000);
     // The readings the row exists for, in the order they are read: the prompt
     // written, the answer read back, what the cache served, the hit rate.
-    expect(turnRow(h)).toMatch(/↑1\.5k ↓750 R34k CH9[0-9]\.\d%/);
+    expect(turnRow(h)).toMatch(/↑1\.5k ↓750/);
+    reading(turnRow(h), "cached ", "R", "34k");
+    expect(turnRow(h)).toMatch(/(?:CH|hit )9[0-9]\.\d%/);
     // And the share of the window, which is the sum of the three plus the window.
     expectContextMarking(turnRow(h));
     // A session in a temp directory is not a repository: no branch, and no noise
@@ -432,6 +448,34 @@ test("the row reads what the request really cost: ↑ ↓ R CH% (D3)", async () 
     // The place row still says where the tools run, and what they may do.
     expect(placeRow(h)).toContain("kumo-e2e-project-");
     expect(badges(h)).toBe("ask");
+  });
+});
+
+test("the arrows count the session, not the request that came last (D3)", async () => {
+  await scenario("barsession", [
+    {
+      chunks: [{ delta: { content: "FIRST_DONE" }, delayMs: 60 }],
+      usage: { inputTokens: 35_500, outputTokens: 750, cachedTokens: 34_000 },
+    },
+    {
+      chunks: [{ delta: { content: "SECOND_DONE" }, delayMs: 60 }],
+      usage: { inputTokens: 3_500, outputTokens: 250, cachedTokens: 3_000 },
+    },
+  ], async (h) => {
+    await h.prompt("What did that cost?");
+    await h.waitFor("FIRST_DONE");
+    await h.waitStable(400, 2000);
+    expect(turnRow(h)).toMatch(/↑1\.5k ↓750/);
+    reading(turnRow(h), "cached ", "R", "34k");
+    await h.prompt("And this one?");
+    await h.waitFor("SECOND_DONE");
+    await h.waitStable(400, 2000);
+    // The second turn adds to the reading instead of replacing it: 1.5k + 0.5k
+    // written, 750 + 250 read back, 34k + 3k served from the cache — what this
+    // conversation has spent since it started, the way pi's status line counts.
+    expect(turnRow(h)).toMatch(/↑2k ↓1k/);
+    reading(turnRow(h), "cached ", "R", "37k");
+    await h.dump("barsession");
   });
 });
 
@@ -457,6 +501,21 @@ test("keys: ctrl+c clears input and ctrl+d exits successfully", async () => {
     expect(Date.now() - start).toBeLessThan(5000);
     console.info(`KEYS EXIT: code=${h.exit?.exitCode}, elapsed=${Date.now() - start}ms`);
     expect(clearFailure, String(clearFailure)).toBeUndefined();
+  });
+});
+
+test("keys: ctrl+c clears typed text first, and quits only on an empty editor", async () => {
+  await scenario("keys-ctrlc", [], async (h) => {
+    h.type("DRAFT_TO_CLEAR");
+    await h.waitFor("DRAFT_TO_CLEAR");
+    h.press("ctrlC");
+    await h.until(() => !h.screen().join("\n").includes("DRAFT_TO_CLEAR"), 1000, "cleared editor");
+    // Clearing text is not leaving: kumo is still here after the first press.
+    await delay(300);
+    expect(h.exit).toBeUndefined();
+    h.press("ctrlC");
+    await h.until(() => h.exit !== undefined, 4900, "exit on the second press");
+    expect(h.exit?.exitCode).toBe(0);
   });
 });
 
@@ -583,8 +642,9 @@ test("ASCII fallback animates with - backslash bar slash and finishes without Un
     const deadline = Date.now() + 4000;
     while (!h.screen().join("\n").includes("ASCII_DONE")) {
       await h.flush();
-      const line = h.screen().find(line => /Thinking/.test(line));
-      if (line) frames.add(line.trim()[0]!);
+      // The activity is the label in the prompt's top rule: `-- | Thinking 1s ---`.
+      const spin = h.screen().map(line => /^\s*\+?-{2} (\S) Thinking/.exec(line)).find(Boolean);
+      if (spin) frames.add(spin[1]!);
       expect(Date.now()).toBeLessThan(deadline);
       await delay(50);
     }
@@ -727,13 +787,24 @@ test("questions: Down Enter picks second option (T28A)", async () => {
   ], async (h) => {
     await h.prompt("Pick a database");
     await h.waitFor("enter select");
+    // The call is in the chat while the form is up: the question and its options
+    // are drawn, and it says it is waiting.
+    const waiting = h.screen().join("\n");
+    expect(waiting).toContain("ask_user");
+    expect(waiting).toContain("3 option(s): SQLite, Redis, Other");
+    expect(waiting).toContain("Waiting for user input");
     h.press("down");
     await delay(100);
     h.press("enter");
     await h.waitFor("Q_DONE");
     const toolMsg = h.server.mainRequests()[1]!.body.messages.find((m) => m.role === "tool");
     expect(JSON.stringify(toolMsg)).toContain("Redis");
-    expect(h.screen().join("\n")).toMatch(/\?.*→.*Redis/);
+    // And it settles into the record of what was asked and chosen.
+    const settled = h.screen().join("\n");
+    expect(settled).toContain("✓ Redis");
+    expect(settled).toContain("Q: Which database should I use?");
+    expect(settled).toMatch(/○ SQLite/);
+    expect(settled).toMatch(/● Redis - Faster/);
   });
 });
 
@@ -871,7 +942,7 @@ test("/new: two turns, new conversation, next request has only new history (T31.
     expect(lastBody).not.toContain("First hello");
     expect(lastBody).not.toContain("Second hello");
     expect(h.screen().join("\n")).not.toContain("First hello");
-    // A fresh conversation has spent nothing, and the bar says so: `0%/100k`,
+    // A fresh conversation has spent nothing, and the bar says so: `ctx 0% of 100k`,
     // checked for shape because the share depends on the session.
     await h.waitStable(300, 2000);
     expectContextMarking(turnRow(h));

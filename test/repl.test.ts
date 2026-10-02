@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { Repl, type AgentLike, type LineSource, type ReplDeps } from "../src/plugins/repl.js";
 import { deferred, tick } from "./fakes.js";
@@ -221,5 +224,46 @@ describe("slash palette source of truth (T31.1)", () => {
     expect(merged.filter((c) => c.name === "/plan")).toHaveLength(1);
     expect(merged.find((c) => c.name === "/plan")?.description).toContain("Shift+Tab");
     expect(merged.map((c) => c.name)).toContain("/commit");
+  });
+});
+
+describe("a plugin that already said it is not echoed again", () => {
+  test("the notice is the answer; the transcript line was the duplicate", async () => {
+    const { saidAlready } = await import("../src/plugins/repl.js");
+    // `/effort high` shows "Effort: high (next message)" above the editor and the
+    // plugin hands the same sentence back. Echoing it wrote a second copy into the
+    // transcript, and that copy is still there after the notice has gone.
+    expect(saidAlready("Effort: high (next message)", "Effort: high (next message)")).toBe(true);
+    // An answer rather than a notice: an error, an unknown level, the list of levels.
+    expect(saidAlready('Unknown effort "xhigh". Levels: low, medium, high.', "Effort: high (next message)")).toBe(false);
+    // Nothing said, nothing to suppress.
+    expect(saidAlready(undefined, "Effort: high (next message)")).toBe(false);
+    expect(saidAlready("Effort: high (next message)", undefined)).toBe(false);
+  });
+
+  test("the effort plugin really does both, which is why the router checks", async () => {
+    // The plugin cannot know whether its caller has a notice box, so it reports
+    // twice on purpose; suppressing the echo is the router's job.
+    const { Effort } = await import("../src/plugins/effort.js");
+    const notices: string[] = [];
+    const holder = { current: { provider: "local", model: "m1", reasoningEffort: "low" as string | undefined } };
+    const effort = new Effort();
+    const home = await mkdtemp(join(tmpdir(), "kumo-effort-doubled-"));
+    const saved = process.env.DSH_HOME;
+    process.env.DSH_HOME = home;
+    try {
+      await effort.attach({
+        agent: {},
+        selection: holder,
+        ui: { showNotice: (text: string) => notices.push(text), footer: { set: () => {} }, requestRender: () => {} } as never,
+      } as never, { resolveModelInfo: async () => ({ reasoning: { efforts: ["low", "medium", "high"].map((id) => ({ id, name: id })) } }) } as never);
+      const said = await effort.runCommand("/effort high");
+      expect(notices.at(-1)).toBe("Effort: high (next message)");
+      expect(said).toBe(notices.at(-1));
+    } finally {
+      if (saved === undefined) delete process.env.DSH_HOME;
+      else process.env.DSH_HOME = saved;
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });

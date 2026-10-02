@@ -355,6 +355,23 @@ export function gracefulExit(exit: (code: number) => void): (code: number) => vo
   };
 }
 
+/**
+ * T34/T37: has the plugin already said this out loud?
+ *
+ * `/effort high` and `/model <route>` reported the same sentence twice: once as the
+ * notice above the editor (transient, with the level also sitting in the footer's
+ * route row for as long as the session lasts) and once as a transcript line, which
+ * never goes away. Four presses left four lines on the screen and a reader could
+ * not tell which one was the answer.
+ *
+ * So the router only echoes a line the plugin did not already show. An error, an
+ * unknown level and the list of levels are answers rather than notices: those keep
+ * their transcript line.
+ */
+export function saidAlready(text: string | undefined, noticeShown: string | undefined): boolean {
+  return text !== undefined && noticeShown !== undefined && text === noticeShown;
+}
+
 async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<void> {
   await ctx.get("loader")?.await();
   const sessions = ctx.get("sessions");
@@ -532,7 +549,9 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     if (cmd === "/effort") {
       if (effort()?.handles?.(clean) === true) {
         const t: string | undefined = await Promise.resolve(effort().runCommand(clean));
-        if (t !== undefined) reply(t);
+        // The plugin showed the change itself; a second copy in the transcript is
+        // the line that stays on the screen long after the notice is gone.
+        if (t !== undefined && !saidAlready(t, effort()?.noticeShown)) reply(t);
       } else {
         ui?.showNotice("Effort control is not available for this model.");
       }
@@ -551,7 +570,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           ? picker.runCommand(clean)
           : picker.runProviderCommand(clean.replace(/^\/provider\s*/, "")),
       );
-      if (t !== undefined) reply(t);
+      if (t !== undefined && !saidAlready(t, picker.noticeShown)) reply(t);
       return;
     }
     if (cmd === "/ask" || cmd === "/auto" || cmd === "/full") {

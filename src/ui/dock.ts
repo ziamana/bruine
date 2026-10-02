@@ -1,4 +1,5 @@
 import { truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
+import { kumoIcons } from "../render/chars.js";
 import type { FooterState } from "./footer.js";
 import { ansi } from "./theme.js";
 import { formatVolume } from "./footer.js";
@@ -138,7 +139,7 @@ export class DockRow implements Component {
       const l = left[i] ?? "";
       const pad = " ".repeat(Math.max(0, leftW - visibleWidth(l)));
       const r = right[i] ?? "";
-      out.push(`${l}${pad} ${ansi.faint("│")} ${r}`);
+      out.push(`${l}${pad} ${ansi.faint(kumoIcons().think === "*" ? "|" : "│")} ${r}`);
     }
     return out;
   }

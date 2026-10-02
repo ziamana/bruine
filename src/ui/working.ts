@@ -1,13 +1,18 @@
-import type { Component } from "@earendil-works/pi-tui";
-import { clipCells } from "../render/reasoning.js";
+import { visibleWidth, type Component } from "@earendil-works/pi-tui";
+import { clipCells, spinnerFrame } from "../render/reasoning.js";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
-import { terminalMotionAllowed, WAITING_FRAMES } from "./logo-motion.js";
+import { terminalMotionAllowed } from "./logo-motion.js";
 
-/** Prefill activity (T24.3): shown from prompt sent until the first stream chunk. */
+export type WorkingState = "Working" | "Waiting for model" | "Thinking";
+
+/** One activity row, shared by the prefill marker and the pinned composer. */
 export class WorkingComponent implements Component {
   #startTime: number;
   #animate: boolean;
+  /** The composer paints this marker; keep it in chat for the stream lifecycle. */
+  docked = false;
+  state: WorkingState = "Waiting for model";
   constructor(
     private now: () => number = Date.now,
     private icons: KumoIcons = kumoIcons(),
@@ -15,15 +20,17 @@ export class WorkingComponent implements Component {
     this.#startTime = now();
     this.#animate = terminalMotionAllowed({ ascii: icons.think === "*" });
   }
-  get active(): boolean {
-    return this.#animate;
+  get active(): boolean { return this.#animate; }
+  line(width: number): string {
+    const elapsed = Math.max(0, this.now() - this.#startTime);
+    const ascii = this.icons.think === "*";
+    const frame = this.#animate ? spinnerFrame(elapsed, this.icons) : ascii ? "|" : "⋮";
+    const label = `${frame} ${this.state} ${Math.floor(elapsed / 1000)}s`;
+    const hint = "Esc to interrupt";
+    const gap = width - visibleWidth(label) - hint.length;
+    if (gap >= 3) return `${ansi.violet(label)}${" ".repeat(gap)}${ansi.gray(hint)}`;
+    return ansi.violet(clipCells(label, width, ascii ? "..." : "…"));
   }
-  render(width: number): string[] {
-    const label = this.icons.think === "*" ? "Waiting for model - Esc cancels" : "Waiting for model · Esc cancels";
-    if (!this.#animate || width < 6) return [ansi.gray(clipCells(label, width))];
-    const elapsed = this.now() - this.#startTime;
-    const frame = WAITING_FRAMES[Math.floor(Math.max(0, elapsed) / 90) % WAITING_FRAMES.length]!;
-    return [`${ansi.cyan(frame)} ${ansi.gray(clipCells(label, width - 5))}`];
-  }
+  render(width: number): string[] { return this.docked ? [] : [this.line(width)]; }
   invalidate(): void {}
 }

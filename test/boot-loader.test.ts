@@ -210,7 +210,7 @@ test("response waiting uses the same small motif and has a still fallback", () =
     const waiting = new WorkingComponent(() => 0);
     expect(waiting.active).toBe(false);
     expect(waiting.render(80)[0]).toContain("Waiting for model");
-    expect(waiting.render(80)[0]).toContain("Esc cancels");
+    expect(waiting.render(80)[0]).toContain("Esc to interrupt");
   } finally {
     if (prior === undefined) delete process.env.KUMO_NO_ANIMATION;
     else process.env.KUMO_NO_ANIMATION = prior;

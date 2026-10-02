@@ -24,9 +24,10 @@ import { LOGO_STOPS, terminalMotionAllowed, wordmarkFrame } from "./logo-motion.
 import { ChatTranscript, ConsoleBand, Gap, Margin, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
 import { displayModel } from "./footer.js";
-import { PlaceRow } from "./place.js";
 import { Shell } from "./shell.js";
 import { QuestionForm } from "./questions.js";
+import { ReasoningComponent } from "./reasoning-component.js";
+import { PromptFrame } from "./prompt-frame.js";
 import { WorkingComponent } from "./working.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
 import { DashboardPanel, DockRow } from "./dock.js";
@@ -311,6 +312,7 @@ export class KumoUi {
   readonly noticeBox: NoticeBox;
   readonly taskPanel: TaskPanel;
   readonly dock: DockRow;
+  readonly promptFrame: PromptFrame;
   readonly header: Text;
   readonly version: string;
   /** T29: the images the `[Image N]` chips in the editor stand for. */
@@ -430,18 +432,20 @@ export class KumoUi {
         },
       ),
     );
+    this.promptFrame = new PromptFrame(this.dock, this.editor, () => {
+      if (this.chat.children.some(c => c instanceof WorkingComponent)) return "Waiting for model";
+      if (this.chat.children.some(c => c instanceof ReasoningComponent && c.active)) return "Thinking";
+      return "Working";
+    }, icons);
     this.dock.visible = this.fancyHeader;
     this.footer.compact = (w) => this.dock.shown(w);
-    // The place, on the console surface between the input and the footer: the eye is
-    // already there, and a coding agent's whole world is the directory it runs in.
-    const place = new PlaceRow(process.cwd());
     // The editor, the place, the cockpit and the footer share one painted surface (T40).
     // The shell owns the order so the transcript can be windowed: scrolled back, the
     // band below it has to stay on the last row, and only the layout knows that.
     this.shell = new Shell(
       [this.header],
       this.chat,
-      [new Margin(new Gap(this.taskPanel)), new Margin(this.noticeBox), new ConsoleBand([this.dock, place, this.footer])],
+      [new Margin(new Gap(this.taskPanel)), new Margin(this.noticeBox), new ConsoleBand([this.promptFrame, this.footer])],
       () => this.terminal.rows,
     );
     this.#layer.addChild(this.shell);
@@ -516,11 +520,11 @@ export class KumoUi {
     // only ever used them to walk a multi-line buffer, and the cost of taking them
     // is a paste of a thousand lines; the cost of leaving them is that the one key
     // a reader reaches for scrolls the composer out of sight.
-    if (matchesKey(data, "pageUp") || matchesKey(data, "ctrl+pageUp")) {
+    if (!this.#confirming && (matchesKey(data, "pageUp") || matchesKey(data, "ctrl+pageUp"))) {
       this.scrollTranscript(this.#pageRows());
       return { consume: true };
     }
-    if (matchesKey(data, "pageDown") || matchesKey(data, "ctrl+pageDown")) {
+    if (!this.#confirming && (matchesKey(data, "pageDown") || matchesKey(data, "ctrl+pageDown"))) {
       this.scrollTranscript(-this.#pageRows());
       return { consume: true };
     }
@@ -676,7 +680,7 @@ export class KumoUi {
     if (this.#closed) return;
     this.updateHeader();
     this.tui.requestRender();
-    const active = this.taskPanel.active || this.chat.children.some((c) => (c as Component & { active?: boolean }).active);
+    const active = this.promptFrame.active || this.taskPanel.active || this.chat.children.some((c) => (c as Component & { active?: boolean }).active);
     if (active && this.#animation === undefined) {
       this.#animation = setInterval(() => this.requestRender(), 100);
       this.#animation.unref();
@@ -688,7 +692,11 @@ export class KumoUi {
 
   addChat(component: Component): void {
     this.chat.addChild(component);
-    if (component instanceof WorkingComponent) this.#startHeaderSweep();
+    if (component instanceof WorkingComponent) {
+      component.docked = true;
+      this.promptFrame.start();
+      this.#startHeaderSweep();
+    }
     this.requestRender();
   }
 
@@ -822,6 +830,7 @@ export class KumoUi {
   /** Fresh conversation view (T31.2): empty chat, no groups, no ghost/notice. */
   clearChat(): void {
     if (this.#closed) return;
+    this.promptFrame.stop();
     this.chat.clear();
     this.#collapsedGroups = [];
     this.#toolsCollapsed = true;
@@ -851,7 +860,7 @@ export class KumoUi {
       (c) => (c as { constructor?: { name?: string } }).constructor?.name === "WorkingComponent",
     );
     if (has) return;
-    this.chat.addChild(new WorkingComponent(Date.now, this.icons));
+    this.addChat(new WorkingComponent(Date.now, this.icons));
     this.#startHeaderSweep();
     this.requestRender();
   }
@@ -1030,6 +1039,7 @@ export class KumoUi {
     error: boolean;
   }): void {
     if (this.#closed) return;
+    this.promptFrame.stop();
     const ascii = this.icons.think === "*";
     if (info.cancelled) {
       this.addChat(new Text(this.#paintReceipt(turnReceipt({
@@ -1259,7 +1269,7 @@ export class KumoUi {
     if (this.#closed) return Promise.resolve(undefined);
     this.clearNoticeBox();
     this.#setConfirming(true);
-    const form = new QuestionForm(questions);
+    const form = new QuestionForm(questions, this.icons);
     this.noticeBox.addChild(form);
     this.requestRender();
     return new Promise((resolve) => {

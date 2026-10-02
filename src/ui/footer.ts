@@ -1,5 +1,7 @@
 import { truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
+import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
+import { isAbsolute, join } from "node:path";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { clipStart } from "../render/reasoning.js";
 import { ansi } from "./theme.js";
@@ -85,6 +87,43 @@ export function displayModel(id?: string, name?: string): string {
 }
 
 /**
+ * The branch a repository is on, read out of `.git/HEAD`.
+ *
+ * The footer's first row says where the tools run, and inside a repository the
+ * other half of that is which branch: a session on `main` and a session on a
+ * feature branch touch the same files in opposite ways, and only one of them is
+ * what the user meant.
+ *
+ * Read once at startup and again on a directory change, never during a render —
+ * the frame is painted on every keystroke, and a syscall per keystroke is how a
+ * status bar becomes the slowest thing in the app. No subprocess either: `git` is
+ * not always installed, is not always on the PATH a GUI-launched terminal hands
+ * over, and a label is not worth a dependency.
+ *
+ * `.git` is a file in a worktree or a submodule and then it names the real
+ * directory; a detached HEAD is a commit rather than a branch, so there is nothing
+ * to say; outside a repository, nothing either.
+ */
+export function readGitBranch(cwd: string): string | undefined {
+  const head = (gitDir: string): string | undefined => {
+    try {
+      // `ref: refs/heads/main` is a branch. Anything else here is a commit id.
+      return /^ref:\s*refs\/heads\/(.+)$/.exec(readFileSync(join(gitDir, "HEAD"), "utf8").trim())?.[1];
+    } catch {
+      return undefined;
+    }
+  };
+  try {
+    const dot = join(cwd, ".git");
+    if (statSync(dot).isDirectory()) return head(dot);
+    const at = /^gitdir:\s*(.+)$/.exec(readFileSync(dot, "utf8").trim())?.[1];
+    return at === undefined ? undefined : head(isAbsolute(at) ? at : join(cwd, at));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * A name that has to give up its head, by the same rule the `PlaceRow` above the
  * input uses: `…/jets/kumo` still names the directory, `…/jets` names the wrong one.
  */
@@ -141,6 +180,7 @@ export class FooterComponent implements Component {
   #ascii: boolean;
   #cwd: string;
   #home: string;
+  #branch: string | undefined;
 
   constructor(icons: KumoIcons = kumoIcons(), opts: { cwd?: string; home?: string } = {}) {
     this.#ascii = icons.think === "*";
@@ -148,6 +188,7 @@ export class FooterComponent implements Component {
     // a syscall. A directory change in the session arrives through `set`.
     this.#cwd = (opts.cwd ?? process.cwd()).trim();
     this.#home = opts.home ?? homedir();
+    this.#branch = readGitBranch(this.#cwd);
   }
 
   /** Live tok/s samples for the cockpit sparkline. */
@@ -156,7 +197,11 @@ export class FooterComponent implements Component {
   compact: (width: number) => boolean = () => false;
 
   set(next: FooterState): void {
+    // The branch belongs to the directory, so it is re-read when the directory
+    // changes and never otherwise — `set` is called on every usage chunk.
+    const moved = next.cwd !== undefined && next.cwd !== (this.state.cwd ?? this.#cwd);
     this.state = { ...this.state, ...next };
+    if (moved) this.#branch = readGitBranch(this.state.cwd ?? this.#cwd);
     if (next.tps !== undefined) this.speed.push(next.tps);
   }
 
@@ -184,7 +229,7 @@ export class FooterComponent implements Component {
     const path = displayPlace(this.state.cwd ?? this.#cwd, this.#home);
     const badges = this.#badges();
     const glyph = this.#ascii ? "#" : "\u2387";
-    const branch = (this.state.gitBranch ?? "").trim();
+    const branch = (this.state.gitBranch ?? this.#branch ?? "").trim();
     const rest = (name: string): string => (name === "" ? "" : `  ${this.#ink("muted")(`${glyph} ${name}`)}`);
     // The path and the branch give up their heads before anything is dropped, and
     // the badge is the last thing to go: it is the one cell range that says whether

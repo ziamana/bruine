@@ -1124,6 +1124,34 @@ describe("attachTui wiring", () => {
     void chats;
   });
 
+  test("the row reads the request's own usage: ↑ prompt, ↓ answer, R cache (D3)", () => {
+    const { ui, stream } = setup();
+    stream({
+      type: "usage",
+      usage: { inputTokens: 1_500, outputTokens: 320, cacheReadTokens: 34_000 },
+    });
+    expect(ui.footerState).toMatchObject({ inputTokens: 1_500, outputTokens: 320, cacheRead: 34_000 });
+    // A later chunk replaces the reading rather than adding to it: the row says
+    // what the last request cost, not what the session has cost so far.
+    stream({
+      type: "usage",
+      usage: { inputTokens: 1_900, outputTokens: 750, cacheReadTokens: 34_000 },
+    });
+    expect(ui.footerState).toMatchObject({ inputTokens: 1_900, outputTokens: 750, cacheRead: 34_000 });
+  });
+
+  test("a usage chunk that says nothing is not read as a zero (D3)", () => {
+    const { ui, stream } = setup();
+    stream({ type: "usage", usage: { inputTokens: 900, outputTokens: 12, cacheReadTokens: 4000 } });
+    // The server stopped counting. The last reading it gave stays on the row,
+    // because printing `↓0` because a field was missing is a lie about the turn.
+    stream({ type: "usage", usage: {} });
+    expect(ui.footerState).toMatchObject({ inputTokens: 900, outputTokens: 12, cacheRead: 4000 });
+    // A zero the server really sent is published: it is a reading, not a gap.
+    stream({ type: "usage", usage: { outputTokens: 0 } });
+    expect(ui.footerState.outputTokens).toBe(0);
+  });
+
   test("reasoning: one live line collapsing on block-end", () => {
     const { chats, stream } = setup();
     stream({ type: "reasoning-delta", text: "one two " });

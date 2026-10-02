@@ -6,9 +6,12 @@
  * leaks is a status bar nobody reads.
  */
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { describe, expect, test } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, test } from "vitest";
 import { ASCII_ICONS, UNICODE_ICONS } from "../src/render/chars.js";
-import { FooterComponent, displayModel, shortenHead } from "../src/ui/footer.js";
+import { FooterComponent, displayModel, readGitBranch, shortenHead } from "../src/ui/footer.js";
 import { strip } from "./fakes.js";
 
 const HOME = "/home/tu44";
@@ -260,5 +263,83 @@ describe("the paths it names (D3)", () => {
     expect(rows(f, 60)[0]).toContain("/srv/kumo");
     f.set({ cwd: `${HOME}/Bureau` });
     expect(rows(f, 60)[0]).toContain("~/Bureau");
+  });
+});
+describe("the branch it names (D3)", () => {
+  const made: string[] = [];
+  const dir = (): string => {
+    const d = mkdtempSync(join(tmpdir(), "kumo-git-"));
+    made.push(d);
+    return d;
+  };
+  afterEach(() => {
+    for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+  const repo = (head: string, name = "main"): string => {
+    const d = dir();
+    mkdirSync(join(d, ".git"));
+    writeFileSync(join(d, ".git", "HEAD"), `ref: refs/heads/${name}\n`);
+    return d;
+  };
+
+  test("a branch is a name, read out of .git/HEAD", () => {
+    expect(readGitBranch(repo("main"))).toBe("main");
+    // A slash is a branch name too: `feature/D3-status-bar` is one branch.
+    expect(readGitBranch(repo("x", "feature/D3-status-bar"))).toBe("feature/D3-status-bar");
+    // A worktree's `.git` is a file naming the real directory, and the branch
+    // lives there.
+    const real = repo("x", "wip");
+    const linked = dir();
+    writeFileSync(join(linked, ".git"), `gitdir: ${join(real, ".git")}\n`);
+    expect(readGitBranch(linked)).toBe("wip");
+  });
+
+  test("no repository, a detached HEAD and an unreadable file all say nothing", () => {
+    expect(readGitBranch(dir())).toBeUndefined();
+    // A detached HEAD is a commit, not a branch: printing the sha would be noise.
+    const detached = dir();
+    mkdirSync(join(detached, ".git"));
+    writeFileSync(join(detached, ".git", "HEAD"), "9f2c1ab4e5d6...\n");
+    expect(readGitBranch(detached)).toBeUndefined();
+    const garbage = dir();
+    mkdirSync(join(garbage, ".git"));
+    writeFileSync(join(garbage, ".git", "HEAD"), "not a head at all\n");
+    expect(readGitBranch(garbage)).toBeUndefined();
+    // A `.git` file pointing nowhere is a broken checkout, not a crash.
+    const broken = dir();
+    writeFileSync(join(broken, ".git"), "gitdir: /nowhere/.git/worktrees/gone\n");
+    expect(readGitBranch(broken)).toBeUndefined();
+    expect(readGitBranch(join(dir(), "nope"))).toBeUndefined();
+  });
+
+  test("read once at startup, and again only when the directory moves", () => {
+    const d = repo("main");
+    const f = new FooterComponent(UNICODE_ICONS, { cwd: d, home: HOME });
+    expect(rows(f, 60)[0]).toContain("⎇ main");
+    // The frame is painted on every keystroke: if the branch were read there, a
+    // deleted .git would empty the row under the user's eyes. It is not.
+    rmSync(join(d, ".git"), { recursive: true, force: true });
+    expect(rows(f, 60)[0]).toContain("⎇ main");
+    // A directory change re-reads it, which is the other half of the rule.
+    f.set({ cwd: dir() });
+    expect(rows(f, 60)[0]).not.toContain("⎇");
+    f.set({ cwd: d });
+    expect(rows(f, 60)[0]).not.toContain("⎇");
+  });
+
+  test("a session that never had a repository shows no branch, and no error", () => {
+    // What the e2e harness runs in: a temp directory, no .git at all.
+    const f = new FooterComponent(UNICODE_ICONS, { cwd: dir(), home: HOME });
+    expect(rows(f, 100)[0]).toContain("ask");
+    expect(rows(f, 100)[0]).not.toContain("⎇");
+    expect(rows(f, 100)[0]).not.toContain("#");
+  });
+
+  test("the row still shows ↑ ↓ R when there is no branch (D3 readings)", () => {
+    const f = new FooterComponent(UNICODE_ICONS, { cwd: repo("main"), home: HOME });
+    f.set({ inputTokens: 17_000, outputTokens: 749, cacheRead: 34_000, cachePct: 99.9 });
+    const line = rows(f, 100)[1]!;
+    expect(line).toContain("↑17k ↓749 R34k CH99.9%");
+    expect(rows(f, 100)[0]).toContain("⎇ main");
   });
 });

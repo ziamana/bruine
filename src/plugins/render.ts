@@ -86,6 +86,13 @@ function restoreTasks(session: any): ReturnType<typeof taskItems> {
   return undefined;
 }
 
+/** A token count the server actually sent, or undefined when it sent nothing. */
+function reported(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 /**
  * Wire the live stream and the durable session log onto the pi-tui chat
  * components (T13a-d). Exported so tests can drive it with fake events.
@@ -371,7 +378,16 @@ export function attachTui(
         if (typeof window === "number" && window > 0) {
           ui.footer.set({ contextUsed: lastInputTokens + lastCacheTokens + lastOutputTokens, contextWindow: window });
         }
-        ui.footer.set({ tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
+        // D3: the row's own readings — ↑ the prompt, ↓ the answer, R what the cache
+        // served — taken from this request's usage and published only when the
+        // server actually sent the number. A field that was missing is not a zero,
+        // and a number printed as fresh when it is stale is worse than no number:
+        // the previous reading stays on the row until the server replaces it.
+        const readings: Record<string, number> = {};
+        if (reported(u.inputTokens) !== undefined) readings.inputTokens = lastInputTokens;
+        if (reported(u.outputTokens) !== undefined) readings.outputTokens = lastOutputTokens;
+        if (reported(cached) !== undefined) readings.cacheRead = lastCacheTokens;
+        ui.footer.set({ ...readings, tps: tps.tps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
         ui.requestRender();
         return;
       }

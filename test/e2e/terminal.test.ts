@@ -406,6 +406,35 @@ test("cache-context: cached 9000/input 100 counts cached in ctx (T27b.2)", async
   });
 });
 
+test("the row reads what the request really cost: ↑ ↓ R CH% (D3)", async () => {
+  await scenario("barreadings", [
+    {
+      chunks: [
+        { delta: { content: "READINGS_DONE" }, delayMs: 60 },
+      ],
+      // The server reports the whole prompt (35.5k) and how much of it came from
+      // the cache (34k); pi-ai hands the app the two halves separately, so the row's
+      // ↑ is the 1.5k that was really prefilled and R the 34k the cache served.
+      usage: { inputTokens: 35_500, outputTokens: 750, cachedTokens: 34_000 },
+    },
+  ], async (h) => {
+    await h.prompt("What did that cost?");
+    await h.waitFor("READINGS_DONE");
+    await h.waitStable(400, 2000);
+    // The readings the row exists for, in the order they are read: the prompt
+    // written, the answer read back, what the cache served, the hit rate.
+    expect(turnRow(h)).toMatch(/↑1\.5k ↓750 R34k CH9[0-9]\.\d%/);
+    // And the share of the window, which is the sum of the three plus the window.
+    expectContextMarking(turnRow(h));
+    // A session in a temp directory is not a repository: no branch, and no noise
+    // where one would be (the harness never writes a `.git`).
+    expect(placeRow(h)).not.toContain("\u2387");
+    // The place row still says where the tools run, and what they may do.
+    expect(placeRow(h)).toContain("kumo-e2e-project-");
+    expect(badges(h)).toBe("ask");
+  });
+});
+
 test("keys: ctrl+c clears input and ctrl+d exits successfully", async () => {
   await scenario("keys", [], async (h) => {
     h.type("PROMPT_TO_CLEAR");

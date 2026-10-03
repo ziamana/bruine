@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseDocument } from "yaml";
-import { SPACE_BUNNY, SPACE_BUNNY_EFFORTS, SPACE_BUNNY_HEADERS, spaceBunnyRoute } from "./spacebunny.js";
+import { SPACE_BUNNY, SPACE_BUNNY_EFFORTS, SPACE_BUNNY_HEADERS, SPACE_BUNNY_INPUT, spaceBunnyRoute } from "./spacebunny.js";
 import { writeAtomic } from "./simple.js";
 
 const ROUTE_PATH = ["llm-pi-ai", "providers", SPACE_BUNNY.routeName] as const;
@@ -27,8 +27,8 @@ export async function addSpaceBunnyToHome(home: string): Promise<"added" | "pres
 /**
  * The first version of the route asked for a key in `BRUINE_ZEN_API_KEY`, which a session started
  * before the route was added never has ("no credential for provider route opencode-zen"), and
- * declared only `off` and `low`. A route in that shape becomes the header form with the endpoint's
- * real levels; any other shape, and any route the user changed on purpose, is left exactly as it is.
+ * declared only `off` and `low`; neither version said the model takes images, so the harness refused
+ * them. A route in that shape becomes the header form with the endpoint's real levels and its inputs; any other shape, and any route the user changed on purpose, is left exactly as it is.
  * Returns whether the file was changed.
  */
 export async function repairSpaceBunnyRoute(home: string): Promise<boolean> {
@@ -56,6 +56,12 @@ export async function repairSpaceBunnyRoute(home: string): Promise<boolean> {
     const old = efforts !== undefined && Object.keys(efforts).length === 2 && "off" in efforts && "low" in efforts && efforts.off === null;
     if (efforts === undefined || old) {
       doc.setIn([...ROUTE_PATH, "models", index, "reasoningEfforts"], { ...SPACE_BUNNY_EFFORTS });
+      changed = true;
+    }
+    // A model that says nothing about what it takes in is read as text only: images are refused.
+    const input = model.input as unknown[] | undefined;
+    if (input === undefined || input.length === 0) {
+      doc.setIn([...ROUTE_PATH, "models", index, "input"], [...SPACE_BUNNY_INPUT]);
       changed = true;
     }
   });

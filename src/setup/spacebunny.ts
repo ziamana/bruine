@@ -36,6 +36,12 @@ export const SPACE_BUNNY_EFFORTS: Record<string, string> = {
   max: "max",
 };
 
+/**
+ * What the model takes in. Without this the harness assumes text only and refuses every image
+ * before it is sent, although the model reads them (the catalogue lists text, image and video).
+ */
+export const SPACE_BUNNY_INPUT: string[] = ["text", "image"];
+
 /** The route as settings.yaml spells it. */
 export function spaceBunnyRoute(): Record<string, unknown> {
   return {
@@ -48,6 +54,7 @@ export function spaceBunnyRoute(): Record<string, unknown> {
         id: SPACE_BUNNY.model,
         name: SPACE_BUNNY.model,
         contextWindow: SPACE_BUNNY.contextWindow,
+        input: [...SPACE_BUNNY_INPUT],
         reasoningEfforts: { ...SPACE_BUNNY_EFFORTS },
       },
     ],
@@ -74,6 +81,7 @@ export function spaceBunnyDiscovered(): Discovered {
     displayName: "OpenCode Zen",
     headers: { ...SPACE_BUNNY_HEADERS },
     reasoningEfforts: { ...SPACE_BUNNY_EFFORTS },
+    input: [...SPACE_BUNNY_INPUT],
   };
 }
 

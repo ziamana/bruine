@@ -618,6 +618,28 @@ test("a file being written shows its first ten lines, then only a line count tha
   }, false, "full");
 }, 60_000);
 
+test("lean catalog: a background sub-agent is a plain job the model can read, not a persistent child it cannot follow", async () => {
+  await scenario("subagent-lean", [textScript("HI_SUB")], async (h) => {
+    await h.prompt("hello");
+    await h.waitFor("HI_SUB");
+    const body = h.server.mainRequests()[0]!.body as unknown as { tools?: Array<{ function?: { name?: string; parameters?: { properties?: Record<string, unknown> } } }> };
+    const text = JSON.stringify(body);
+    // The persistent mode's guidance (poll nothing, wait for a notice) is not in the prompt:
+    // the model was told to wait for a notice while holding no tool to follow the child.
+    expect(text).not.toContain("Use subagent in the background by default");
+    const names = (body.tools ?? []).map((t) => t.function?.name);
+    expect(names).toContain("subagent");
+    expect(names).toContain("job_output");
+    expect(names).toContain("job_kill");
+    // Persistent children are followed with these two, and the lean catalog does not mount them.
+    expect(names).not.toContain("send_message");
+    expect(names).not.toContain("list_agents");
+    // Background stays available as an option on the call, as a job.
+    const sub = (body.tools ?? []).find((t) => t.function?.name === "subagent");
+    expect(Object.keys(sub?.function?.parameters?.properties ?? {})).toContain("run_in_background");
+  });
+});
+
 test("/tasks with nothing running says so", async () => {
   await scenario("tasks-empty", [], async (h) => {
     h.type("/tasks");

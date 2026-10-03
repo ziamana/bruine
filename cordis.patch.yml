@@ -92,6 +92,20 @@
   disabled: !!js process.env.KUMO_TOOLS !== 'full'
 - id: tool-subagent-fork
   disabled: !!js process.env.KUMO_TOOLS !== 'full'
+
+# A sub-agent run in the background is a plain job in the lean catalog: job_output
+# reads it, job_kill stops it and /tasks lists it. The persistent mode needs
+# send_message and list_agents, which only the full catalog mounts; with them off a
+# model has no way to follow the child and polls job_output with an id the job
+# registry has never heard of ("unknown job"), then does the work itself. One-shot
+# also waits for the child by default, which is what a small model expects.
+# (A config here replaces the base row's whole config, so the provider and the tool
+# name are repeated.)
+- id: tool-subagent
+  config:
+    provider: spawn
+    toolName: subagent
+    backgroundMode: !!js (process.env.KUMO_TOOLS === 'full' && 'continuable') || 'one-shot'
 - id: tool-workflow
   disabled: !!js process.env.KUMO_TOOLS !== 'full'
 - id: tool-goal

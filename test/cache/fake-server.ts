@@ -106,9 +106,15 @@ function systemMessageOf(body: OpenAiRequestLike): string {
   return system === undefined ? "" : JSON.stringify(system);
 }
 
-/** A main-session request carries kumo's persona; one-shot calls (titles…) do not. */
+/** The next-message suggestion: the conversation so far plus one message asking for it. */
+export function isSuggestionRequest(body: OpenAiRequestLike): boolean {
+  const last = (body.messages ?? []).at(-1);
+  return JSON.stringify(last?.content ?? "").includes("Suggest the user's most likely next message");
+}
+
+/** A main-session request carries kumo's persona; one-shot calls (titles…) and the suggestion riding on it do not count. */
 export function isMainSessionRequest(body: OpenAiRequestLike): boolean {
-  return systemMessageOf(body).includes("terminal coding agent");
+  return !isSuggestionRequest(body) && systemMessageOf(body).includes("terminal coding agent");
 }
 
 export function firstDiffByte(a: string, b: string): string | undefined {

@@ -86,7 +86,10 @@ export async function startServer(scripts: Script[], opts: ServerOptions = {}) {
       let raw = "";
       for await (const part of req) raw += String(part);
       const body = JSON.parse(raw) as RequestBody;
-      const main = body.messages.some((m) => ["system", "developer"].includes(m.role) && JSON.stringify(m.content).includes("terminal coding agent"));
+      // The next-message suggestion rides on the main conversation (same system prompt and tools,
+      // one more message), so the system prompt alone no longer tells it from a loop request.
+      const suggestion = JSON.stringify(body.messages.at(-1)?.content ?? "").includes("Suggest the user's most likely next message");
+      const main = !suggestion && body.messages.some((m) => ["system", "developer"].includes(m.role) && JSON.stringify(m.content).includes("terminal coding agent"));
       const record: RecordedRequest = { body, main, completed: false, disconnected: false };
       requests.push(record);
       // T33b: HTTP-level failures (401/404/5xx) for the error-mapping scenarios.

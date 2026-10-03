@@ -1,7 +1,7 @@
 import { Text } from "@earendil-works/pi-tui";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createUserMessage } from "@deepseek-ai/dsh-llm";
+import { MainRequestMemory, sameRoute, shouldSuggest, sharedPrefixRequest, standaloneRequest } from "./suggest.js";
 import { ReasoningLine, dim, type Screen } from "../render/reasoning.js";
 import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { TextStream } from "../render/text.js";
@@ -267,6 +267,17 @@ export function attachTui(
     }
   };
 
+  // The suggestion for the next prompt starts from the conversation's own request, so the server
+  // answers it out of the cache it already holds: remember the last one the loop sent.
+  const mainRequests = new MainRequestMemory();
+  const offRequest = ctx.on(
+    "llm/stream",
+    (options: Parameters<MainRequestMemory["see"]>[0], next: () => unknown) => {
+      mainRequests.see(options, (liveAgent() as { session?: { id?: string } }).session?.id);
+      return next();
+    },
+    { global: true, prepend: true },
+  );
   const offStream = ctx.on("agent/assistant-stream", ({ agent: subject, frame }: any) => {
     if (subject !== liveAgent()) return;
     const f = frame as StreamFrame;
@@ -595,7 +606,9 @@ export function attachTui(
   }
 
   async function triggerSuggest(): Promise<void> {
-    if (!suggestionsEnabled()) return;
+    // Not while planning, and not when there is nothing to build a suggestion on.
+    const modes = ctx.get("modes") as { plan?: boolean } | undefined;
+    if (!shouldSuggest({ enabled: suggestionsEnabled(), plan: modes?.plan === true, lastUser, answer: currentAnswer })) return;
     const route = fastRoute();
     if (route === undefined) return;
     const llm = ctx.get("llm") as
@@ -604,6 +617,7 @@ export function attachTui(
             provider: string;
             model: string;
             messages: unknown[];
+            tools?: unknown[];
             maxTokens?: number;
             reasoningEffort?: string;
             signal?: AbortSignal;
@@ -612,7 +626,6 @@ export function attachTui(
         }
       | undefined;
     if (llm === undefined) return;
-    if (lastUser.trim() === "" || currentAnswer.trim() === "") return;
     suggestController?.abort();
     const controller = new AbortController();
     suggestController = controller;
@@ -625,25 +638,16 @@ export function attachTui(
       } catch {
         off = false;
       }
+      // On the conversation's own route the suggestion is the end of the conversation: the same
+      // system prompt, tools and history the server already holds, plus one more message. On
+      // any other route it has to stand alone, which costs that route a full prompt of its own.
+      const last = mainRequests.last;
+      const effort = off ? { effort: "off" } : {};
+      const request = last !== undefined && sameRoute(route, last)
+        ? sharedPrefixRequest(last, currentAnswer, effort)
+        : standaloneRequest(route, lastUser, currentAnswer.slice(-800), effort);
       let text = "";
-      const excerpt = currentAnswer.slice(-800);
-      const prompt = createUserMessage({
-        content: [
-          {
-            type: "text",
-            text: `Suggest the user's most likely next message, max 8 words, same language as the user. Reply with the message only.\n\nLast user prompt: ${lastUser}\nLast answer (excerpt): ${excerpt}`,
-          },
-        ],
-        source: { kind: "plugin", plugin: "kumo-suggest" },
-      });
-      for await (const chunk of llm.stream({
-        provider: route.provider,
-        model: route.model,
-        messages: [prompt],
-        maxTokens: 24,
-        ...(off ? { reasoningEffort: "off" } : {}),
-        signal: controller.signal,
-      })) {
+      for await (const chunk of llm.stream({ ...request, signal: controller.signal })) {
         if (controller.signal.aborted) return;
         if (chunk.type === "text-delta" && chunk.text !== undefined) text += chunk.text;
       }
@@ -666,6 +670,7 @@ export function attachTui(
     closeLive();
     for (const comp of tools.values()) comp.cancel();
     ui.requestRender();
+    offRequest();
     offStream();
     offSession();
   };

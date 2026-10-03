@@ -11,7 +11,7 @@ export interface DshContext {
   plugin?(plugin: unknown, config?: unknown): unknown;
   provide(name: string, value: unknown): void;
   inject(services: string[], callback: (ctx: any) => void): void;
-  on(event: string, listener: (...args: any[]) => any): () => void;
+  on(event: string, listener: (...args: any[]) => any, options?: boolean | { global?: boolean; prepend?: boolean }): () => void;
   logger?: {
     error(...args: unknown[]): void;
     warn(...args: unknown[]): void;

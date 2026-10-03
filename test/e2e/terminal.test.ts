@@ -640,7 +640,7 @@ test("lean catalog: a background sub-agent is a plain job the model can read, no
   });
 });
 
-test("cache: the main requests only append, and the one request beside them is the known suggestion", async () => {
+test("cache: the main requests only append, and the suggestion is the end of the conversation", async () => {
   await scenario("cache-audit", [textScript("CA_ONE"), textScript("CA_TWO"), textScript("CA_THREE")], async (h) => {
     for (const [i, word] of ["CA_ONE", "CA_TWO", "CA_THREE"].entries()) {
       await h.prompt(`question ${String(i + 1)}`);
@@ -665,15 +665,20 @@ test("cache: the main requests only append, and the one request beside them is t
       expect(history(mains[i]!).length).toBeGreaterThan(before.length);
     }
 
-    // The only other request kumo sends is the next-message suggestion: one per turn, a single
-    // short message with no system prompt and no tools. It starts differently from the
-    // conversation, which is why it is audited here: a server with one slot would not keep the
-    // conversation's cache across it. A new kind of request must show up as a failure.
+    // The only other request kumo sends is the next-message suggestion: at most one per turn. It is
+    // the end of the conversation, not a request of its own: the same system prompt and tools, a
+    // main request's messages untouched, and two more (the answer, then the ask). A server that
+    // caches the start of a request answers it from the cache the conversation already built.
+    // A request of any other shape must show up as a failure.
+    expect(sides.length).toBeGreaterThan(0);
     expect(sides.length).toBeLessThanOrEqual(mains.length);
     for (const side of sides) {
-      expect(side.messages).toHaveLength(1);
-      expect(JSON.stringify(side.messages)).toContain("Suggest the user's most likely next message");
-      expect(side.tools ?? []).toHaveLength(0);
+      expect(JSON.stringify(side.messages.at(-1))).toContain("Suggest the user's most likely next message");
+      const parent = mains.find((m) => side.messages.length === m.messages.length + 2
+        && m.messages.every((msg, k) => JSON.stringify(side.messages[k]) === JSON.stringify(msg)));
+      expect(parent, "the suggestion starts with one main request, message for message").toBeDefined();
+      expect(system(side)).toBe(system(parent!));
+      expect(JSON.stringify(side.tools)).toBe(JSON.stringify(parent!.tools));
     }
   });
 });

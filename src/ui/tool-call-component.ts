@@ -17,6 +17,11 @@ const MAX_OUTPUT_LINES = 5;
 /** Lines of a multi-line command kept on screen while the call is still being written. */
 const MAX_PENDING_COMMAND_ROWS = 4;
 
+/** Lines of a file being written that are shown as they arrive; past them only a counter moves. */
+const PREVIEW_ROWS = 10;
+/** Which argument carries the text a tool is writing. */
+const WRITTEN_TEXT_KEY: Record<string, string> = { write: "content", edit: "new_string" };
+
 function padCells(text: string, width: number): string {
   const w = stringWidth(text);
   if (w >= width) return text;
@@ -137,8 +142,44 @@ export class ToolCallComponent implements ChatToolCall {
    * being written, word by word, instead of a bare ellipsis until it is whole.
    */
   #partialArgs(): Record<string, unknown> | undefined {
-    const parsed = parsePartialJson(this.#rawArgs);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
+    // Read three times per frame (the summary, the command, the preview) and a file
+    // being written can be large: parse once per length of text received.
+    if (this.#parsedAt !== this.#rawArgs.length) {
+      const parsed = parsePartialJson(this.#rawArgs);
+      this.#parsed = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
+      this.#parsedAt = this.#rawArgs.length;
+    }
+    return this.#parsed;
+  }
+  #parsed: Record<string, unknown> | undefined;
+  #parsedAt = -1;
+
+  /**
+   * The text of a file being written, as it arrives: its first lines are shown, numbered,
+   * and after them only a count of lines and bytes that keeps moving. Watching a hundred
+   * lines scroll by is noise; watching a number climb is proof that it is working.
+   */
+  #writtenPreview(width: number): string[] {
+    const key = WRITTEN_TEXT_KEY[this.tool];
+    const text = key === undefined ? undefined : this.#partialArgs()?.[key];
+    if (typeof text !== "string" || text === "") return [];
+    const ascii = this.icons.think === "*";
+    const ellipsis = ascii ? "..." : "…";
+    const rows = text.split("\n");
+    // A trailing newline ends the last line rather than starting a blank one.
+    if (rows.at(-1) === "") rows.pop();
+    const count = rows.length;
+    const bar = ascii ? "|" : "│";
+    const out = rows.slice(0, PREVIEW_ROWS).map((row, i) => {
+      const gutter = `${String(i + 1).padStart(4)} ${bar} `;
+      return ansi.faint(gutter) + ansi.gray(clipCells(sanitize(row).replace(/\t/g, "  "), Math.max(1, width - gutter.length), ellipsis));
+    });
+    if (count > PREVIEW_ROWS) {
+      const bytes = Buffer.byteLength(text, "utf8");
+      const size = bytes < 1024 ? `${String(bytes)} B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
+      out.push(ansi.faint(clipCells(`     ${ellipsis} ${String(count)} lines ${ascii ? "-" : "·"} ${size}`, width, ellipsis)));
+    }
+    return out;
   }
 
   summary(width = 60, link = false): string {
@@ -181,7 +222,7 @@ export class ToolCallComponent implements ChatToolCall {
       const head = stringWidth(plainLine) === stringWidth(`${fr} ${toolPad}${detail}`)
         ? `${ansi.cyan(fr)} ${ansi.text(toolPad)}${ansi.gray(detail)}`
         : plainLine;
-      return [head, ...this.#commandTail(width)];
+      return [head, ...this.#commandTail(width), ...this.#writtenPreview(width)];
     }
     const mark = this.#done.ok ? ansi.green(this.icons.ok) : ansi.red(this.icons.fail);
     const dur = formatDuration(this.#done.seconds) ?? (this.#done.ok ? "0.0s" : undefined);

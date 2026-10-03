@@ -574,6 +574,50 @@ test.skipIf(process.platform === "win32")("/tasks lists a real background comman
   }, false, "full");
 }, 60_000);
 
+/** A write call whose content arrives in `steps` fragments, `gapMs` apart, the way a model types a long file. */
+function slowWrite(file: string, lines: number, steps: number, gapMs: number): Script {
+  const content = Array.from({ length: lines }, (_, i) => `row ${String(i + 1)} of the file`).join("\n") + "\n";
+  const json = JSON.stringify({ file_path: file, content });
+  const size = Math.ceil(json.length / steps);
+  return {
+    finish: "tool_calls",
+    finishDelayMs: 200,
+    chunks: [
+      { delta: { tool_calls: [{ index: 0, id: "w1", type: "function", function: { name: "write", arguments: "" } }] }, delayMs: 100 },
+      ...Array.from({ length: steps }, (_, i) => ({
+        delta: { tool_calls: [{ index: 0, function: { arguments: json.slice(i * size, (i + 1) * size) } }] },
+        delayMs: gapMs,
+      })),
+    ],
+  };
+}
+
+test("a file being written shows its first ten lines, then only a line count that climbs", async () => {
+  await scenario("write-live", [slowWrite("big.txt", 150, 14, 250), textScript("WRITE_DONE")], async (h) => {
+    h.type("Write the file");
+    h.press("enter");
+    await h.waitFor("   1 \u2502 row 1 of the file");
+    const counts: number[] = [];
+    let numberedEleven = false;
+    const deadline = Date.now() + 8000;
+    while (!h.screen().join("\n").includes("WRITE_DONE") && Date.now() < deadline) {
+      const screen = h.screen().join("\n");
+      const m = /\u2026 (\d+) lines \u00b7/.exec(screen);
+      if (m) counts.push(Number(m[1]));
+      if (/ 11 \u2502 row 11/.test(screen)) numberedEleven = true;
+      await delay(60);
+    }
+    // The first ten lines were on screen, the eleventh was never printed as a line...
+    expect(numberedEleven).toBe(false);
+    // ...and a counter moved while the rest arrived: it was seen at several values, only going up.
+    const distinct = [...new Set(counts)];
+    expect(distinct.length).toBeGreaterThanOrEqual(3);
+    expect([...distinct].sort((a, b) => a - b)).toEqual(distinct);
+    expect(distinct.at(-1)!).toBeGreaterThan(distinct[0]! + 20);
+    await h.waitFor("WRITE_DONE");
+  }, false, "full");
+}, 60_000);
+
 test("/tasks with nothing running says so", async () => {
   await scenario("tasks-empty", [], async (h) => {
     h.type("/tasks");
@@ -864,10 +908,10 @@ test("questions: Down Enter picks second option (T28A)", async () => {
     await h.waitFor("enter select");
     // The call is in the chat while the form is up: the question and its options
     // are drawn, and it says it is waiting.
-    const waiting = h.screen().join("\n");
-    expect(waiting).toContain("ask_user");
-    expect(waiting).toContain("3 option(s): SQLite, Redis, Other");
-    expect(waiting).toContain("Waiting for user input");
+    // The call may be revealed at reading speed: wait for its end rather than sampling it.
+    await h.waitFor("3 option(s): SQLite, Redis, Other");
+    await h.waitFor("Waiting for user input");
+    expect(h.screen().join("\n")).toContain("ask_user");
     h.press("down");
     await delay(100);
     h.press("enter");

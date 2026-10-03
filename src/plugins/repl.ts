@@ -16,6 +16,8 @@ import kumoModel, { KUMO_MODEL_SERVICE } from "./model.js";
 import { KUMO_RENDER_SERVICE } from "./render.js";
 import { readAvailableSkills, type AvailableSkill } from "../setup/skills.js";
 import { recentSessions, replaySession, sessionChoice } from "./session-history.js";
+import { configFiles, openInEditor, resolveEditor } from "./config-edit.js";
+import { resolveDshHome } from "../update.js";
 import { formatVerification, runVerification } from "./verify.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -58,6 +60,7 @@ export const KUMO_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/ask", description: "Switch permissions directly" },
   { name: "/full", description: "Switch permissions directly" },
   { name: "/skills", description: "List available skills" },
+  { name: "/config", description: "Open settings.yaml and kumo.json in your editor" },
   { name: "/reload", description: "Re-read settings.yaml and the terminal background" },
   { name: "/mouse", description: "Turn mouse selection on or off (the wheel scrolls while off)" },
   { name: "/help", description: "Show commands and keys" },
@@ -598,6 +601,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/model  Switch provider and model (also f2)",
           "/provider  List the providers (also /provider all)",
           "/skills  List available skills (or /skills <name>)",
+          "/config  Open settings.yaml and kumo.json in your editor (/config path lists them)",
           "/reload  Re-read settings.yaml and the terminal background",
           "/help  Show commands and keys",
           "!cmd  Run a shell command yourself (output not sent to the model)",
@@ -619,6 +623,33 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           ? `Skill "${requested}" is not available. Run /skills to see the list.`
           : formatAvailableSkills([selected]));
       }
+      return;
+    }
+    if (cmd === "/config") {
+      const home = resolveDshHome();
+      const files = configFiles(home);
+      if (files.length === 0) {
+        reply(`No settings yet in ${home}. Run \`kumo setup\` first.`);
+        return;
+      }
+      const list = files.map((f) => `  ${f}`).join("\n");
+      // A piped run has no desktop to open anything on, and `path` asks only for the names.
+      if (ui === undefined || clean.replace(/^\/config\s*/, "").trim() === "path") {
+        reply(`Config files:\n${list}`);
+        return;
+      }
+      const choice = resolveEditor(home);
+      if (choice === undefined) {
+        reply(`No graphical editor found. Set KUMO_EDITOR (for example KUMO_EDITOR=kate), or open:\n${list}`);
+        return;
+      }
+      const result = await openInEditor(choice, files);
+      if (!result.ok) {
+        reply(`Could not open ${result.editor}: ${result.error ?? "it did not start"}.\nSet KUMO_EDITOR to another editor, or open:\n${list}`);
+        return;
+      }
+      const names = files.map((f) => f.split(/[\\/]/).pop()).join(" and ");
+      reply(`Opened ${names} in ${result.editor}. Save, then /reload re-reads settings.yaml; kumo.json is read when kumo starts.`);
       return;
     }
     if (cmd === "/reload") {

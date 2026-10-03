@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -516,6 +516,40 @@ test("keys: ctrl+c clears typed text first, and quits only on an empty editor", 
     h.press("ctrlC");
     await h.until(() => h.exit !== undefined, 4900, "exit on the second press");
     expect(h.exit?.exitCode).toBe(0);
+  });
+});
+
+test.skipIf(process.platform === "win32")("/config opens settings.yaml and kumo.json in the editor the user chose", async () => {
+  await scenario("config-open", [], async (h) => {
+    // The editor is a script that records what it was asked to open: kumo.json says which.
+    const recorder = join(h.project, "fake-editor.sh");
+    const record = join(h.project, "opened.txt");
+    writeFileSync(recorder, `#!/bin/sh\nprintf '%s\\n' "$@" > '${record}'\n`);
+    chmodSync(recorder, 0o755);
+    const configPath = join(h.home, "kumo.json");
+    writeFileSync(configPath, JSON.stringify({ ...JSON.parse(readFileSync(configPath, "utf8")), editor: recorder }));
+
+    h.type("/config");
+    h.press("enter");
+    await h.waitFor("Opened settings.yaml and kumo.json in fake-editor.sh");
+    await h.until(() => existsSync(record), 3000, "the editor ran");
+    const opened = readFileSync(record, "utf8").trim().split("\n");
+    expect(opened).toEqual([join(h.home, "settings.yaml"), join(h.home, "kumo.json")]);
+    // The screen says what to do next, and kumo is still running.
+    expect(h.screen().join("\n")).toContain("/reload");
+    expect(h.exit).toBeUndefined();
+  });
+});
+
+test("/config path lists the files without opening anything", async () => {
+  await scenario("config-path", [], async (h) => {
+    h.type("/config path");
+    h.press("enter");
+    await h.waitFor("Config files:");
+    const screen = h.screen().join("\n");
+    expect(screen).toContain("settings.yaml");
+    expect(screen).toContain("kumo.json");
+    expect(screen).not.toContain(".env");
   });
 });
 

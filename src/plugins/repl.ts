@@ -17,6 +17,7 @@ import { KUMO_RENDER_SERVICE } from "./render.js";
 import { readAvailableSkills, type AvailableSkill } from "../setup/skills.js";
 import { recentSessions, replaySession, sessionChoice } from "./session-history.js";
 import { configFiles, openInEditor, resolveEditor } from "./config-edit.js";
+import { formatTasks, listTasks, stopTask, type JobsLike, type SubagentsLike } from "./tasks.js";
 import { resolveDshHome } from "../update.js";
 import { formatVerification, runVerification } from "./verify.js";
 import { readFileSync } from "node:fs";
@@ -61,6 +62,7 @@ export const KUMO_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/full", description: "Switch permissions directly" },
   { name: "/skills", description: "List available skills" },
   { name: "/config", description: "Open settings.yaml and kumo.json in your editor" },
+  { name: "/tasks", description: "List background tasks (commands and sub-agents); /tasks kill <id> stops one" },
   { name: "/reload", description: "Re-read settings.yaml and the terminal background" },
   { name: "/mouse", description: "Turn mouse selection on or off (the wheel scrolls while off)" },
   { name: "/help", description: "Show commands and keys" },
@@ -602,6 +604,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/provider  List the providers (also /provider all)",
           "/skills  List available skills (or /skills <name>)",
           "/config  Open settings.yaml and kumo.json in your editor (/config path lists them)",
+          "/tasks  List background tasks; /tasks kill <id> stops one",
           "/reload  Re-read settings.yaml and the terminal background",
           "/help  Show commands and keys",
           "!cmd  Run a shell command yourself (output not sent to the model)",
@@ -623,6 +626,21 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           ? `Skill "${requested}" is not available. Run /skills to see the list.`
           : formatAvailableSkills([selected]));
       }
+      return;
+    }
+    if (cmd === "/tasks") {
+      const services = { jobs: ctx.get("jobs") as JobsLike | undefined, subagents: ctx.get("subagents") as SubagentsLike | undefined };
+      if (services.jobs === undefined && services.subagents === undefined) {
+        reply("Background tasks are not available in this build.");
+        return;
+      }
+      const sessionId = (agent as { session?: { id?: string } } | undefined)?.session?.id;
+      const [verb, ...rest] = clean.replace(/^\/tasks\s*/, "").trim().split(/\s+/);
+      if (verb === "kill" || verb === "stop") {
+        reply(await stopTask(services, agent, sessionId, rest.join(" ").trim()));
+        return;
+      }
+      reply(formatTasks(await listTasks(services, agent, sessionId), Date.now(), process.stdout.columns ?? 100));
       return;
     }
     if (cmd === "/config") {

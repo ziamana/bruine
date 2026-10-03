@@ -541,6 +541,47 @@ test.skipIf(process.platform === "win32")("/config opens settings.yaml and kumo.
   });
 });
 
+test.skipIf(process.platform === "win32")("/tasks lists a real background command and stops it", async () => {
+  await scenario("tasks-bg", [
+    toolScript("bash", { command: "sleep 120", description: "wait in the background", run_in_background: true }, "bg1"),
+    textScript("BG_STARTED"),
+  ], async (h) => {
+    await h.prompt("Run it in the background");
+    await h.waitFor("BG_STARTED");
+
+    h.type("/tasks");
+    h.press("enter");
+    await h.waitFor("Background tasks (1 running)");
+    const listed = h.screen().join("\n");
+    expect(listed).toMatch(/bash-1 +running .*sleep 120/);
+    expect(listed).toContain("/tasks kill <id> stops one.");
+
+    h.type("/tasks kill bash-1");
+    h.press("enter");
+    await h.waitFor("Stopping bash-1.");
+
+    // The job settles as killed, and the list says so rather than still running.
+    let killed = false;
+    for (let attempt = 0; attempt < 10 && !killed; attempt += 1) {
+      await delay(600);
+      h.type("/tasks");
+      h.press("enter");
+      await delay(400);
+      killed = /bash-1 +killed/.test(h.screen().join("\n"));
+    }
+    expect(killed, h.screen().join("\n")).toBe(true);
+    expect(h.screen().join("\n")).toContain("Background tasks (0 running)");
+  }, false, "full");
+}, 60_000);
+
+test("/tasks with nothing running says so", async () => {
+  await scenario("tasks-empty", [], async (h) => {
+    h.type("/tasks");
+    h.press("enter");
+    await h.waitFor("No background tasks.");
+  });
+});
+
 test("/config path lists the files without opening anything", async () => {
   await scenario("config-path", [], async (h) => {
     h.type("/config path");

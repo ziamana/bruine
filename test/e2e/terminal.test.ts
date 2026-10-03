@@ -745,6 +745,61 @@ test("a finished turn leaves a ring on the prompt's rule for a second, then it i
   }
 });
 
+test("the logo comes in with an effect in the banner while the prompt is already there, then it is the plain mark", async () => {
+  const { LOGO } = await import("../../src/ui/logo-motion.js");
+  const h = await Harness.start([textScript("INTRO_DONE")], "ask", false, { env: { BRUINE_INTRO: "decrypt" } });
+  try {
+    const mark = (): string[] => {
+      const lines = h.screen();
+      const at = lines.findIndex((l) => /\bv\d+\.\d+\.\d+/.test(l) && /[█▀▄░▒▓╷│╎·]/.test(l.slice(0, 30)));
+      return at < 0 ? [] : lines.slice(at, at + 3).map((l) => l.trim().slice(0, LOGO[0].length));
+    };
+    const plain = [...LOGO].map((l) => l.trimEnd());
+    const frames = new Set<string>();
+    let promptDuring = false;
+    const until = Date.now() + 2500;
+    while (Date.now() < until) {
+      await h.flush();
+      const rows = mark();
+      if (rows.length === 3) frames.add(rows.join("|"));
+      // The prompt's frame is on the screen while the logo is still arriving.
+      if (rows.length === 3 && rows.map((r) => r.trimEnd()).join("|") !== plain.join("|") && h.screen().some((l) => /^[╭┌+]/.test(l.trim()) && /─|-/.test(l))) promptDuring = true;
+      await delay(40);
+    }
+    expect(frames.size, h.screen().join("\n")).toBeGreaterThanOrEqual(4);
+    expect(promptDuring, h.screen().join("\n")).toBe(true);
+    // Once it is over, the mark is the plain one, exactly.
+    await h.waitStable(300, 4000);
+    expect(mark().map((r) => r.trimEnd())).toEqual(plain);
+    // And the prompt works as ever.
+    await h.prompt("go");
+    await h.waitFor("INTRO_DONE");
+    expect(h.server.errors).toEqual([]);
+  } finally {
+    await h.dump("intro-failure");
+    await h.close();
+  }
+});
+
+test("a key in the middle of the entrance stops it and is not lost", async () => {
+  const { LOGO } = await import("../../src/ui/logo-motion.js");
+  const h = await Harness.start([textScript("KEY_OK")], "ask", false, { env: { BRUINE_INTRO: "spotlights" } });
+  try {
+    await h.waitFor("e2e-model", 30_000);
+    await delay(400);
+    h.type("hello");
+    await h.waitFor("hello");
+    await h.waitStable(250, 2000);
+    const lines = h.screen();
+    const at = lines.findIndex((l) => /\bv\d+\.\d+\.\d+/.test(l));
+    expect(lines.slice(at, at + 3).map((l) => l.trim().slice(0, LOGO[0].length).trimEnd())).toEqual([...LOGO].map((l) => l.trimEnd()));
+    expect(h.server.errors).toEqual([]);
+  } finally {
+    await h.dump("intro-key-failure");
+    await h.close();
+  }
+});
+
 test("/tasks with nothing running says so", async () => {
   await scenario("tasks-empty", [], async (h) => {
     h.type("/tasks");

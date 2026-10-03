@@ -134,7 +134,7 @@ export class Harness {
       for (const [key, value] of Object.entries(process.env)) {
         if (value !== undefined && !/(API_KEY|TOKEN|SECRET|^DSH_|^BRUINE_|^KUMO_)/i.test(key)) env[key] = value;
       }
-      Object.assign(env, { BRUINE_HOME: home, DSH_HOME: home, DSH_TELEMETRY_DISABLED: "1", BRUINE_LOCAL_API_KEY: "e2e", BRUINE_ASCII: ascii ? "1" : "0", BRUINE_NO_UPDATE_CHECK: "1", BRUINE_NO_RIPPLE: "1", BRUINE_COLOR: "basic", TERM: "xterm-256color", LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" });
+      Object.assign(env, { BRUINE_HOME: home, DSH_HOME: home, DSH_TELEMETRY_DISABLED: "1", BRUINE_LOCAL_API_KEY: "e2e", BRUINE_ASCII: ascii ? "1" : "0", BRUINE_NO_UPDATE_CHECK: "1", BRUINE_NO_RIPPLE: "1", BRUINE_INTRO: "off", BRUINE_COLOR: "basic", TERM: "xterm-256color", LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" });
       Object.assign(env, opts.env ?? {});
       ensureSpawnHelper();
       h.child = pty.spawn(process.execPath, [join(root, "dist", "bin.js")], { name: "xterm-256color", cols: 100, rows: 30, cwd: project, env });

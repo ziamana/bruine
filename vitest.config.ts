@@ -15,6 +15,6 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "test/e2e/**"],
     // Unit tests assert the 16-color codes; palette.test.ts covers 256 and 24-bit. The ring a
     // finished turn leaves keeps repainting for a second, so it is off unless a test asks.
-    env: { BRUINE_COLOR: "basic", BRUINE_NO_RIPPLE: "1" },
+    env: { BRUINE_COLOR: "basic", BRUINE_NO_RIPPLE: "1", BRUINE_INTRO: "off" },
   },
 });

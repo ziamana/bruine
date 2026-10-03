@@ -36,6 +36,8 @@ import type { ReasoningComponent } from "./reasoning-component.js";
 import { PromptFrame } from "./prompt-frame.js";
 import { withEscapeFilter } from "./escape-filter.js";
 import { besideLogo, LOGO_BESIDE_GAP, LOGO_MIN_WIDTH, logoRows, paintResourceLine, planResourceLine } from "./header.js";
+import { terminalMotionAllowed } from "./logo-motion.js";
+import { IntroPlayer, introSetting, planIntro, readLastIntro, rememberIntro } from "./intro.js";
 import { TurnActivity } from "./turn-activity.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
 import { createAutocomplete } from "./file-complete.js";
@@ -394,6 +396,8 @@ export class BruineUi {
   /** T29: the images the `[Image N]` chips in the editor stand for. */
   readonly pendingImages = new PendingImages();
   #animation: ReturnType<typeof setInterval> | undefined;
+  /** The logo's entrance in the banner, while it plays. */
+  #intro: IntroPlayer | undefined;
   #closed = false;
   #noticeTimer: ReturnType<typeof setTimeout> | undefined;
   #persistentNotice: Component | undefined;
@@ -558,6 +562,8 @@ export class BruineUi {
 
   /** Everything that is a key: the mode switches, the editor, the slash commands. */
   #onKey(data: string, handlers: BruineUiHandlers): ReturnType<TuiInputListener> {
+    // A key is the user taking over: the logo is whole at once, and the key goes on to do its work.
+    this.#intro?.skip();
     // T60: "the user typed something" is a question about the encoding, and
     // under the kitty protocol a letter is an escape sequence. Reading it as
     // bytes meant a background suggestion was never dismissed by typing.
@@ -776,6 +782,31 @@ export class BruineUi {
     // and a form both keep the terminal's.
     this.mouse.start();
     void this.probeBackdrop();
+    this.#startIntro();
+  }
+
+  /**
+   * The logo comes in with an effect, in the banner, while the prompt is already usable.
+   * Only where motion is allowed and the banner has room for the mark; `BRUINE_INTRO=off`
+   * (or `"intro": "off"` in the config) keeps it still, and `BRUINE_INTRO=<effect>` pins one.
+   */
+  #startIntro(): void {
+    if (this.#closed || this.#intro !== undefined) return;
+    if (!terminalMotionAllowed() || this.icons.think === "*") return;
+    if (this.terminal.columns - HEADER_MARGIN * 2 < LOGO_MIN_WIDTH) return;
+    const home = runtimeHome();
+    const setting = introSetting(home);
+    if (setting === "off" || setting === "none" || setting === "0") return;
+    const plan = planIntro({ pick: setting, last: readLastIntro(home) });
+    const first = plan.steps[0]?.effect?.id;
+    if (first !== undefined) rememberIntro(home, first);
+    this.#intro = new IntroPlayer(plan, () => this.requestRender());
+    this.#intro.start();
+  }
+
+  /** What the banner's mark is drawing: an entrance in progress, or the mark itself. */
+  get introPlaying(): boolean {
+    return this.#intro?.active === true;
   }
 
   /**
@@ -1062,7 +1093,7 @@ export class BruineUi {
         .join(this.#ink("faint")(` ${sep} `));
     const rows: string[] = [];
     if (!ascii && width >= LOGO_MIN_WIDTH) {
-      const [top, middle, bottom] = logoRows();
+      const [top, middle, bottom] = this.#intro?.rows() ?? logoRows();
       const version = this.#ink("text")(`v${this.version}`);
       if (besideLogo(width) >= helpLineCells(sep)) {
         rows.push(`${top}${LOGO_BESIDE_GAP}${version}${this.#hostCell(sep)}`, `${middle}${LOGO_BESIDE_GAP}${keys(besideLogo(width))}`, bottom);
@@ -1526,6 +1557,7 @@ export class BruineUi {
   /** Graceful shutdown: drain pending key-release bytes, then stop. */
   async shutdown(): Promise<void> {
     this.#closed = true;
+    this.#intro?.skip();
     clearInterval(this.#animation);
     this.#animation = undefined;
     // T56: give the mouse back, whatever was in flight.

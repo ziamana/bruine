@@ -1,6 +1,6 @@
 # Third-party notices
 
-Kumo ships a few skills written by other people, copied unchanged from their public
+Bruine ships a few skills written by other people, copied unchanged from their public
 repositories with their license files. Each one keeps its own `LICENSE` (and `NOTICE.md`
 where its author provides one) inside `skills/<name>/`. They are offered in the setup, and
 a user can leave any of them out.
@@ -16,8 +16,8 @@ a user can leave any of them out.
 `impeccable` itself carries a notice (`skills/impeccable/NOTICE.md`) for reference files it
 derives from `ehmo/platform-design-skills` (MIT).
 
-The kumo skills in the same folder (`code-review`, `git-workflow`, `systematic-debugging`,
-`write-tests`) are kumo's own and fall under kumo's license.
+The Bruine skills in the same folder (`code-review`, `git-workflow`, `systematic-debugging`,
+`write-tests`) are Bruine's own and fall under Bruine's license.
 
 `youtube-transcript` installs its npm dependency (`youtube-transcript-plus`, MIT) the first
 time it is used; nothing of it is shipped. `impeccable`'s launcher may download its helper

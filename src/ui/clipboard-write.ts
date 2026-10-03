@@ -25,6 +25,18 @@ export interface ClipboardWriter {
   args: string[];
   /** What to tell the user when this is the tool that is missing. */
   install: string;
+  /**
+   * How the text is written to the tool. `utf16le-bom` is for Windows' `clip`, which reads its
+   * input in the console's code page unless it starts with a UTF-16 byte order mark: sent as
+   * UTF-8, an accent or a `›` arrives on the clipboard as two or three wrong characters.
+   */
+  encoding?: "utf8" | "utf16le-bom";
+}
+
+/** The bytes a writer receives for `text`. */
+export function writerInput(writer: ClipboardWriter, text: string): string | Buffer {
+  if (writer.encoding !== "utf16le-bom") return text;
+  return Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, "utf16le")]);
 }
 
 /** How long a writer gets to exit before it is assumed to have forked. */
@@ -58,7 +70,7 @@ export function clipboardWriters(
     return [{ cmd: "pbcopy", args: [], install: "macOS ships pbcopy" }];
   }
   if (os === "win32") {
-    return [{ cmd: "clip", args: [], install: "Windows ships clip" }];
+    return [{ cmd: "clip", args: [], install: "Windows ships clip", encoding: "utf16le-bom" }];
   }
   if (env["WAYLAND_DISPLAY"] !== undefined) {
     return [{ cmd: "wl-copy", args: [], install: installHint("wl-copy") }];
@@ -71,7 +83,7 @@ export function clipboardWriters(
 
 const runWriter: RunWriter = (writer, text) =>
   runTool(writer.cmd, writer.args, {
-    input: text,
+    input: writerInput(writer, text),
     // The tool forks so it can go on owning the selection; a writer still alive
     // at the timeout did its job.
     daemon: true,

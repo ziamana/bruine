@@ -586,7 +586,9 @@ export class BruineUi {
     if (data.includes("\x1b[200~") || typedText(data) !== "") {
       handlers.onUserActivity?.();
     }
-    if (matchesKey(data, "ctrl+v") && !this.#confirming) {
+    // alt+v too: Windows Terminal keeps ctrl+v for its own text paste, and with only an image on
+    // the clipboard it sends nothing at all, so ctrl+v never reaches bruine there.
+    if ((matchesKey(data, "ctrl+v") || matchesKey(data, "alt+v")) && !this.#confirming) {
       void this.pasteClipboardImage();
       return { consume: true };
     }

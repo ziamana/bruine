@@ -265,7 +265,8 @@ describe("a plugin that already said it is not echoed again", () => {
     } finally {
       if (saved === undefined) delete process.env.DSH_HOME;
       else process.env.DSH_HOME = saved;
-      await rm(home, { recursive: true, force: true });
+      // The effort is remembered in bruine.json in the background: retry while that write lands.
+      await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 20 });
     }
   });
 });

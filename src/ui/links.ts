@@ -62,7 +62,8 @@ export function linkToolSummary(summary: string, rawArgs: string): string {
   if (summary.includes("…") || summary.includes("...")) return summary;
   if (!summary.includes(absolute.replace(/^\.\//, "")) && summary !== absolute) {
     // The summary was made relative to the cwd, so match on the basename too.
-    if (!summary.endsWith(absolute.split("/").pop() ?? absolute)) return summary;
+    // Either separator: a Windows path arrives with backslashes.
+    if (!summary.endsWith(absolute.split(/[\\/]/).pop() ?? absolute)) return summary;
   }
   return fileLink(summary, absolute);
 }

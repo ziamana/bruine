@@ -489,6 +489,15 @@ describe("pasting an image into the editor", () => {
     await ui.shutdown();
   });
 
+  test("alt+v does the same, for Windows Terminal, which keeps ctrl+v for itself", async () => {
+    const { ui, terminal } = await makeUi();
+    const paste = vi.spyOn(ui, "pasteClipboardImage").mockResolvedValue(true);
+    terminal.onInput?.("\x1bv");
+    expect(paste).toHaveBeenCalledTimes(1);
+    expect(ui.editor.getText()).toBe("");
+    await ui.shutdown();
+  });
+
   test("a dropped path arrives as one bracketed paste and becomes a chip", async () => {
     const dir = mkdtempSync(join(tmpdir(), "bruine-t29-brack-"));
     const file = join(dir, "dropped.png");

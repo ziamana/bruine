@@ -34,18 +34,23 @@ export const ASCII_ICONS: BruineIcons = {
 };
 
 const UTF8_RE = /utf-?8/i;
+/** TERM_PROGRAM values of terminals that always render UTF-8. */
+const UNICODE_TERMINALS: ReadonlySet<string> = new Set(["vscode", "WezTerm", "ghostty", "iTerm.app", "Apple_Terminal", "Hyper", "Tabby"]);
 
 export function iconsFor(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
 ): BruineIcons {
   if (appEnv("ASCII", env) === "1") return ASCII_ICONS;
-  const utf8 = UTF8_RE.test(`${env.LC_ALL ?? ""}${env.LC_CTYPE ?? ""}${env.LANG ?? ""}`);
-  if (utf8) return UNICODE_ICONS;
-  if (platform === "win32") {
-    // Windows Terminal exports WT_SESSION and is UTF-8 capable.
-    return env.WT_SESSION !== undefined ? UNICODE_ICONS : ASCII_ICONS;
-  }
+  const locale = `${env.LC_ALL ?? ""}${env.LC_CTYPE ?? ""}${env.LANG ?? ""}`;
+  if (UTF8_RE.test(locale)) return UNICODE_ICONS;
+  // Terminals that are UTF-8 whatever the locale says: Windows Terminal, VS Code's, WezTerm.
+  if (env.WT_SESSION !== undefined || UNICODE_TERMINALS.has(env.TERM_PROGRAM ?? "")) return UNICODE_ICONS;
+  // macOS terminals are UTF-8 out of the box; a shell that never exported LANG (iTerm2 with
+  // "Set locale variables automatically" off) is still one. Only an explicit non-UTF-8 locale
+  // (LANG=C) says otherwise.
+  if (platform === "darwin") return locale === "" ? UNICODE_ICONS : ASCII_ICONS;
+  // The classic Windows console's fonts have no braille or box-drawing cells to count on.
   return ASCII_ICONS;
 }
 

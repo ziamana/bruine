@@ -115,8 +115,10 @@ export function openInEditor(
   platform: NodeJS.Platform = process.platform,
 ): Promise<OpenResult> {
   const editor = baseName(choice.command);
-  // xdg-open takes one file; every other opener takes them all.
-  const batches = choice.command === "xdg-open" ? files.map((f) => [f]) : [[...files]];
+  // xdg-open and Notepad take one file each (Notepad silently ignores the rest); every other
+  // opener takes them all.
+  const single = choice.command === "xdg-open" || baseName(choice.command).toLowerCase().replace(/\.exe$/, "") === "notepad";
+  const batches = single ? files.map((f) => [f]) : [[...files]];
   return new Promise((resolve) => {
     let started = 0;
     const done = (result: OpenResult): void => resolve(result);

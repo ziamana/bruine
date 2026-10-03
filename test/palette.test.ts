@@ -35,6 +35,14 @@ describe("Nuage palette", () => {
     expect(detectColorDepth({ TERM: "xterm" })).toBe("basic");
     expect(detectColorDepth({ COLORTERM: "truecolor", BRUINE_ASCII: "1" })).toBe("basic");
   });
+  test("the classic Windows console: 24-bit since Windows 10 build 14931, 256 before, 16 on old Windows", () => {
+    expect(detectColorDepth({}, "win32", "10.0.19045")).toBe("truecolor");
+    expect(detectColorDepth({}, "win32", "10.0.10586")).toBe("256");
+    expect(detectColorDepth({}, "win32", "6.1.7601")).toBe("basic");
+    // A TERM set by a POSIX layer (Git Bash, MSYS) is read as it is.
+    expect(detectColorDepth({ TERM: "xterm" }, "win32", "10.0.19045")).toBe("basic");
+    expect(detectColorDepth({}, "linux", "6.1.0")).toBe("basic");
+  });
   test("codes per depth", () => {
     expect(fgCode("sky", "truecolor")).toBe("\x1b[38;2;125;207;255m");
     expect(fgCode("sky", "basic")).toBe("\x1b[36m");

@@ -268,7 +268,11 @@ describe("BruineUi persistent update notice (T30)", () => {
       new FakeTerminal(),
       UNICODE_ICONS,
     );
-    await new Promise((r) => setTimeout(r, 20)); // the notice check is async
+    // The notice check is async (it reads the cache file): wait for it to settle rather than
+    // for a fixed 20 ms, which a busy machine (or a CI runner) does not always honour.
+    for (let i = 0; i < 50 && !ui.tui.render(80).join("\n").includes(" is available"); i += 1) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
     return ui;
   }
 

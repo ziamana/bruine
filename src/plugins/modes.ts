@@ -214,7 +214,7 @@ export class Modes implements BruineModesService {
 }
 
 function execSummary(toolName: string, args: Record<string, unknown>): string {
-  if (toolName === "bash") return String(args.command ?? args.cmd ?? "");
+  if (toolName === "bash" || toolName === "pwsh") return String(args.command ?? args.cmd ?? "");
   if (typeof args.path === "string") return args.path;
   if (typeof args.file_path === "string") return args.file_path;
   return JSON.stringify(args).slice(0, 160);

@@ -668,11 +668,12 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/tasks  List background tasks; /tasks kill <id> stops one",
           "/reload  Re-read settings.yaml and the terminal background",
           "/effect  Weather: bruine, pluie, foudre, auto (also on), off",
+          "/mcp  MCP servers and their tools; /mcp enable|disable <name> for the next session",
           "/help  Show commands and keys",
           "!cmd  Run a shell command yourself (output not sent to the model)",
           "@file  Attach a file (a list opens as you type)",
           "/exit  Quit bruine (also ctrl+d)",
-          `Esc interrupt, ctrl+c clear (quits when empty), ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, f2 next model, PageUp/PageDown read back (the input bar stays), ${TASKS_HELP}`,
+          `Esc interrupt, ctrl+c clear (quits when empty), ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, f2 next model, ctrl+v or alt+v paste an image (alt+v in Windows Terminal), ↑ on an empty box edit the last queued prompt, PageUp/PageDown read back (the input bar stays; shift+PageUp in macOS Terminal), ${TASKS_HELP}`,
         ].join("\n"),
       );
       return;

@@ -31,7 +31,7 @@ training), and the offer can end without notice, so keep another model in reach.
 | Plan mode | `Shift+Tab` to plan before it builds; the plan is a message, the tools never change |
 | `/model` and `/provider` | Switch model mid-session from the server's own live catalogue |
 | Skills | Reuses the skills you already wrote for Claude Code, OpenCode, pi or `~/.agents/skills` |
-| Images | `ctrl+v` pastes a screenshot straight to a vision model |
+| Images | `ctrl+v` (or `alt+v`, which Windows Terminal lets through) pastes a screenshot straight to a vision model |
 | Context and speed | A footer that shows context used, tok/s, prefill and cache hit rate |
 | Works on | Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal |
 | herdr | Works with herdr: shows up as `bruine` in `herdr agent list`. |
@@ -86,7 +86,7 @@ Inside a session, `/` opens the command palette: `/new`, `/resume`, `/verify`, `
 used recently. You can keep typing while bruine works: a prompt sent during a turn waits above the
 box and goes out, as its own turn, when the current one ends (`↑` on an empty box takes the last one
 back to edit; `escape` stops the turn and puts the queued prompts back in the box, unsent). `ctrl+t` shows the task list, `ctrl+o` expands tool output, `ctrl+e` cycles the
-reasoning effort, `ctrl+v` pastes an image.
+reasoning effort, `ctrl+v` pastes an image (`alt+v` in Windows Terminal, which keeps `ctrl+v` for its own paste).
 
 ## Environment
 
@@ -133,6 +133,7 @@ MIT. Everything that runs locally stays MIT.
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) - the design, the product constraints, and the
   dsh APIs bruine depends on
 - [`docs/tickets/`](./docs/tickets) - the work, one ticket at a time
+- [`docs/PLATFORMS.md`](./docs/PLATFORMS.md) - what was checked and fixed for Windows and macOS
 - [`bench/`](./bench) - the benchmark: a system-prompt change only ships when a number says it helps
 
 ## Chat weather

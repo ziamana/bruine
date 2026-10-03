@@ -23,7 +23,7 @@ export interface ToolResult {
 
 export interface RunToolOptions {
   /** Written to the tool's stdin, then closed. argv has limits; stdin does not. */
-  input?: string;
+  input?: string | Buffer;
   /** Tools that fork on purpose never exit inside the timeout, and that is fine. */
   daemon?: boolean;
   timeoutMs?: number;

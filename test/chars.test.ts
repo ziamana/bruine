@@ -31,6 +31,16 @@ describe("iconsFor (T14.5)", () => {
     expect(iconsFor({ WT_SESSION: "abc" }, "win32")).toBe(UNICODE_ICONS);
     expect(iconsFor({}, "win32")).toBe(ASCII_ICONS);
   });
+
+  test("VS Code's terminal on Windows is UTF-8 too", () => {
+    expect(iconsFor({ TERM_PROGRAM: "vscode" }, "win32")).toBe(UNICODE_ICONS);
+  });
+
+  test("macOS without any locale is still UTF-8; an explicit C locale is not", () => {
+    expect(iconsFor({}, "darwin")).toBe(UNICODE_ICONS);
+    expect(iconsFor({ TERM_PROGRAM: "Apple_Terminal", LANG: "C" }, "darwin")).toBe(UNICODE_ICONS);
+    expect(iconsFor({ LANG: "C" }, "darwin")).toBe(ASCII_ICONS);
+  });
 });
 
 describe("cross-platform source audit (T14.4)", () => {

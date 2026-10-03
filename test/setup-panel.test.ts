@@ -58,3 +58,67 @@ describe("CenteredPanel", () => {
     expect(panel.render(100)).toEqual(Array(5).fill("#".repeat(100)));
   });
 });
+
+describe("CenteredPanel rain in the margins", () => {
+  const plainText = (s: string): string => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
+  const rainy = (allowed: boolean, rows = 30) =>
+    new CenteredPanel(block(6), () => rows, { maxWidth: 60, fullscreen: () => false, rain: { allowed: () => allowed, time: () => 4000 } });
+  const DROPS = /[·╷│╎]/;
+
+  test("a wide terminal rains either side of the panel and the panel's own columns are untouched", () => {
+    const lines = rainy(true).render(120).map(plainText);
+    const panelRows = lines.filter((l) => l.includes("#"));
+    expect(panelRows).toHaveLength(6);
+    for (const row of panelRows) {
+      expect(row.slice(30, 90)).toBe("#".repeat(60));
+      expect(row.length).toBe(120);
+    }
+    // A drop is somewhere in the margins at some moment of the next few seconds.
+    let seen = "";
+    for (const time of [500, 1500, 2500, 3500, 4500, 6000]) {
+      const panel = new CenteredPanel(block(6), () => 30, { maxWidth: 60, fullscreen: () => false, rain: { allowed: () => true, time: () => time } });
+      seen += panel.render(120).map(plainText).filter((l) => l.includes("#")).map((r) => r.slice(0, 30) + r.slice(90)).join("");
+    }
+    expect(seen).toMatch(DROPS);
+  });
+
+  test("it also rains in the rows above and below a panel shorter than the console", () => {
+    const lines = rainy(true).render(120).map(plainText);
+    const above = lines.slice(0, lines.findIndex((l) => l.includes("#")));
+    const below = lines.slice(lines.length - 8);
+    expect(above.join("")).toMatch(DROPS);
+    expect(below.join("")).toMatch(DROPS);
+  });
+
+  test("it never rains over the panel's own text", () => {
+    for (const time of [0, 700, 1800, 3300, 9000]) {
+      const panel = new CenteredPanel(block(6), () => 30, { maxWidth: 60, fullscreen: () => false, rain: { allowed: () => true, time: () => time } });
+      const rows = panel.render(120).map(plainText).filter((l) => l.includes("#"));
+      expect(rows.every((r) => r.slice(30, 90) === "#".repeat(60))).toBe(true);
+    }
+  });
+
+  test("it moves with time", () => {
+    const at = (time: number): string => new CenteredPanel(block(6), () => 30, { maxWidth: 60, fullscreen: () => false, rain: { allowed: () => true, time: () => time } }).render(120).join("\n");
+    expect(at(1000)).not.toBe(at(1700));
+  });
+
+  test("with motion off the margins are plain space, as before", () => {
+    const lines = rainy(false).render(120).map(plainText);
+    expect(lines.join("")).not.toMatch(DROPS);
+    expect(lines.filter((l) => l !== "").every((l) => /^ {30}#{60}$/.test(l))).toBe(true);
+  });
+
+  test("a terminal with no room around the panel has no margins to rain in", () => {
+    const panel = new CenteredPanel(block(20), () => 20, { maxWidth: 100, fullscreen: () => false, rain: { allowed: () => true, time: () => 3000 } });
+    const lines = panel.render(80).map(plainText);
+    expect(panel.hasMargins).toBe(false);
+    expect(lines).toEqual(Array(20).fill("#".repeat(80)));
+  });
+
+  test("hasMargins says when there is room to rain in", () => {
+    const panel = rainy(true);
+    panel.render(120);
+    expect(panel.hasMargins).toBe(true);
+  });
+});

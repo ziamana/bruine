@@ -2,6 +2,7 @@ import { stripTerminalSequences, truncateToWidth, visibleWidth, type Component }
 import { kumoIcons, isAscii, asciiText, type KumoIcons } from "../render/chars.js";
 import { paint } from "./palette.js";
 import { WorkingComponent } from "./working.js";
+import { rippleFrame } from "./rain.js";
 import { Box } from "./box.js";
 
 import { TurnActivity } from "./turn-activity.js";
@@ -28,7 +29,17 @@ export class PromptFrame implements Component {
   }
   get focused(): boolean { return this.editor.focused; }
   set focused(value: boolean) { this.editor.focused = value; this.updateBorder(); }
-  get active(): boolean { return this.activity.active && this.#working.active; }
+  get active(): boolean { return (this.activity.active && this.#working.active) || this.#ripple() !== undefined; }
+  /**
+   * The ring a finished turn leaves on the rule, for a second: a drop landed. It needs the same
+   * motion the spinner needs (`KUMO_NO_RIPPLE=1` turns this one off alone), and it keeps the
+   * repaint loop alive only while it is showing.
+   */
+  #ripple(): string | undefined {
+    if (this.activity.active || !this.#working.active || process.env.KUMO_NO_RIPPLE === "1") return undefined;
+    const since = this.activity.sinceStop;
+    return since === undefined ? undefined : rippleFrame(since, isAscii(this.icons));
+  }
   private updateBorder(): void {
     const role = this.activity.active || this.editor.focused ? "lavender" : "faint";
     if (role === this.#role) return;
@@ -40,27 +51,28 @@ export class PromptFrame implements Component {
     const framed = width >= 12;
     const rows = this.content.render(framed ? width - 4 : width);
     if (!rows.length) return rows;
-    if (!framed) return this.activity.active && width >= 7
-      ? [this.activityRule(rows[0]!, width, ascii), ...rows.slice(1)] : rows;
+    const ripple = this.#ripple();
+    if (!framed) return (this.activity.active || ripple !== undefined) && width >= 7
+      ? [this.activityRule(rows[0]!, width, ascii, ripple), ...rows.slice(1)] : rows;
     const bottom = this.editor.frameBottomRow ?? rows.length - 1;
     if (bottom < 1) return rows;
     const ink = (text: string): string => paint(this.#role ?? "faint", text);
     const box = new Box(width, { ascii, ink });
     const { tl, tr, bl, br, h } = box.glyphs;
-    const top = this.activity.active
-      ? `${ink(tl)}${this.activityRule(rows[0]!, width - 2, ascii)}${ink(tr)}`
+    const top = this.activity.active || ripple !== undefined
+      ? `${ink(tl)}${this.activityRule(rows[0]!, width - 2, ascii, ripple)}${ink(tr)}`
       : `${ink(tl + h)}${rows[0]}${ink(h + tr)}`;
     const lower = `${ink(bl + h)}${rows[bottom]}${ink(h + br)}`;
     return [top, ...rows.slice(1, bottom).map(row => box.row(row)), lower,
       ...rows.slice(bottom + 1).map(row => `  ${row}`)];
   }
-  private activityRule(original: string, width: number, ascii: boolean): string {
+  private activityRule(original: string, width: number, ascii: boolean, ripple?: string): string {
     const rule = ascii ? "-" : "─";
     const scroll = /[↑^] \d+ more/.exec(stripTerminalSequences(original))?.[0];
     const budget = Math.max(1, width - 6);
     const suffix = scroll ? truncateToWidth(`  ${scroll}`, Math.max(0, budget - 4), ascii ? "..." : "…") : "";
     const room = Math.max(1, budget - visibleWidth(suffix));
-    const label = truncateToWidth(this.#working.label(), room, ascii ? "..." : "…");
+    const label = truncateToWidth(ripple !== undefined ? paint("lavender", ripple) : this.#working.label(), room, ascii ? "..." : "…");
     const caption = label + paint("muted", suffix);
     const rest = Math.max(0, width - visibleWidth(caption) - 4);
     return `${paint("lavender", rule.repeat(2))} ${caption} ${paint("lavender", rule.repeat(rest))}`;

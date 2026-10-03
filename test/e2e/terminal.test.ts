@@ -717,6 +717,34 @@ test("cache: the main requests only append, and the suggestion is the end of the
   });
 });
 
+test("a finished turn leaves a ring on the prompt's rule for a second, then it is plain", async () => {
+  const h = await Harness.start([textScript("RIPPLE_DONE")], "ask", false, { env: { KUMO_NO_RIPPLE: "0" } });
+  try {
+    await h.waitFor("e2e-model", 30_000);
+    await h.waitStable(150, 2000);
+    await h.prompt("say it");
+    await h.waitFor("RIPPLE_DONE");
+    const ring = (line: string): boolean => /─\s+(?:\(\s*·?\s*\)|\(\s{3,}\)|·)\s+─/.test(line);
+    const frames = new Set<string>();
+    const until = Date.now() + 2500;
+    while (Date.now() < until) {
+      await h.flush();
+      const line = h.screen().find(ring);
+      if (line) frames.add(line.trim());
+      await delay(60);
+    }
+    expect(frames.size, h.screen().join("\n")).toBeGreaterThanOrEqual(2);
+    // After its second it is gone, and the rule is the plain one.
+    await delay(600);
+    await h.flush();
+    expect(h.screen().some(ring), h.screen().join("\n")).toBe(false);
+    expect(h.server.errors).toEqual([]);
+  } finally {
+    await h.dump("ripple-failure");
+    await h.close();
+  }
+});
+
 test("/tasks with nothing running says so", async () => {
   await scenario("tasks-empty", [], async (h) => {
     h.type("/tasks");

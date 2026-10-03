@@ -64,6 +64,7 @@ import {
 } from "./simple.js";
 import { readKumoJsonDoc, readUpdateCheckChoice, setUpdateCheck } from "../update.js";
 import { parse as parseYaml } from "yaml";
+import { terminalMotionAllowed } from "../ui/logo-motion.js";
 import { CenteredPanel, SetupFrame } from "./frame.js";
 import { SetupCardPicker, SetupThemePicker, SetupWelcome, type SetupCardOption } from "./welcome.js";
 import { CheckList, LineInput, SetupFilterList, SetupSummary, fitPlain, type CheckItem } from "./widgets.js";
@@ -510,7 +511,19 @@ export async function runFullSetup(
       ],
     invalidate: () => {},
   };
-  const panel = new CenteredPanel(root, () => terminal.rows, { maxWidth: 108, fullscreen: () => welcomeShowing });
+  const rainStart = Date.now();
+  const rainOn = terminalMotionAllowed() && !isAscii();
+  const panel = new CenteredPanel(root, () => terminal.rows, {
+    maxWidth: 108,
+    fullscreen: () => welcomeShowing,
+    rain: { allowed: () => rainOn, time: () => Date.now() - rainStart },
+  });
+  // A light rain in the margins moves, so something has to repaint: only while the panel has
+  // margins to rain in, and never faster than the eye needs.
+  const rainTimer = rainOn
+    ? setInterval(() => { if (!welcomeShowing && panel.hasMargins) tui.requestRender(); }, 160)
+    : undefined;
+  rainTimer?.unref();
   tui.addChild(panel);
   tui.addChild(statusWidget);
 
@@ -701,6 +714,7 @@ export async function runFullSetup(
       // best effort
     }
     welcome?.stop();
+    if (rainTimer !== undefined) clearInterval(rainTimer);
     tui.stop();
   }
 

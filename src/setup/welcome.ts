@@ -105,6 +105,24 @@ export class SetupWelcome implements Component {
   }
 }
 
+/**
+ * How hard it rains while a card is under the cursor: the option that goes on is a downpour, the
+ * one that puts it off is a drizzle. A card that says nothing about it leaves the rain as it was.
+ */
+export function cardWeather(value: string): number | undefined {
+  switch (value) {
+    case "simple": // Quick setup
+    case "settings": // Review your setup
+      return 0.95;
+    case "full": // Customize setup
+      return 0.62;
+    case "later": // Set up later
+      return 0.12;
+    default:
+      return undefined;
+  }
+}
+
 export interface SetupCardOption extends SelectItem {
   recommended?: boolean;
 }

@@ -180,3 +180,135 @@ export function rippleFrame(sinceMs: number, ascii = false): string | undefined 
   if (frame === undefined) return undefined;
   return ascii ? frame.replace("·", ".") : frame;
 }
+
+const clamp01 = (x: number): number => Math.max(0, Math.min(1, x));
+
+/** How fast the rain falls at a level: a calm drizzle crawls, a downpour streaks. */
+export function rainSpeed(level: number): number {
+  return 0.35 + 1.5 * clamp01(level);
+}
+
+/**
+ * The weather of a screen: how hard it rains, easing from one level to the next.
+ *
+ * A level is set (by the option under the cursor, or by how far through the setup one is) and
+ * the rain follows it over a fraction of a second, so the drops speed up or slow down instead of
+ * jumping. The clock the rain runs on is not wall time but the sum of the time that passed,
+ * each slice scaled by the speed it passed at: slowing the rain slows the drops already falling.
+ */
+export class Weather {
+  #level: number;
+  #target: number;
+  #phase = 0;
+  #at: number | undefined;
+
+  constructor(initial = 0.7, private readonly now: () => number = Date.now) {
+    this.#level = this.#target = clamp01(initial);
+  }
+
+  /** Where the rain is heading. */
+  set(target: number): void {
+    this.#target = clamp01(target);
+  }
+
+  get target(): number {
+    return this.#target;
+  }
+
+  #advance(): void {
+    const t = this.now();
+    if (this.#at === undefined) {
+      this.#at = t;
+      return;
+    }
+    const dt = Math.max(0, Math.min(250, t - this.#at));
+    this.#at = t;
+    this.#level += (this.#target - this.#level) * (1 - Math.exp(-dt / 220));
+    this.#phase += dt * rainSpeed(this.#level);
+  }
+
+  /** The level right now, between the one it left and the one it is heading for. */
+  get level(): number {
+    this.#advance();
+    return this.#level;
+  }
+
+  /** The rain's own clock, in milliseconds of rain. */
+  get phase(): number {
+    this.#advance();
+    return this.#phase;
+  }
+
+  /** The share of columns that carry a drop in the margins. */
+  get margin(): number {
+    return 0.1 + 0.38 * this.level;
+  }
+
+  /** The share of columns that carry a drop behind the panel, in its blank cells: far fainter. */
+  get interior(): number {
+    return 0.02 + 0.06 * this.level;
+  }
+}
+
+// An escape sequence is zero width: a colour, a link, the cursor marker.
+const ESCAPES = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b_[^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]/y;
+
+/**
+ * Draws drops into the empty stretches of a line, and nowhere else.
+ *
+ * A drop only ever replaces a space that sits inside a run of at least `minRun` spaces, and never
+ * the first or the last of the run, so the gap between two words and the padding against a border
+ * are never touched: only the open air of a panel. A line that holds the cursor is left alone
+ * entirely, so a field being typed in is never disturbed. Everything else (colours, links,
+ * the widths) comes through unchanged, which is why this walks the string instead of
+ * rebuilding it.
+ */
+export function rainIntoBlanks(
+  line: string,
+  cells: ReadonlyArray<RainCell | undefined>,
+  ink: RainInk,
+  skipIf: string,
+  minRun = 5,
+): string {
+  if (skipIf !== "" && line.includes(skipIf)) return line;
+  type Piece = { text: string; col: number; space: boolean };
+  const pieces: Piece[] = [];
+  let col = 0;
+  let at = 0;
+  while (at < line.length) {
+    ESCAPES.lastIndex = at;
+    const esc = ESCAPES.exec(line);
+    if (esc !== null) {
+      pieces.push({ text: esc[0], col, space: false });
+      at += esc[0].length;
+      continue;
+    }
+    const ch = String.fromCodePoint(line.codePointAt(at)!);
+    at += ch.length;
+    const width = ch === " " ? 1 : ch.charCodeAt(0) < 0x20 ? 0 : [...ch].length === 1 && ch.codePointAt(0)! < 0x2e80 ? 1 : 2;
+    pieces.push({ text: ch, col, space: ch === " " });
+    col += width;
+  }
+  // Runs of spaces, with escapes allowed in between.
+  let i = 0;
+  while (i < pieces.length) {
+    if (!pieces[i]!.space) {
+      i += 1;
+      continue;
+    }
+    const run: number[] = [];
+    let j = i;
+    while (j < pieces.length && (pieces[j]!.space || (pieces[j]!.text.startsWith("\x1b") && !pieces[j]!.space))) {
+      if (pieces[j]!.space) run.push(j);
+      j += 1;
+    }
+    if (run.length >= minRun) {
+      for (const k of run.slice(1, -1)) {
+        const cell = cells[pieces[k]!.col];
+        if (cell !== undefined) pieces[k]!.text = ink[cell.layer](cell.char);
+      }
+    }
+    i = j;
+  }
+  return pieces.map((p) => p.text).join("");
+}

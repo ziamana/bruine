@@ -122,3 +122,55 @@ describe("CenteredPanel rain in the margins", () => {
     expect(panel.hasMargins).toBe(true);
   });
 });
+
+describe("rain behind the panel", () => {
+  const plainText = (s: string): string => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
+  const textual: Component = {
+    render: (width: number) => [
+      "┌" + "─".repeat(width - 2) + "┐",
+      "│ Review your setup" + " ".repeat(width - 20) + "│",
+      "│" + " ".repeat(width - 2) + "│",
+      "│ Set up later" + " ".repeat(width - 15) + "│",
+      "│" + " ".repeat(width - 2) + "│",
+      "└" + "─".repeat(width - 2) + "┘",
+    ],
+    invalidate: () => {},
+  };
+  const panel = (time: number, interior = 0.5): CenteredPanel =>
+    new CenteredPanel(textual, () => 20, { maxWidth: 60, fullscreen: () => false, rain: { allowed: () => true, time: () => time, density: () => 0.3, interior: () => interior } });
+
+  test("drops fall in the blank rows inside the frame", () => {
+    let seen = "";
+    for (const t of [500, 1500, 2500, 3500, 4500, 6000]) {
+      seen += panel(t).render(100).map(plainText).filter((l) => l.includes("│") && !/Review|Set up/.test(l)).join("");
+    }
+    expect(seen).toMatch(/[·╷│╎]/);
+    expect(seen.replace(/[│ ]/g, "")).not.toBe("");
+  });
+
+  test("every word of the panel is always there, and the frame keeps its width", () => {
+    for (const t of [0, 400, 1300, 2700, 5000, 9000]) {
+      const lines = panel(t).render(100).map(plainText);
+      expect(lines.some((l) => l.includes("Review your setup"))).toBe(true);
+      expect(lines.some((l) => l.includes("Set up later"))).toBe(true);
+      for (const l of lines.filter((x) => /Review|Set up/.test(x))) expect(l.slice(20, 80)).toMatch(/^│.*│$/);
+    }
+  });
+
+  test("with no interior setting the inside of the panel is untouched, as before", () => {
+    const p = new CenteredPanel(textual, () => 20, { maxWidth: 60, fullscreen: () => false, rain: { allowed: () => true, time: () => 3000 } });
+    const inner = p.render(100).map(plainText).filter((l) => l.includes("│"));
+    expect(inner.every((l) => !/[·╷╎]/.test(l.slice(21, 79)))).toBe(true);
+  });
+
+  test("a terminal exactly as wide as the panel still gets rain behind it when the weather asks", () => {
+    const p = new CenteredPanel(textual, () => 6, { maxWidth: 100, fullscreen: () => false, rain: { allowed: () => true, time: () => 2000, density: () => 0, interior: () => 0.8 } });
+    let seen = "";
+    for (const t of [200, 1200, 2200, 3200]) {
+      const q = new CenteredPanel(textual, () => 6, { maxWidth: 100, fullscreen: () => false, rain: { allowed: () => true, time: () => t, density: () => 0, interior: () => 0.8 } });
+      seen += q.render(60).map(plainText).join("");
+    }
+    expect(seen).toMatch(/[·╷│╎]/);
+    expect(p.render(60)).toHaveLength(6);
+  });
+});

@@ -60,7 +60,7 @@ class SetupPty {
   exit: { exitCode: number; signal?: number } | undefined;
   private constructor(readonly home: string) {}
 
-  static async start(home: string): Promise<SetupPty> {
+  static async start(home: string, extraEnv?: Record<string, string>): Promise<SetupPty> {
     const h = new SetupPty(home);
     const env: Record<string, string> = {};
     for (const [k, v] of Object.entries(process.env)) {
@@ -71,6 +71,9 @@ class SetupPty {
       DSH_HOME: home,
       DSH_TELEMETRY_DISABLED: "1",
       BRUINE_NO_UPDATE_CHECK: "1",
+      // The setup tests read the screen as text: the rain behind the panel has its own test.
+      BRUINE_NO_RAIN: "1",
+      ...(extraEnv ?? {}),
       TERM: "xterm-256color",
       LANG: "en_US.UTF-8",
       LC_ALL: "en_US.UTF-8",
@@ -567,6 +570,44 @@ test("first install → Groq from the catalog → model, key, saved as a catalog
     expect(await readFile(join(home, ".env"), "utf8")).toContain("GROQ_API_KEY=gsk_e2e_secret");
   } finally {
     await h.dump("t35-groq-failure");
+    await h.close();
+  }
+});
+
+test("the rain behind the setup follows the option under the cursor: heavy on Quick setup, light on Set up later", async () => {
+  const home = await mkdtemp(join(tmpdir(), "bruine-t35-rain-"));
+  const h = await SetupPty.start(home, { BRUINE_NO_RAIN: "0" });
+  try {
+    await h.waitFor("Choose your setup");
+    await h.waitFor("Quick setup");
+    const drops = (): number => (h.text().match(/[·╷╎]/g) ?? []).length;
+    const sample = async (): Promise<number> => {
+      let total = 0;
+      const frames = new Set<string>();
+      for (let i = 0; i < 22; i += 1) {
+        await delay(100);
+        // Every word of the screen is always there, whatever falls behind it.
+        const text = h.text();
+        expect(text).toContain("Quick setup");
+        expect(text).toContain("Customize setup");
+        expect(text).toContain("Set up later");
+        frames.add(text);
+        total += drops();
+      }
+      expect(frames.size).toBeGreaterThan(5);
+      return total;
+    };
+    const heavy = await sample();
+    await h.pressN("down", 2);
+    const lines = h.screen();
+    const marker = lines.findIndex((l) => l.includes("› ╭"));
+    expect(lines[marker + 1]).toContain("Set up later");
+    await delay(900); // the rain eases to its new weather
+    const light = await sample();
+    expect(heavy, `heavy ${String(heavy)} light ${String(light)}`).toBeGreaterThan(0);
+    expect(light).toBeLessThan(heavy);
+  } finally {
+    await h.dump("t35-rain-failure");
     await h.close();
   }
 });

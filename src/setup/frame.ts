@@ -1,9 +1,9 @@
-import { visibleWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, visibleWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
 import { isAscii, asciiText } from "../render/chars.js";
 import { paint, onBg, colorDepth } from "../ui/palette.js";
 import { ansi } from "../ui/theme.js";
 import { Box } from "../ui/box.js";
-import { paintRainRow, rainGrid, type RainInk } from "../ui/rain.js";
+import { paintRainRow, rainGrid, rainIntoBlanks, type RainInk } from "../ui/rain.js";
 
 export interface SetupFrameOptions {
   step?: number;
@@ -53,12 +53,21 @@ export interface CenteredPanelOptions {
    * A light rain in the margins around the panel, never over it. It only exists where the
    * panel leaves room (a wide or a tall terminal), and only while `allowed` says motion is on.
    */
-  rain?: { allowed: () => boolean; time: () => number };
+  rain?: {
+    allowed: () => boolean;
+    time: () => number;
+    /** Drops in the margins (share of columns); the default is a light rain. */
+    density?: () => number;
+    /** Drops behind the panel, in its blank cells; none by default. */
+    interior?: () => number;
+  };
 }
 
 /** The margin rain is the quietest the rain gets: it must never pull the eye off the panel. */
 const MARGIN_INK: RainInk = { far: (t) => ansi.faint(t), mid: (t) => ansi.faint(t), near: (t) => ansi.gray(t) };
 const MARGIN_DENSITY = 0.12;
+/** Behind the panel the rain is fainter still: it is the weather outside the window, not the subject. */
+const INTERIOR_INK: RainInk = { far: (t) => ansi.faint(t), mid: (t) => ansi.faint(t), near: (t) => ansi.faint(t) };
 
 /**
  * Puts the setup panel in the middle of the console.
@@ -98,21 +107,26 @@ export class CenteredPanel implements Component {
     const top = Math.max(0, Math.floor((rows - this.#tallest) / 2));
     const rain = this.options.rain;
     this.#margins = leftWidth > 0 || top > 0;
-    if (rain === undefined || !rain.allowed() || !this.#margins) {
+    if (rain === undefined || !rain.allowed() || (!this.#margins && (rain.interior?.() ?? 0) <= 0)) {
       const left = " ".repeat(leftWidth);
       return [...Array<string>(top).fill(""), ...panel.map((line) => (line === "" ? line : `${left}${line}`))];
     }
     // Rain around the panel: whole rows above and below it, and the columns either side of it.
     const total = Math.max(rows - 1, top + panel.length);
-    const grid = rainGrid({ width, height: total, time: rain.time(), density: MARGIN_DENSITY, seed: 11 });
+    const time = rain.time();
+    const grid = rainGrid({ width, height: total, time, density: rain.density?.() ?? MARGIN_DENSITY, seed: 11 });
+    const interior = rain.interior?.() ?? 0;
+    const inside = interior > 0 ? rainGrid({ width: panelWidth, height: panel.length, time, density: interior, seed: 13 }) : undefined;
     const out: string[] = [];
     for (let y = 0; y < total; y += 1) {
       const cells = grid[y]!;
-      const line = panel[y - top];
-      if (line === undefined) {
+      const raw = panel[y - top];
+      if (raw === undefined) {
         out.push(paintRainRow(cells, MARGIN_INK));
         continue;
       }
+      // Behind the panel: only the open air of its lines, never its words or its fields.
+      const line = inside === undefined ? raw : rainIntoBlanks(raw, inside[y - top]!, INTERIOR_INK, CURSOR_MARKER);
       const slack = Math.max(0, panelWidth - visibleWidth(line));
       out.push(`${paintRainRow(cells.slice(0, leftWidth), MARGIN_INK)}${line}${" ".repeat(slack)}${paintRainRow(cells.slice(leftWidth + panelWidth), MARGIN_INK)}`);
     }

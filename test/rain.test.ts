@@ -144,3 +144,130 @@ describe("hash01", () => {
     expect(seen.size).toBeGreaterThan(450);
   });
 });
+
+import { Weather, rainIntoBlanks, rainSpeed } from "../src/ui/rain.js";
+
+describe("Weather", () => {
+  const clock = (): { t: number; now: () => number } => {
+    const c = { t: 1000, now: () => c.t };
+    return c;
+  };
+
+  test("it eases toward the level it is given instead of jumping to it", () => {
+    const c = clock();
+    const w = new Weather(0.9, c.now);
+    expect(w.level).toBeCloseTo(0.9, 5);
+    w.set(0.1);
+    c.t += 50;
+    const soon = w.level;
+    expect(soon).toBeLessThan(0.9);
+    expect(soon).toBeGreaterThan(0.5);
+    c.t += 5000;
+    for (let i = 0; i < 40; i += 1) { c.t += 100; w.level; }
+    expect(w.level).toBeCloseTo(0.1, 1);
+  });
+
+  test("the rain clock runs faster at a high level than at a low one, over the same wall time", () => {
+    const fast = clock();
+    const slow = clock();
+    const a = new Weather(0.95, fast.now);
+    const b = new Weather(0.1, slow.now);
+    a.phase; b.phase;
+    for (let i = 0; i < 20; i += 1) { fast.t += 100; slow.t += 100; a.phase; b.phase; }
+    expect(a.phase).toBeGreaterThan(b.phase * 2);
+  });
+
+  test("slowing the rain slows the drops already falling: the clock never goes back", () => {
+    const c = clock();
+    const w = new Weather(0.95, c.now);
+    let last = w.phase;
+    for (let i = 0; i < 30; i += 1) {
+      if (i === 5) w.set(0.05);
+      c.t += 80;
+      const p = w.phase;
+      expect(p).toBeGreaterThanOrEqual(last);
+      last = p;
+    }
+  });
+
+  test("a long pause is one step, not a leap: a suspended terminal does not make the rain race", () => {
+    const c = clock();
+    const w = new Weather(0.5, c.now);
+    w.phase;
+    c.t += 60_000;
+    expect(w.phase).toBeLessThan(500);
+  });
+
+  test("a harder rain has more drops in the margins and a little more behind the panel", () => {
+    const calm = new Weather(0.1);
+    const hard = new Weather(1);
+    expect(calm.margin).toBeLessThan(hard.margin);
+    expect(calm.interior).toBeLessThan(hard.interior);
+    expect(hard.interior).toBeLessThan(hard.margin / 3);
+    expect(rainSpeed(0.1)).toBeLessThan(rainSpeed(1));
+  });
+
+  test("it is clamped: nonsense levels are still a level", () => {
+    const w = new Weather(7);
+    expect(w.target).toBe(1);
+    w.set(-3);
+    expect(w.target).toBe(0);
+  });
+});
+
+describe("rainIntoBlanks", () => {
+  const cells = (width: number): Array<{ char: string; layer: "far" | "mid" | "near" } | undefined> =>
+    Array.from({ length: width }, () => ({ char: "·", layer: "far" as const }));
+  const drops = { far: (t: string) => `\x1b[2m${t}\x1b[22m`, mid: (t: string) => t, near: (t: string) => t };
+  const plain = (s: string): string => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
+
+  test("it fills the open air of a line and keeps every word and its width", () => {
+    const line = "Review your setup" + " ".repeat(30) + "end";
+    const out = plain(rainIntoBlanks(line, cells(line.length), drops, ""));
+    expect(out).toHaveLength(line.length);
+    expect(out.startsWith("Review your setup")).toBe(true);
+    expect(out.endsWith("end")).toBe(true);
+    expect(out).toContain("·");
+  });
+
+  test("the space between two words, and the first and last of a run, are never touched", () => {
+    const line = "a b c    d" + " ".repeat(8) + "e";
+    const out = plain(rainIntoBlanks(line, cells(line.length), drops, ""));
+    expect(out.slice(0, 9)).toBe("a b c    ");
+    // the run before the last word: its first and last cell are still spaces
+    const run = out.slice(10, 18);
+    expect(run[0]).toBe(" ");
+    expect(run[run.length - 1]).toBe(" ");
+  });
+
+  test("a short run of spaces is left alone", () => {
+    const line = "name    value";
+    expect(rainIntoBlanks(line, cells(line.length), drops, "")).toBe(line);
+  });
+
+  test("colours and links come through untouched", () => {
+    const line = `\x1b[36mhello\x1b[39m${" ".repeat(12)}\x1b]8;;http://x\x07link\x1b]8;;\x07`;
+    const out = rainIntoBlanks(line, cells(40), drops, "");
+    expect(out.startsWith("\x1b[36mhello\x1b[39m")).toBe(true);
+    expect(out.endsWith("\x1b]8;;http://x\x07link\x1b]8;;\x07")).toBe(true);
+    expect(plain(out).replace(/\x1b\][^\x07]*\x07/g, "")).toHaveLength(5 + 12 + 4);
+  });
+
+  test("a line holding the marker is left exactly as it was", () => {
+    const line = `> ${"\x1b_cursor\x07"}typed${" ".repeat(30)}`;
+    expect(rainIntoBlanks(line, cells(60), drops, "\x1b_cursor\x07")).toBe(line);
+  });
+
+  test("with no drop in a cell the line is unchanged, and an empty line is fine", () => {
+    const line = "x" + " ".repeat(20) + "y";
+    expect(rainIntoBlanks(line, Array(line.length).fill(undefined), drops, "")).toBe(line);
+    expect(rainIntoBlanks("", [], drops, "")).toBe("");
+  });
+
+  test("wide characters keep the columns of what follows them", () => {
+    const line = "界" + " ".repeat(14) + "end";
+    const out = rainIntoBlanks(line, cells(line.length + 1), drops, "");
+    expect(plain(out).endsWith("end")).toBe(true);
+    expect(plain(out).startsWith("界")).toBe(true);
+  });
+});

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { resetColorDepth } from "../src/ui/palette.js";
-import { SetupWelcome } from "../src/setup/welcome.js";
+import { SetupWelcome, cardWeather } from "../src/setup/welcome.js";
 
 describe("setup welcome screen", () => {
   test("fills the terminal with one background and centers only the BRUINE mark", () => {
@@ -95,5 +95,21 @@ describe("the welcome rain", () => {
       const lines = new SetupWelcome(() => 12).render(18).map(plain).filter((l) => l.trim() !== "");
       expect(lines).toEqual(["      BRUINE"]);
     });
+  });
+});
+
+describe("the weather an option asks for", () => {
+  test("the options that go on are a downpour and the one that puts it off is a drizzle", () => {
+    const go = cardWeather("simple")!;
+    const middle = cardWeather("full")!;
+    const later = cardWeather("later")!;
+    expect(cardWeather("settings")).toBe(go);
+    expect(go).toBeGreaterThan(middle);
+    expect(middle).toBeGreaterThan(later);
+    expect(later).toBeLessThan(0.2);
+  });
+
+  test("a card that says nothing about the weather leaves it as it was", () => {
+    for (const value of ["ask", "auto", "full-access", "none", "skip", "yes", "no", ""]) expect(cardWeather(value)).toBeUndefined();
   });
 });

@@ -65,9 +65,11 @@ import {
 } from "./simple.js";
 import { readBruineJsonDoc, readUpdateCheckChoice, setUpdateCheck } from "../update.js";
 import { parse as parseYaml } from "yaml";
+import { appEnv } from "../compat.js";
 import { terminalMotionAllowed } from "../ui/logo-motion.js";
 import { CenteredPanel, SetupFrame } from "./frame.js";
-import { SetupCardPicker, SetupThemePicker, SetupWelcome, type SetupCardOption } from "./welcome.js";
+import { SetupCardPicker, SetupThemePicker, SetupWelcome, cardWeather, type SetupCardOption } from "./welcome.js";
+import { Weather } from "../ui/rain.js";
 import { CheckList, LineInput, SetupFilterList, SetupSummary, fitPlain, type CheckItem } from "./widgets.js";
 
 const BACK = Symbol("back");
@@ -512,17 +514,23 @@ export async function runFullSetup(
       ],
     invalidate: () => {},
   };
-  const rainStart = Date.now();
-  const rainOn = terminalMotionAllowed() && !isAscii();
+  const rainOn = terminalMotionAllowed() && !isAscii() && appEnv("NO_RAIN") !== "1";
+  // The weather follows where one is: it pours at the start of the setup and calms toward the
+  // summary, and an option under the cursor can ask for more or less (see cardWeather).
+  const weather = new Weather(0.85);
+  const progressWeather = (): number => {
+    const at = displayStep === undefined ? 0 : STEPS.indexOf(displayStep);
+    return 0.85 - 0.6 * (Math.max(0, at) / (STEPS.length - 1));
+  };
   const panel = new CenteredPanel(root, () => terminal.rows, {
     maxWidth: 108,
     fullscreen: () => welcomeShowing,
-    rain: { allowed: () => rainOn, time: () => Date.now() - rainStart },
+    rain: { allowed: () => rainOn, time: () => weather.phase, density: () => weather.margin, interior: () => weather.interior },
   });
   // A light rain in the margins moves, so something has to repaint: only while the panel has
   // margins to rain in, and never faster than the eye needs.
   const rainTimer = rainOn
-    ? setInterval(() => { if (!welcomeShowing && panel.hasMargins) tui.requestRender(); }, 160)
+    ? setInterval(() => { if (!welcomeShowing) tui.requestRender(); }, 90)
     : undefined;
   rainTimer?.unref();
   tui.addChild(panel);
@@ -570,6 +578,7 @@ export async function runFullSetup(
     new Promise((resolveP) => {
       root.clear();
       panel.reset();
+      weather.set(progressWeather());
       const box = new Container();
 
       const built = build((v) => {
@@ -666,6 +675,13 @@ export async function runFullSetup(
       const picker = new SetupCardPicker(items, () => terminal.rows);
       if (options.initial !== undefined) picker.setSelectedIndex(options.initial);
       picker.onSelect = (index) => finish(map(index));
+      // The option under the cursor sets the weather: the menus ask for more or less rain.
+      const rainFor = (index: number): void => {
+        const asked = cardWeather(String(items[index]?.value ?? ""));
+        weather.set(asked ?? progressWeather());
+      };
+      rainFor(options.initial ?? 0);
+      picker.onChange = rainFor;
       const original = picker.handleInput.bind(picker);
       picker.handleInput = data => {
         if (!isKeyRelease(data) && skip >= 0 && typedText(data).toLowerCase() === "s") { finish(map(skip)); return; }

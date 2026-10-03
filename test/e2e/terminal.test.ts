@@ -897,6 +897,38 @@ test("questions: Esc skips, turn goes on (T28A)", async () => {
   });
 });
 
+test("questions: a held Escape is one Escape, so it clears the filter and does not also skip", async () => {
+  await scenario("q-esc-held", [
+    askTool([{ id: "db", question: "Which?", options: [{ label: "SQLite" }, { label: "Redis" }] }]),
+    textScript("Q_DONE"),
+  ], async (h) => {
+    await h.prompt("Pick");
+    await h.waitFor("enter select");
+    h.type("Red");
+    await h.waitFor("Filter: Red");
+    // What holding the key sends: the press, the keyboard's repeat delay, then a stream
+    // of repeats a few dozen milliseconds apart. The first clears the filter; a second
+    // Escape would skip the whole question, and none of the repeats may be one.
+    h.type("\x1b");
+    await delay(600);
+    for (let i = 0; i < 14; i += 1) {
+      h.type("\x1b");
+      await delay(35);
+    }
+    await delay(500);
+    const held = h.screen().join("\n");
+    expect(held).toContain("enter select");
+    expect(held).not.toContain("Filter: Red");
+    expect(held).not.toContain("Q_DONE");
+    // Let go, wait, and one deliberate Escape does skip it.
+    await delay(1700);
+    h.type("\x1b");
+    await h.waitFor("Q_DONE");
+    const toolMsg = h.server.mainRequests()[1]!.body.messages.find((m) => m.role === "tool");
+    expect(JSON.stringify(toolMsg)).toContain("skipped");
+  });
+});
+
 test("suggest: ghost appears, Right fills editor and sends (T28B)", async () => {
   await scenario("suggest-accept", [textScript("TURN_DONE"), textScript("SECOND_DONE")], async (h) => {
     await h.prompt("Say hi");

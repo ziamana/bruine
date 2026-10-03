@@ -24,6 +24,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ansi, selectListTheme } from "../ui/theme.js";
+import { withEscapeFilter } from "../ui/escape-filter.js";
 import { typedText } from "../ui/keys.js";
 import {
   SetupFlow,
@@ -469,7 +470,7 @@ export async function runFullSetup(
   dshHome: string,
   opts: WizardOptions = {},
 ): Promise<"saved" | "simple" | "later" | "quit"> {
-  const terminal = opts.terminal ?? new ProcessTerminal();
+  const terminal = opts.terminal ?? withEscapeFilter(new ProcessTerminal());
   const tui: TUI = new TuiMainScreen(terminal);
   const root = new Container();
   const flow = new SetupFlow(opts.prefill ?? defaultAnswers());

@@ -33,6 +33,7 @@ import { echoLine, QuestionForm } from "./questions.js";
 import type { QuestionCallComponent } from "./question-call-component.js";
 import type { ReasoningComponent } from "./reasoning-component.js";
 import { PromptFrame } from "./prompt-frame.js";
+import { withEscapeFilter } from "./escape-filter.js";
 import { besideLogo, LOGO_BESIDE_GAP, LOGO_MIN_WIDTH, logoRows, paintResourceLine, planResourceLine } from "./header.js";
 import { TurnActivity } from "./turn-activity.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
@@ -416,7 +417,7 @@ export class KumoUi {
     icons: KumoIcons = kumoIcons(),
   ) {
     this.icons = icons;
-    this.terminal = terminal ?? new ProcessTerminal();
+    this.terminal = terminal ?? withEscapeFilter(new ProcessTerminal());
     this.tui = new TuiMainScreen(this.terminal);
     this.version = version;
 
@@ -517,7 +518,11 @@ export class KumoUi {
       // instead of the mark against the top edge of the terminal.
       [new Spacer(1), this.header],
       this.chat,
-      [new Margin(new Gap(this.taskPanel)), new Margin(this.noticeBox), new Margin(bottomZones)],
+      // One blank row above every block that is showing: the task panel, and the
+      // notice box (the approval list, a notice, the question form) which used to
+      // sit glued under the last thing the transcript said. Same rhythm as the
+      // task panel above it, and nothing at all when the box is empty.
+      [new Margin(new Gap(this.taskPanel)), new Margin(new Gap(this.noticeBox)), new Margin(bottomZones)],
       () => this.terminal.rows,
       this.jumpLatest,
     );
@@ -773,7 +778,7 @@ export class KumoUi {
     for (const component of this.#animatedComponents) {
       if (!("active" in component) || !component.active) this.#animatedComponents.delete(component);
     }
-    const active = this.promptFrame.active || this.taskPanel.active || this.#animatedComponents.size > 0;
+    const active = this.promptFrame.active || this.taskPanel.active || this.footer.active || this.#animatedComponents.size > 0;
     if (active && this.#animation === undefined) {
       this.#animation = setInterval(() => this.requestRender(), 100);
       this.#animation.unref();
@@ -949,6 +954,7 @@ export class KumoUi {
   /** Show the waiting state immediately on submit; content advances the activity. */
   showWorking(): void {
     if (this.#closed) return;
+    this.footer.beginTurn();
     this.activity.start("Waiting for model");
     this.requestRender();
   }
@@ -1211,6 +1217,7 @@ export class KumoUi {
   }): void {
     if (this.#closed) return;
     this.activity.stop();
+    this.footer.endTurn();
     const ascii = this.icons.think === "*";
     if (info.cancelled) {
       this.addChat(new Text(this.#paintReceipt(turnReceipt({

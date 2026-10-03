@@ -40,6 +40,7 @@ import { terminalMotionAllowed } from "./logo-motion.js";
 import { IntroPlayer, introSetting, planIntro, readLastIntro, rememberIntro } from "./intro.js";
 import { TurnActivity } from "./turn-activity.js";
 import { WeatherBackdrop, readWeatherEffect, type WeatherEffect } from "./weather-effect.js";
+import { QueuedPrompts } from "./queued-prompts.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
 import { createAutocomplete } from "./file-complete.js";
 import {
@@ -91,6 +92,8 @@ export interface BruineUiHandlers {
   onQuit(): void;
   /** Shift+Tab: toggle Plan/Build (T31.4). */
   onShiftTab?: () => void;
+  /** Up on an empty input box while prompts are queued: the last one, taken out of the queue to edit. */
+  onQueueEdit?: () => string | undefined;
   /**
    * T56: where a mouse selection is written. Left out, the platform clipboard
    * is used, which means a test never spawns wl-copy.
@@ -388,6 +391,8 @@ export class BruineUi {
    */
   readonly mouse: MouseFeature;
   readonly noticeBox: NoticeBox;
+  /** The prompts typed during a turn, waiting for it to end. */
+  readonly queued: QueuedPrompts;
   readonly taskPanel: TaskPanel;
   readonly promptFrame: PromptFrame;
   readonly activity = new TurnActivity();
@@ -447,6 +452,7 @@ export class BruineUi {
     this.footer = new FooterComponent(icons);
     this.taskPanel = new TaskPanel(icons);
     this.noticeBox = new NoticeBox();
+    this.queued = new QueuedPrompts(icons);
     try {
       // T28b.1: settings.yaml is the source of truth; bruine.json only a fallback.
       const route = readSettingsRoute();
@@ -517,6 +523,7 @@ export class BruineUi {
     // its two rules and the status bar is plain text under it, so nothing there is a
     // painted slab.
     const bottomZones = new Container();
+    bottomZones.addChild(this.queued);
     bottomZones.addChild(this.promptFrame);
     bottomZones.addChild(this.footer);
     this.shell = new Shell(
@@ -664,6 +671,16 @@ export class BruineUi {
     if (matchesKey(data, "ctrl+d")) {
       if (this.editor.getText() === "") {
         handlers.onQuit();
+        return { consume: true };
+      }
+    }
+    // Up on an empty box while prompts wait: the last one comes back to be edited (and, sent
+    // again, it queues again). Without a queue, up is the editor's own history.
+    if (matchesKey(data, "up") && this.editor.getText() === "" && this.queued.items.length > 0) {
+      const text = handlers.onQueueEdit?.();
+      if (text !== undefined) {
+        this.editor.setText(text);
+        this.requestRender();
         return { consume: true };
       }
     }
@@ -916,6 +933,12 @@ export class BruineUi {
   /** For /new integration: clear the panel without adding a chat line. */
   clearTasks(): void {
     this.taskPanel.clearTasks();
+    this.requestRender();
+  }
+
+  /** Show the prompts waiting for the running turn (an empty list hides the block). */
+  setQueued(items: readonly string[]): void {
+    this.queued.set(items);
     this.requestRender();
   }
 

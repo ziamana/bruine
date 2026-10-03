@@ -56,7 +56,9 @@ only when that task should run with full access.
 
 Inside a session, `/` opens the command palette: `/new`, `/resume`, `/verify`, `/compact`, `/plan`, `/permissions`,
 `/model`, `/provider`, `/effort`, `/skills`, `/reload`, `/help`, `/exit`. `f2` walks the routes you
-used recently. `ctrl+t` shows the task list, `ctrl+o` expands tool output, `ctrl+e` cycles the
+used recently. You can keep typing while bruine works: a prompt sent during a turn waits above the
+box and goes out, as its own turn, when the current one ends (`↑` on an empty box takes the last one
+back to edit; `escape` stops the turn and puts the queued prompts back in the box, unsent). `ctrl+t` shows the task list, `ctrl+o` expands tool output, `ctrl+e` cycles the
 reasoning effort, `ctrl+v` pastes an image.
 
 ## Environment

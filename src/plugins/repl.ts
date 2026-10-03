@@ -151,17 +151,28 @@ export interface ReplDeps {
   flush(session: unknown): Promise<unknown>;
   appExit(code: number): void;
   lines: LineSource;
+  /** The prompts waiting for the running turn to end changed (shown above the input box). */
+  onQueue?(queued: readonly string[]): void;
+  /** The turn was stopped with prompts still queued: they are handed back, never sent. */
+  onRecall?(prompts: string[]): void;
 }
 
 /**
  * The interactive loop: read a line, run one turn, redraw the prompt.
  * Pure orchestration over {@link ReplDeps} so it is testable without dsh.
+ *
+ * A prompt sent while a turn runs is not lost: it waits in a queue and goes out, as its own
+ * turn, when the running one ends; several go out one after the other, in the order typed.
+ * Stopping the turn (Escape) does not send them: it hands them back (see {@link takeQueue}).
  */
 export class Repl {
   #deps: ReplDeps;
   #inTurn = false;
   #done = false;
   #turnPromise: Promise<void> | undefined;
+  #queue: string[] = [];
+  /** True from the moment a turn starts until the queue it leaves behind is drained. */
+  #draining = false;
 
   constructor(deps: ReplDeps) {
     this.#deps = deps;
@@ -177,24 +188,63 @@ export class Repl {
     this.#deps.lines.onSigint(() => this.#onSigint());
 
     if (initialPrompt !== undefined && initialPrompt.trim() !== "") {
-      await this.#turn(initialPrompt);
+      await this.#drain(initialPrompt);
     }
     if (!this.#done) this.#prompt();
   }
 
   async #onLine(line: string): Promise<void> {
-    if (this.#inTurn || this.#done) return;
+    if (this.#done) return;
     const text = line.trim();
     if (EXIT_COMMANDS.has(text)) {
       await this.#quit();
       return;
     }
     if (text === "") {
-      this.#prompt();
+      if (!this.#draining) this.#prompt();
       return;
     }
-    await this.#turn(text);
+    if (this.#draining) {
+      this.#queue.push(text);
+      this.#deps.onQueue?.([...this.#queue]);
+      return;
+    }
+    await this.#drain(text);
     if (!this.#done) this.#prompt();
+  }
+
+  /** Run `first`, then every prompt queued meanwhile, one turn each, in order. */
+  async #drain(first: string): Promise<void> {
+    this.#draining = true;
+    try {
+      let next: string | undefined = first;
+      while (next !== undefined && !this.#done) {
+        await this.#turn(next);
+        next = this.#queue.shift();
+        if (next !== undefined) this.#deps.onQueue?.([...this.#queue]);
+      }
+    } finally {
+      this.#draining = false;
+    }
+  }
+
+  /** The prompts waiting for the running turn, oldest first. */
+  get queued(): readonly string[] {
+    return [...this.#queue];
+  }
+
+  /** Take the most recent queued prompt back out of the queue (to edit it), if there is one. */
+  takeLastQueued(): string | undefined {
+    const last = this.#queue.pop();
+    if (last !== undefined) this.#deps.onQueue?.([...this.#queue]);
+    return last;
+  }
+
+  /** Empty the queue and return what was in it, oldest first. */
+  takeQueue(): string[] {
+    const all = this.#queue.splice(0);
+    if (all.length > 0) this.#deps.onQueue?.([]);
+    return all;
   }
 
   #turn(text: string): Promise<void> {
@@ -213,8 +263,12 @@ export class Repl {
   }
 
   #onSigint(): void {
-    // Escape / Ctrl+C during a turn cancels the turn, never the app.
-    if (this.#inTurn) this.#deps.agent.cancel({ kind: "user" });
+    // Escape / Ctrl+C during a turn cancels the turn, never the app. Stopping means stopping:
+    // what was queued behind the turn is handed back instead of going out next.
+    if (!this.#inTurn) return;
+    const queued = this.takeQueue();
+    this.#deps.agent.cancel({ kind: "user" });
+    if (queued.length > 0) this.#deps.onRecall?.(queued);
   }
 
   async #quit(): Promise<void> {
@@ -238,9 +292,10 @@ export class Repl {
     if (p !== undefined) await p.catch(() => {});
   }
 
-  /** Retire this loop without exiting (T31.2: replaced on /new). */
+  /** Retire this loop without exiting (T31.2: replaced on /new). Queued prompts are dropped. */
   stop(): void {
     this.#done = true;
+    this.takeQueue();
   }
 
   async #flushQuietly(): Promise<void> {
@@ -761,6 +816,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         },
         onEscape: () => emitter.emitSigint(),
         onQuit: () => emitter.emitClose(),
+        onQueueEdit: () => repl?.takeLastQueued(),
         // T31.4: Shift+Tab toggles Plan/Build. Tab is completion only.
         onShiftTab: () => {
           modes()?.togglePlan?.();
@@ -772,6 +828,17 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     );
     ui.footer.set({ model: selection.model, provider: selection.provider });
     ui.setAutocompleteCommands(completeCommandList());
+    // Prompts typed while a turn runs wait above the box; Escape hands them back.
+    const queueUi = {
+      onQueue: (queued: readonly string[]): void => ui?.setQueued(queued),
+      onRecall: (prompts: string[]): void => {
+        if (ui === undefined) return;
+        const typed = ui.editor.getText();
+        ui.editor.setText([...prompts, ...(typed.trim() === "" ? [] : [typed])].join("\n\n"));
+        ui.showNotice(`Stopped. ${prompts.length === 1 ? "The queued prompt is" : `The ${String(prompts.length)} queued prompts are`} back in the box, not sent.`);
+        ui.requestRender();
+      },
+    };
     repl = new Repl({
       agent,
       followup,
@@ -780,6 +847,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         void ui?.shutdown().finally(() => gracefulExit(exit)(code));
       },
       lines: emitter.source(),
+      ...queueUi,
     });
     const service: BruineRepl = { agent, ui, selection: selectionRef };
     ctx.provide(BRUINE_REPL_SERVICE, service);
@@ -841,6 +909,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           void ui?.shutdown().finally(() => gracefulExit(exit)(code));
         },
         lines: emitter.source(),
+        ...queueUi,
       });
       repl = fresh;
       await fresh.run();

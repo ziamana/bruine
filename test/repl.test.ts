@@ -178,16 +178,18 @@ describe("Repl", () => {
     expect(h.exits).toEqual([]);
   });
 
-  test("lines typed during a turn are ignored", async () => {
+  test("a line typed during a turn waits for it, then goes out (prompt-queue.test.ts has the rest)", async () => {
     const h = harness();
     await h.repl.run();
     h.lines.emitLine("one");
     await tick();
     h.lines.emitLine("two");
+    expect(h.followups).toEqual(["one"]);
+    expect(h.repl.queued).toEqual(["two"]);
     h.idle.resolve();
     await tick();
     await tick();
-    expect(h.followups).toEqual(["one"]);
+    expect(h.followups).toEqual(["one", "two"]);
   });
 
   test("EOF during a turn waits for the turn before exiting", async () => {

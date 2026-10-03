@@ -127,7 +127,7 @@ export function requiredKeyEnvs(answers: SetupAnswers): string[] {
 /** Does any chosen role run on a discovered server (→ local dummy key)? */
 function usesLocalServer(answers: SetupAnswers): boolean {
   return [answers.roles.main, answers.roles.fast, answers.roles.vision].some(
-    (r) => r?.discovered !== undefined && r.discovered.apiKey === undefined,
+    (r) => r?.discovered !== undefined && r.discovered.headers === undefined,
   );
 }
 
@@ -333,7 +333,7 @@ export class SetupFlow {
             displayName: d.displayName ?? `Bruine server ${key}`,
             api: "openai-completions",
             baseURL: d.baseUrl,
-            apiKeyEnv: d.apiKey?.env ?? "BRUINE_LOCAL_API_KEY",
+            ...(d.headers !== undefined ? { headers: { ...d.headers } } : { apiKeyEnv: "BRUINE_LOCAL_API_KEY" }),
             // T19.A.2: an `off` effort so the Auto judge can get a plain answer.
             models: [],
           };
@@ -353,7 +353,7 @@ export class SetupFlow {
           const reasoning =
             d.template !== undefined
               ? reasoningSettingsFor(d.template)
-              : { reasoningEfforts: { off: null, low: "low" } as Record<string, string | null> };
+              : { reasoningEfforts: (d.reasoningEfforts ?? { off: null, low: "low" }) as Record<string, string | null> };
           entry.models.push({
             id: pick.model,
             name: pick.model,
@@ -454,10 +454,6 @@ export class SetupFlow {
 
     const env: Array<[string, string]> = [];
     if (usesLocalServer(a)) env.push(["BRUINE_LOCAL_API_KEY", "local"]);
-    for (const role of [a.roles.main, a.roles.fast, a.roles.vision]) {
-      const key = role?.discovered?.apiKey;
-      if (key !== undefined && !env.some(([name]) => name === key.env)) env.push([key.env, key.value]);
-    }
     for (const [name, value] of Object.entries(a.keys)) {
       if (value.trim() !== "") env.push([name, value.trim()]);
     }

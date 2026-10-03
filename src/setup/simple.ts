@@ -417,7 +417,6 @@ async function askProviderKey(
 /** The free model, after a yes: its route, its public key, then the web search offer. */
 async function useSpaceBunny(dshHome: string, io: SetupIO, opts: { fetchImpl?: FetchLike }): Promise<SetupOutcome> {
   await writeAtomic(join(dshHome, "settings.yaml"), renderSettingsYaml(spaceBunnySettings()), 0o600);
-  await writeEnvVar(join(dshHome, ".env"), SPACE_BUNNY.keyEnv, SPACE_BUNNY.keyValue);
   io.write("Using Space Bunny Free through OpenCode Zen.\n");
   await askSearch(dshHome, io, opts);
   return { kind: "free" };

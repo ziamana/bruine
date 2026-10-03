@@ -822,7 +822,7 @@ test("/model offers Space Bunny Free to a home that never added it, asks first, 
     const settings = readFileSync(join(h.home, "settings.yaml"), "utf8");
     expect(settings).toContain("opencode-zen");
     expect(settings).toContain("https://opencode.ai/zen/v1");
-    expect(readFileSync(join(h.home, ".env"), "utf8")).toContain("BRUINE_ZEN_API_KEY=public");
+    expect(settings).toContain("Authorization: Bearer public");
     expect(h.server.errors).toEqual([]);
   } finally {
     await h.dump("zen-model-failure");

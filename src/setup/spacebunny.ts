@@ -13,10 +13,46 @@ export const SPACE_BUNNY = {
   model: "space-bunny-free",
   contextWindow: 1_000_000,
   routeName: "opencode-zen",
-  keyEnv: "BRUINE_ZEN_API_KEY",
-  /** The gateway's public key: free models take it, and refuse every other value. */
-  keyValue: "public",
 } as const;
+
+/**
+ * The gateway's public key: free models take it, and refuse every other value. It travels as a
+ * header and not through an environment variable, so a route added in the middle of a session
+ * works at once (a variable the process did not start with is one the runtime never sees).
+ */
+export const SPACE_BUNNY_HEADERS: Record<string, string> = { Authorization: "Bearer public" };
+
+/**
+ * The thinking levels the endpoint takes, asked of it: `reasoning_effort` accepts minimal, low,
+ * medium, high, xhigh and max, and refuses `none`. `minimal` and `low` answer without thinking, so
+ * `off` is `minimal`; the others think more as they go up.
+ */
+export const SPACE_BUNNY_EFFORTS: Record<string, string> = {
+  off: "minimal",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  xhigh: "xhigh",
+  max: "max",
+};
+
+/** The route as settings.yaml spells it. */
+export function spaceBunnyRoute(): Record<string, unknown> {
+  return {
+    displayName: "OpenCode Zen",
+    api: "openai-completions",
+    baseURL: SPACE_BUNNY.baseUrl,
+    headers: { ...SPACE_BUNNY_HEADERS },
+    models: [
+      {
+        id: SPACE_BUNNY.model,
+        name: SPACE_BUNNY.model,
+        contextWindow: SPACE_BUNNY.contextWindow,
+        reasoningEfforts: { ...SPACE_BUNNY_EFFORTS },
+      },
+    ],
+  };
+}
 
 /** What the user is told before saying yes. */
 export const SPACE_BUNNY_NOTICE = [
@@ -36,7 +72,8 @@ export function spaceBunnyDiscovered(): Discovered {
     modelInfos: [{ id: SPACE_BUNNY.model, contextWindow: SPACE_BUNNY.contextWindow }],
     routeName: SPACE_BUNNY.routeName,
     displayName: "OpenCode Zen",
-    apiKey: { env: SPACE_BUNNY.keyEnv, value: SPACE_BUNNY.keyValue },
+    headers: { ...SPACE_BUNNY_HEADERS },
+    reasoningEfforts: { ...SPACE_BUNNY_EFFORTS },
   };
 }
 
@@ -47,24 +84,7 @@ export function spaceBunnyPick(): RolePick {
 /** settings.yaml for the quick setup: the route, and it as the default model. */
 export function spaceBunnySettings(): SettingsDoc {
   return {
-    "llm-pi-ai": {
-      providers: {
-        [SPACE_BUNNY.routeName]: {
-          displayName: "OpenCode Zen",
-          api: "openai-completions",
-          baseURL: SPACE_BUNNY.baseUrl,
-          apiKeyEnv: SPACE_BUNNY.keyEnv,
-          models: [
-            {
-              id: SPACE_BUNNY.model,
-              name: SPACE_BUNNY.model,
-              contextWindow: SPACE_BUNNY.contextWindow,
-              reasoningEfforts: { off: null, low: "low" },
-            },
-          ],
-        },
-      },
-    },
+    "llm-pi-ai": { providers: { [SPACE_BUNNY.routeName]: spaceBunnyRoute() } },
     "agent-default-model": { provider: SPACE_BUNNY.routeName, model: SPACE_BUNNY.model },
   };
 }

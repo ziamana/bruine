@@ -711,15 +711,17 @@ describe("Space Bunny Free in /model", () => {
     const yaml = await readFile(join(home, "settings.yaml"), "utf8");
     expect(yaml).toContain("opencode-zen:");
     expect(yaml).toContain("https://opencode.ai/zen/v1");
-    expect(yaml).toContain("BRUINE_ZEN_API_KEY");
+    expect(yaml).toContain("Authorization: Bearer public");
+    expect(yaml).not.toContain("apiKeyEnv: BRUINE_ZEN_API_KEY");
     expect(yaml).toContain("space-bunny-free");
+    expect(yaml).toContain("xhigh");
     expect(yaml).toContain("Ornith.gguf"); // what was there is still there
     expect(yaml).toContain("agent-default-model:");
-    expect(await readFile(join(home, ".env"), "utf8")).toContain("BRUINE_ZEN_API_KEY=public");
+    // No key variable: nothing to write to .env, and nothing the running session could miss.
+    expect(existsSync(join(home, ".env"))).toBe(false);
     expect(h.holder.current).toMatchObject({ provider: "opencode-zen", model: "space-bunny-free" });
     expect(reply).toMatch(/space-bunny-free/);
-    expect(process.env.BRUINE_ZEN_API_KEY).toBe("public");
-    delete process.env.BRUINE_ZEN_API_KEY;
+    expect(process.env.BRUINE_ZEN_API_KEY).toBeUndefined();
   });
 
   test("if the runtime does not mount the route in time, the user is told the one command that finishes it", async () => {
@@ -740,7 +742,6 @@ describe("Space Bunny Free in /model", () => {
       expect(h.holder.current).toMatchObject({ provider: "local" });
     } finally {
       vi.useRealTimers();
-      delete process.env.BRUINE_ZEN_API_KEY;
     }
   });
 
@@ -753,6 +754,30 @@ describe("Space Bunny Free in /model", () => {
     (quiet.ui as { askChoice?: unknown }).askChoice = undefined;
     await attach(quiet, { settings: SETTINGS });
     expect(await quiet.picker.runCommand("/model space-bunny")).toMatch(/needs a yes or no/);
+  });
+
+  test("a route an earlier version wrote (a key variable, two levels) is mended when the picker starts", async () => {
+    const h = harness({ picks: [-1] });
+    const home = await attach(h, {
+      settings: SETTINGS.replace("agent-default-model:", [
+        "    opencode-zen:",
+        "      displayName: OpenCode Zen",
+        "      api: openai-completions",
+        "      baseURL: 'https://opencode.ai/zen/v1'",
+        "      apiKeyEnv: BRUINE_ZEN_API_KEY",
+        "      models:",
+        "        - id: space-bunny-free",
+        "          reasoningEfforts:",
+        "            off: null",
+        "            low: low",
+        "agent-default-model:",
+      ].join("\n")),
+    });
+    await vi.waitFor(async () => expect(await readFile(join(home, "settings.yaml"), "utf8")).toContain("Authorization: Bearer public"));
+    const yaml = await readFile(join(home, "settings.yaml"), "utf8");
+    expect(yaml).not.toContain("apiKeyEnv: BRUINE_ZEN_API_KEY");
+    expect(yaml).toContain("xhigh");
+    expect(yaml).toContain("Ornith.gguf");
   });
 
   test("the plain listing says how to add it", async () => {

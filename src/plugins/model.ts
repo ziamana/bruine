@@ -1,5 +1,5 @@
 import { SPACE_BUNNY, SPACE_BUNNY_NOTICE } from "../setup/spacebunny.js";
-import { addSpaceBunnyToHome } from "../setup/zen-route.js";
+import { addSpaceBunnyToHome, repairSpaceBunnyRoute } from "../setup/zen-route.js";
 import { runtimeHome, configReadPath, configWritePath } from "../compat.js";
 /**
  * T37 — `/model` and `/provider`: the route, chosen without leaving the session.
@@ -365,6 +365,9 @@ export class ModelPicker {
     this.llm = llm;
     this.defaultModel = defaultModel;
     this.dshHome = process.env.DSH_HOME;
+    // A route added by an earlier version in a shape that cannot work is mended; settings.yaml is
+    // hot-reloaded, so a session that is already running picks it up.
+    void repairSpaceBunnyRoute(this.dshHome ?? runtimeHome()).catch(() => false);
     if (this.holder?.current === undefined) return;
     this.ready = true;
     // f2 walks the recently used routes (opencode's `model_cycle_recent`).
@@ -440,8 +443,6 @@ export class ModelPicker {
       this.ui.showNotice?.(text, { red: true });
       return text;
     }
-    // The route is read from the key's variable, and dsh reads the process environment.
-    process.env[SPACE_BUNNY.keyEnv] ??= SPACE_BUNNY.keyValue;
     // settings.yaml is hot-reloaded: give the runtime a moment to mount the route before using it.
     for (let i = 0; i < 40; i += 1) {
       let live: Array<{ id: string }> = [];

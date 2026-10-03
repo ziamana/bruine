@@ -241,9 +241,11 @@ describe("simpleSetup", () => {
     expect(parsed["agent-default-model"]).toEqual({ provider: "opencode-zen", model: "space-bunny-free" });
     expect(parsed["llm-pi-ai"].providers["opencode-zen"]).toMatchObject({
       baseURL: "https://opencode.ai/zen/v1",
-      apiKeyEnv: "BRUINE_ZEN_API_KEY",
+      headers: { Authorization: "Bearer public" },
     });
-    expect(await readFile(join(home, ".env"), "utf8")).toBe("BRUINE_ZEN_API_KEY=public\n");
+    expect(Object.keys(parsed["llm-pi-ai"].providers["opencode-zen"].models[0].reasoningEfforts)).toEqual(["off", "low", "medium", "high", "xhigh", "max"]);
+    // No key variable, so no .env line to write.
+    await expect(stat(join(home, ".env"))).rejects.toThrow();
   });
 
   test("a local server found → the free model is not even mentioned", async () => {

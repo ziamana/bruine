@@ -5,7 +5,7 @@ import { parse as parseYaml } from "yaml";
 import { describe, expect, test } from "vitest";
 import { SetupFlow, requiredKeyEnvs, type SetupAnswers } from "../src/setup/flow.js";
 import { loadPrefill } from "../src/setup/full.js";
-import { SPACE_BUNNY, SPACE_BUNNY_NOTICE, spaceBunnyPick } from "../src/setup/spacebunny.js";
+import { SPACE_BUNNY_HEADERS, SPACE_BUNNY_NOTICE, spaceBunnyPick } from "../src/setup/spacebunny.js";
 import type { Discovered } from "../src/setup/discover.js";
 
 const server1: Discovered = {
@@ -214,27 +214,38 @@ describe("Space Bunny Free (the yes or no of the roles step)", () => {
     return flow.buildPlan({ dshHome: "/h", bundledSkillsRoot: "/p", bundledSkills: [] });
   };
 
-  test("yes makes a route of its own, with its own key, and no local dummy key", () => {
+  test("yes makes a route of its own that authenticates with a header, and no key variable at all", () => {
     const p = plan();
     const parsed = parseYaml(p.settingsYaml) as Record<string, any>;
     expect(parsed["llm-pi-ai"].providers["opencode-zen"]).toMatchObject({
       displayName: "OpenCode Zen",
       api: "openai-completions",
       baseURL: "https://opencode.ai/zen/v1",
-      apiKeyEnv: "BRUINE_ZEN_API_KEY",
+      headers: { Authorization: "Bearer public" },
     });
+    expect(parsed["llm-pi-ai"].providers["opencode-zen"].apiKeyEnv).toBeUndefined();
     expect(parsed["llm-pi-ai"].providers["opencode-zen"].models[0]).toMatchObject({
       id: "space-bunny-free",
       contextWindow: 1_000_000,
     });
     expect(parsed["agent-default-model"]).toEqual({ provider: "opencode-zen", model: "space-bunny-free" });
     const names = p.env.map(([name]) => name);
-    expect(p.env).toContainEqual(["BRUINE_ZEN_API_KEY", "public"]);
+    expect(names).not.toContain("BRUINE_ZEN_API_KEY");
     expect(names).not.toContain("BRUINE_LOCAL_API_KEY");
   });
 
-  test("the gateway refuses every key but its public one, so that is the one written", () => {
-    expect(SPACE_BUNNY.keyValue).toBe("public");
+  test("the gateway refuses every key but its public one, so that is the one sent", () => {
+    expect(SPACE_BUNNY_HEADERS.Authorization).toBe("Bearer public");
+  });
+
+  test("the model offers the thinking levels the endpoint really takes, off being the quiet one", () => {
+    const parsed = parseYaml(plan().settingsYaml) as Record<string, any>;
+    const efforts = parsed["llm-pi-ai"].providers["opencode-zen"].models[0].reasoningEfforts;
+    expect(Object.keys(efforts)).toEqual(["off", "low", "medium", "high", "xhigh", "max"]);
+    expect(efforts.off).toBe("minimal");
+    expect(efforts.max).toBe("max");
+    // `none` is refused by the endpoint, so it is never a wire value.
+    expect(Object.values(efforts)).not.toContain("none");
   });
 
   test("it asks for no key from the user", () => {
@@ -262,10 +273,11 @@ describe("Space Bunny Free (the yes or no of the roles step)", () => {
     const p = flow.buildPlan({ dshHome: "/h", bundledSkillsRoot: "/p", bundledSkills: [] });
     const parsed = parseYaml(p.settingsYaml) as Record<string, any>;
     const providers = parsed["llm-pi-ai"].providers as Record<string, any>;
-    expect(providers["opencode-zen"].apiKeyEnv).toBe("BRUINE_ZEN_API_KEY");
+    expect(providers["opencode-zen"].headers).toEqual({ Authorization: "Bearer public" });
+    expect(providers["opencode-zen"].apiKeyEnv).toBeUndefined();
     const local = Object.values(providers).find((prov) => prov.baseURL === server1.baseUrl);
     expect(local.apiKeyEnv).toBe("BRUINE_LOCAL_API_KEY");
-    expect(p.env).toContainEqual(["BRUINE_ZEN_API_KEY", "public"]);
     expect(p.env).toContainEqual(["BRUINE_LOCAL_API_KEY", "local"]);
+    expect(p.env.map(([n]) => n)).not.toContain("BRUINE_ZEN_API_KEY");
   });
 });

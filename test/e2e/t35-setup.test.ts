@@ -407,7 +407,7 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
   }
 });
 
-test("first install → Yes to Space Bunny Free → its own route and key, nothing asked about a key", async () => {
+test("first install → Yes to Space Bunny Free → its own route, nothing asked about a key", async () => {
   const server = await startServer([]);
   const home = await mkdtemp(join(tmpdir(), "bruine-t35-zen-"));
   const h = await SetupPty.start(home);
@@ -459,10 +459,8 @@ test("first install → Yes to Space Bunny Free → its own route and key, nothi
     expect(settings["agent-default-model"]).toEqual({ provider: "opencode-zen", model: "space-bunny-free" });
     expect(settings["llm-pi-ai"].providers["opencode-zen"]).toMatchObject({
       baseURL: "https://opencode.ai/zen/v1",
-      apiKeyEnv: "BRUINE_ZEN_API_KEY",
+      headers: { Authorization: "Bearer public" },
     });
-    const env = await readFile(join(home, ".env"), "utf8");
-    expect(env).toContain("BRUINE_ZEN_API_KEY=public");
     const bruine = JSON.parse(await readFile(join(home, "bruine.json"), "utf8")) as Record<string, any>;
     expect(bruine.models.main).toMatchObject({ provider: "opencode-zen", model: "space-bunny-free", contextWindow: 1_000_000 });
   } finally {

@@ -42,6 +42,8 @@ export interface Discovered {
   reasoningEfforts?: Record<string, string | null>;
   /** What the route's models take in, when known (`text`, `image`); absent leaves the harness default. */
   input?: string[];
+  /** How long this route's stream may stay silent before a retry, when it needs less than the default. */
+  streamIdleTimeoutMs?: number;
 }
 
 /** Which thinking knobs a chat template understands (T34). */

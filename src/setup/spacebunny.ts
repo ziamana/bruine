@@ -42,6 +42,13 @@ export const SPACE_BUNNY_EFFORTS: Record<string, string> = {
  */
 export const SPACE_BUNNY_INPUT: string[] = ["text", "image"];
 
+/**
+ * How long the stream may stay silent before the request is given up and tried again. The harness
+ * waits five minutes by default; on a free gateway that stalls now and then, that is five minutes
+ * of nothing. Two minutes still covers a model that thinks quietly at its highest level.
+ */
+export const SPACE_BUNNY_IDLE_TIMEOUT_MS = 120_000;
+
 /** The route as settings.yaml spells it. */
 export function spaceBunnyRoute(): Record<string, unknown> {
   return {
@@ -49,6 +56,7 @@ export function spaceBunnyRoute(): Record<string, unknown> {
     api: "openai-completions",
     baseURL: SPACE_BUNNY.baseUrl,
     headers: { ...SPACE_BUNNY_HEADERS },
+    streamIdleTimeoutMs: SPACE_BUNNY_IDLE_TIMEOUT_MS,
     models: [
       {
         id: SPACE_BUNNY.model,
@@ -82,6 +90,7 @@ export function spaceBunnyDiscovered(): Discovered {
     headers: { ...SPACE_BUNNY_HEADERS },
     reasoningEfforts: { ...SPACE_BUNNY_EFFORTS },
     input: [...SPACE_BUNNY_INPUT],
+    streamIdleTimeoutMs: SPACE_BUNNY_IDLE_TIMEOUT_MS,
   };
 }
 

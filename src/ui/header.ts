@@ -15,9 +15,9 @@ const RESOURCE_MAX_WIDTH = 100;
 /** Two columns of indent, then the label padded to its longest ("plugins") and two spaces. */
 const RESOURCE_PREFIX = 2 + 9;
 
-/** The two rows of the mark in the palette's gradient (one accent on terminals without 24-bit color). */
-export function logoRows(): [string, string] {
-  return [gradientStops(LOGO[0], [...LOGO_STOPS]), gradientStops(LOGO[1], [...LOGO_STOPS])];
+/** The three rows of the mark in the palette's gradient (one accent on terminals without 24-bit color). */
+export function logoRows(): [string, string, string] {
+  return [gradientStops(LOGO[0], [...LOGO_STOPS]), gradientStops(LOGO[1], [...LOGO_STOPS]), gradientStops(LOGO[2], [...LOGO_STOPS])];
 }
 
 /** Cells left for what sits beside the mark. */

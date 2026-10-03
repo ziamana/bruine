@@ -1040,7 +1040,7 @@ export class KumoUi {
    * The banner: the wordmark with the version and the server beside it, the way out
    * under that, then what is loaded.
    *
-   * The mark is two rows and stays still: it is the same on every frame and every
+   * The mark is three rows and stays still: it is the same on every frame and every
    * terminal that can draw it, and it gives the first screen its identity without a
    * sweep or a boot sequence. Beside it, row one names the build and where the model
    * is served, row two is the key line. Under a blank row, skills and plugins are one
@@ -1061,14 +1061,14 @@ export class KumoUi {
         .join(this.#ink("faint")(` ${sep} `));
     const rows: string[] = [];
     if (!ascii && width >= LOGO_MIN_WIDTH) {
-      const [top, bottom] = logoRows();
+      const [top, middle, bottom] = logoRows();
       const version = this.#ink("text")(`v${this.version}`);
       if (besideLogo(width) >= helpLineCells(sep)) {
-        rows.push(`${top}${LOGO_BESIDE_GAP}${version}${this.#hostCell(sep)}`, `${bottom}${LOGO_BESIDE_GAP}${keys(besideLogo(width))}`);
+        rows.push(`${top}${LOGO_BESIDE_GAP}${version}${this.#hostCell(sep)}`, `${middle}${LOGO_BESIDE_GAP}${keys(besideLogo(width))}`, bottom);
       } else {
         // Not enough room to keep the key labels next to the mark: the mark keeps the
         // build and the host, and the key line takes the full width under it.
-        rows.push(`${top}${LOGO_BESIDE_GAP}${version}`, `${bottom}${LOGO_BESIDE_GAP}${this.#hostName()}`, keys(width));
+        rows.push(`${top}${LOGO_BESIDE_GAP}${version}`, `${middle}${LOGO_BESIDE_GAP}${this.#hostName()}`, bottom, keys(width));
       }
     } else {
       const mark = ascii ? "|" : "\u258c";

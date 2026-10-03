@@ -884,7 +884,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       await vi.waitFor(() => expect(strip(ui.headerText(100))).toContain("skills"));
       const rows = ui.headerText(100).split("\n").map(strip);
       // Sorted by name, from the manifest, never from a constant.
-      expect(rows[3]).toMatch(/^ {2}skills {3}apex \u00b7 brixhub/);
+      expect(rows[4]).toMatch(/^ {2}skills {3}apex \u00b7 brixhub/);
       await ui.shutdown();
     } finally {
       if (saved === undefined) delete process.env.DSH_HOME;

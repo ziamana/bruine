@@ -57,9 +57,9 @@ export class SetupWelcome implements Component {
     const markWidth = LOGO[0].length;
     const narrow = width < markWidth + 4;
     const frame = ascii || narrow ? [WORD] : wordmarkFrame(phase);
-    // Keep a four-row canvas after the mark settles into its permanent two-row
-    // form, so it remains still and centered for the brief final hold.
-    const canvasHeight = ascii || narrow ? 1 : 4;
+    // Keep the full canvas (the mark plus a row of streaks above and splash below) after the
+    // mark settles into its permanent rows, so it remains still and centered for the brief final hold.
+    const canvasHeight = ascii || narrow ? 1 : LOGO.length + 2;
     const canvas = Array<string>(canvasHeight).fill("");
     const frameTop = Math.floor((canvasHeight - frame.length) / 2);
     frame.forEach((line, index) => { canvas[frameTop + index] = line; });

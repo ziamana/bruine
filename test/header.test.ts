@@ -94,7 +94,7 @@ describe("the header", () => {
     const ui = new KumoUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
     const rows = ui.headerText(60).split("\n").map(strip);
     expect(rows[0]).toMatch(/^[\u2588\u2584\u2580 ]+ {3}v0\.2\.0$/);
-    expect(rows[2]).toBe("escape interrupt \u00b7 ctrl+c clear \u00b7 ctrl+d exit \u00b7 / commands");
+    expect(rows[3]).toBe("escape interrupt \u00b7 ctrl+c clear \u00b7 ctrl+d exit \u00b7 / commands");
     delete process.env.KUMO_COLOR;
   });
 
@@ -113,10 +113,11 @@ describe("the header", () => {
     const ui = new KumoUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
     ui.setResources({ skills, plugins: ["repl", "render"] });
     const rows = ui.headerText(100).split("\n").map(strip);
-    expect(rows[2]).toBe("");
-    expect(rows[3]).toMatch(/^ {2}skills {3}apex · brixhub/);
-    expect(rows[3]!.trimEnd().endsWith("/skills")).toBe(true);
-    expect(rows[4]).toMatch(/^ {2}plugins {2}repl · render$/);
+    // The three rows of the mark, then the blank row, then one line for each kind.
+    expect(rows[3]).toBe("");
+    expect(rows[4]).toMatch(/^ {2}skills {3}apex · brixhub/);
+    expect(rows[4]!.trimEnd().endsWith("/skills")).toBe(true);
+    expect(rows[5]).toMatch(/^ {2}plugins {2}repl · render$/);
   });
 
   test("an empty kind is left out, never announced", () => {

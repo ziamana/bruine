@@ -69,7 +69,7 @@ describe("the welcome rain", () => {
       expect(lines).toHaveLength(30);
       expect(lines.some((l) => /[·╷│╎]/.test(l))).toBe(true);
       // The mark's own band is clear of rain on both sides.
-      const mid = lines.slice(12, 18);
+      const mid = lines.slice(11, 19);
       expect(mid.some((l) => /[█▀▄░▒▓]/.test(l))).toBe(true);
     });
   });
@@ -82,8 +82,8 @@ describe("the welcome rain", () => {
       Date.now = () => realNow() + 5000;
       try {
         const lines = welcome.render(100).map(plain).filter((l) => l.trim() !== "");
-        expect(lines).toHaveLength(2);
-        expect(lines.join("")).toMatch(/█▀▄ █▀▄ █ █/);
+        expect(lines).toHaveLength(3);
+        expect(lines.join("")).toMatch(/█▀▀▄ █▀▀▄ █  █/);
       } finally {
         Date.now = realNow;
       }

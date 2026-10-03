@@ -1,7 +1,9 @@
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_OFFICIAL, loadCloudProviders } from "./cloud.js";
 import { fetchProps, type TemplateCaps } from "./discover.js";
+import { SPACE_BUNNY, SPACE_BUNNY_NOTICE, spaceBunnySettings } from "./spacebunny.js";
 
 /** Ports probed on 127.0.0.1 for an OpenAI-compatible model server. */
 export const PROBE_PORTS = [
@@ -304,6 +306,8 @@ export type SetupOutcome =
   | { kind: "local"; baseUrl: string; model: string }
   | { kind: "deepseek" }
   | { kind: "openrouter" }
+  | { kind: "cloud"; provider: string; model: string }
+  | { kind: "free" }
   | { kind: "skipped" };
 
 export interface SearchChoice {
@@ -409,6 +413,62 @@ async function askProviderKey(
   return { kind: provider };
 }
 
+/** The free model, after a yes: its route, its public key, then the web search offer. */
+async function useSpaceBunny(dshHome: string, io: SetupIO, opts: { fetchImpl?: FetchLike }): Promise<SetupOutcome> {
+  await writeAtomic(join(dshHome, "settings.yaml"), renderSettingsYaml(spaceBunnySettings()), 0o600);
+  await writeEnvVar(join(dshHome, ".env"), SPACE_BUNNY.keyEnv, SPACE_BUNNY.keyValue);
+  io.write("Using Space Bunny Free through OpenCode Zen.\n");
+  await askSearch(dshHome, io, opts);
+  return { kind: "free" };
+}
+
+/** Any other provider of the catalog: its name, its key, one of its models. */
+async function askOtherCloud(
+  dshHome: string,
+  io: SetupIO,
+  opts: { fetchImpl?: FetchLike },
+): Promise<SetupOutcome | "retry"> {
+  const providers = await loadCloudProviders();
+  io.write(`Providers: ${providers.map((p) => p.id).join(", ")}\n`);
+  const raw = (await io.question("Provider (name or id): ")).trim().toLowerCase();
+  const exact = providers.find((p) => p.id === raw || p.name.toLowerCase() === raw);
+  const near = providers.filter((p) => raw !== "" && (p.id.includes(raw) || p.name.toLowerCase().includes(raw)));
+  const provider = exact ?? (near.length === 1 ? near[0] : undefined);
+  if (provider === undefined) {
+    io.write(near.length > 1 ? `More than one match: ${near.map((p) => p.id).join(", ")}.\n` : `No provider named "${raw}".\n`);
+    return "retry";
+  }
+  const key = (await io.secret(`${provider.name} API key: `)).trim();
+  if (key === "") {
+    io.write("No key entered. Skipping. You can add one later in the kumo home .env file\n");
+    return { kind: "skipped" };
+  }
+  let model: string;
+  if (provider.models.length === 0) {
+    const def = provider.id === DEEPSEEK_OFFICIAL.id ? DEEPSEEK_DEFAULT_MODEL : "";
+    model = (await io.question(`Model id${def !== "" ? ` [${def}]` : ""}: `)).trim() || def;
+    if (model === "") {
+      io.write("A model id is needed.\n");
+      return "retry";
+    }
+  } else {
+    const shown = provider.models.slice(0, 12);
+    io.write(`Models: ${shown.map((m, i) => `[${String(i + 1)}] ${m.id}`).join("   ")}${provider.models.length > shown.length ? `   (+${String(provider.models.length - shown.length)} more: type an id)` : ""}\n`);
+    const pick = (await io.question("Model number or id [1]: ")).trim();
+    const n = Number.parseInt(pick, 10);
+    model = pick === "" ? (shown[0]?.id ?? "") : Number.isInteger(n) && String(n) === pick ? (shown[Math.min(Math.max(n - 1, 0), shown.length - 1)]?.id ?? "") : pick;
+  }
+  const doc: SettingsDoc = {
+    ...(provider.id === DEEPSEEK_OFFICIAL.id ? {} : { "llm-pi-ai": { providers: { [provider.id]: { apiKeyEnv: provider.keyEnv } } } }),
+    "agent-default-model": { provider: provider.id, model },
+  };
+  await writeAtomic(join(dshHome, "settings.yaml"), renderSettingsYaml(doc), 0o600);
+  await writeEnvVar(join(dshHome, ".env"), provider.keyEnv, key);
+  io.write(`Saved. Your API key is stored in ${join(dshHome, ".env")} (owner-only).\n`);
+  await askSearch(dshHome, io, opts);
+  return { kind: "cloud", provider: provider.id, model };
+}
+
 async function askServerAddress(
   dshHome: string,
   io: SetupIO,
@@ -471,12 +531,21 @@ export async function simpleSetup(
   }
 
   io.write("No local model server found.\n");
+  // The free model is offered once, as a yes or no that starts on no: the answer decides
+  // where the user's code goes.
+  const free = (await io.question(`${SPACE_BUNNY_NOTICE}\n[y/N] `)).trim().toLowerCase();
+  if (free.startsWith("y")) return useSpaceBunny(dshHome, io, opts);
   for (;;) {
     const choice = (
-      await io.question("Setup:  1) Enter a server address   2) DeepSeek   3) OpenRouter   [1] ")
+      await io.question("Setup:  1) Enter a server address   2) DeepSeek   3) OpenRouter   4) Other cloud provider   [1] ")
     ).trim();
     if (choice.startsWith("2")) return askProviderKey(dshHome, io, "deepseek", opts);
     if (choice.startsWith("3")) return askProviderKey(dshHome, io, "openrouter", opts);
+    if (choice.startsWith("4")) {
+      const other = await askOtherCloud(dshHome, io, opts);
+      if (other !== "retry") return other;
+      continue;
+    }
     const result = await askServerAddress(dshHome, io, opts);
     if (result !== "retry") return result;
   }

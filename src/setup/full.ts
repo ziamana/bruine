@@ -773,7 +773,12 @@ export async function runFullSetup(
       if (entry === CANCEL) return "quit";
       if (entry === "later") return "later";
       if (entry === "simple") {
+        // Leaving the panel for plain questions: wipe it, or its frame stays on the screen
+        // above them with half a border.
+        root.clear();
+        tui.requestRender();
         tui.stop();
+        if (process.stdout.isTTY === true) process.stdout.write("\x1b[2J\x1b[H");
         await simpleSetup(dshHome, setupIO());
         return "simple";
       }

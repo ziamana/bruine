@@ -1,5 +1,6 @@
 import type { Discovered } from "./discover.js";
 import type { RolePick } from "./flow.js";
+import type { SettingsDoc } from "./simple.js";
 
 /**
  * Space Bunny Free: a model OpenCode serves at no charge for a limited time through its
@@ -41,4 +42,29 @@ export function spaceBunnyDiscovered(): Discovered {
 
 export function spaceBunnyPick(): RolePick {
   return { discovered: spaceBunnyDiscovered(), model: SPACE_BUNNY.model, contextWindow: SPACE_BUNNY.contextWindow };
+}
+
+/** settings.yaml for the quick setup: the route, and it as the default model. */
+export function spaceBunnySettings(): SettingsDoc {
+  return {
+    "llm-pi-ai": {
+      providers: {
+        [SPACE_BUNNY.routeName]: {
+          displayName: "OpenCode Zen",
+          api: "openai-completions",
+          baseURL: SPACE_BUNNY.baseUrl,
+          apiKeyEnv: SPACE_BUNNY.keyEnv,
+          models: [
+            {
+              id: SPACE_BUNNY.model,
+              name: SPACE_BUNNY.model,
+              contextWindow: SPACE_BUNNY.contextWindow,
+              reasoningEfforts: { off: null, low: "low" },
+            },
+          ],
+        },
+      },
+    },
+    "agent-default-model": { provider: SPACE_BUNNY.routeName, model: SPACE_BUNNY.model },
+  };
 }

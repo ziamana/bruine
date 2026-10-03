@@ -49,7 +49,7 @@ export interface WindowHint extends Component {
 export class Shell extends Container {
   /** Index of the transcript among `children`; everything after it is pinned. */
   readonly #split: number;
-  /** The last transcript render, which is what a held window reads from. */
+  /** The last render of the header and the transcript, which is what a held window reads from. */
   #history: string[] = [];
   #previous: string[] = [];
   /** Lines the window is held above the live end. 0 is the live edge. */
@@ -103,7 +103,10 @@ export class Shell extends Container {
       else if (i > this.#split) bottom.push(...child.render(width));
     }
     const live = this.transcript.render(width);
-    this.#ingest(live);
+    // The header is the first thing in the document, not a bar pinned over it: the
+    // window reads the header and the transcript as one scroll, so the wordmark comes
+    // into view only when the reader reaches the top, as it does in the terminal itself.
+    this.#ingest([...top, ...live]);
     // At rest the transcript is printed whole and the terminal scrolls it, which is
     // what it has always done: the window is a mode, not the default frame.
     if (this.#back === 0 && this.hint === undefined) return [...top, ...live, ...bottom];
@@ -118,7 +121,7 @@ export class Shell extends Container {
     if (this.#back === 0) return [...top, ...live, ...bottom];
 
     const rows = Math.max(MIN_ROWS, this.rows());
-    const area = Math.max(1, rows - top.length - hint.length - bottom.length);
+    const area = Math.max(1, rows - hint.length - bottom.length);
     // The window is the last `keep` lines of the history, less the `back` lines
     // below it: slicing to the end would show the live edge and the offset would
     // only be a way to lose rows.
@@ -132,7 +135,7 @@ export class Shell extends Container {
     // budget — the top of the history, or a frame that just grew — is padded, never
     // left short, or the composer would drift up with it.
     const gap = Math.max(0, area - window.length);
-    const frame = [...top, ...Array.from({ length: gap }, () => ""), ...window, ...hint, ...bottom];
+    const frame = [...Array.from({ length: gap }, () => ""), ...window, ...hint, ...bottom];
     // The renderer repaints only the lines that differ, and treats the top of the
     // screen as wherever the previous frame left it. A windowed frame shorter than a
     // live one that had scrolled starts with the very same lines (the header, the

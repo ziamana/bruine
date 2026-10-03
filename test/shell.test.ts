@@ -232,24 +232,44 @@ describe("the transcript window keeps the composer on the last row", () => {
 
   test("the windowed frame's first line is not the live frame's, so the renderer redraws it whole", () => {
     // The renderer repaints only the lines that changed. A windowed frame starts with
-    // the same lines as the live one it replaces; without a difference on its first
-    // line a terminal that had scrolled repainted from the middle and left the rest
-    // of the screen blank.
+    // lines the live one also had; without a difference on its first line a terminal
+    // that had scrolled repainted from the middle and left the rest of the screen blank.
     const lines = Array.from({ length: 20 }, (_, i) => `line ${String(i)}`);
     const live: Component = { render: () => lines, invalidate: () => {} };
     const shell = new Shell([block("header")], live, [block("editor")], () => 12);
     const atRest = shell.render(40);
-    shell.scrollBy(3);
+    shell.scrollBy(500);
     const held = shell.render(40);
-    expect(held[0]).not.toBe(atRest[0]);
-    // It paints nothing: the visible text is the same line.
+    // Scrolled to the top, the window opens on the same line the live frame does.
     expect(strip(held[0]!)).toBe(strip(atRest[0]!));
+    expect(held[0]).not.toBe(atRest[0]);
     // And every windowed frame carries it, so moving in the window repaints only what moved.
-    shell.scrollBy(1);
-    expect(shell.render(40)[0]).toBe(held[0]);
+    shell.scrollBy(-1);
+    expect(shell.render(40)[0]!.startsWith("\x1b[0m")).toBe(true);
     // Back at the live edge the line is the plain one again.
     shell.scrollBy(-50);
     expect(shell.render(40)[0]).toBe(atRest[0]);
+  });
+
+  test("the header scrolls with the transcript: out of view while reading, back at the very top", () => {
+    // The wordmark is the first thing in the document. Reading back through a long
+    // conversation it is far above, and it must not sit pinned over the page.
+    const lines = Array.from({ length: 60 }, (_, i) => `line ${String(i)}`);
+    const live: Component = { render: () => lines, invalidate: () => {} };
+    const shell = new Shell([block("HEADER")], live, [block("editor")], () => 12);
+    shell.render(40);
+    shell.scrollBy(20);
+    const middle = shell.render(40).map(strip);
+    expect(middle).not.toContain("HEADER");
+    expect(middle.at(-1)).toBe("editor");
+    expect(middle.filter((l) => l.startsWith("line "))).toHaveLength(11);
+    // All the way up, the header is the first line of the first page.
+    shell.scrollBy(500);
+    const top = shell.render(40).map(strip);
+    expect(top[0]).toBe("HEADER");
+    expect(top.filter((l) => l.startsWith("line "))[0]).toBe("line 0");
+    expect(top.at(-1)).toBe("editor");
+    expect(top).toHaveLength(12);
   });
 
   test("a terminal too short for a window still gets its band", () => {

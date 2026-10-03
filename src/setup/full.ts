@@ -806,7 +806,16 @@ export async function runFullSetup(
           status = stepTitle(flow.step);
           continue;
         }
-        flow.submit(result as Partial<SetupAnswers>);
+        try {
+          flow.submit(result as Partial<SetupAnswers>);
+        } catch (err) {
+          // A missing answer (no main model, a key left empty) is said on the step, which
+          // stays: it must never end the whole setup and lose what was already chosen.
+          setStatus(`! ${(err as Error).message}`);
+          await sleep(1800);
+          setStatus(stepTitle(step));
+          continue;
+        }
         status = stepTitle(flow.step);
       }
       if (!returnToEntry) return "quit";
@@ -1137,8 +1146,8 @@ export async function runFullSetup(
         const mapped = cur.cloud !== undefined ? idx : idx >= 0 ? idx + (opts.allowNone === true ? 1 : 0) + (opts.useMainDefault !== undefined ? 1 : 0) : -1;
         if (mapped >= 0) initial = mapped;
         skipLabel = `Skip (keep: ${cur.model})`;
+        items.push({ value: "skip", label: skipLabel });
       }
-      items.push({ value: "skip", label: skipLabel });
     } else if (opts.useMainDefault !== undefined) {
       const curFast = flow.answers.roles.fast;
       if (curFast !== undefined) {
@@ -1156,7 +1165,8 @@ export async function runFullSetup(
       initial = flow.answers.roles.vision === undefined ? 0 : undefined;
     }
 
-    const src = await selectStep(`Role: ${label} (s skips)`, items, (i) => i, { filter: true, ...(initial !== undefined ? { initial } : {}) });
+    const hasSkip = items[items.length - 1]?.value === "skip";
+    const src = await selectStep(`Role: ${label}${hasSkip ? " (s skips)" : ""}`, items, (i) => i, { filter: true, ...(initial !== undefined ? { initial } : {}) });
     if (src === BACK || src === CANCEL) return src;
     const item = items[src] as SelectItem;
     if (item.value === "skip") return SKIP;
@@ -1213,22 +1223,24 @@ export async function runFullSetup(
     displayStep = "keys";
     const reqs = requiredKeyEnvs(flow.answers);
     if (reqs.length === 0) {
-      const r = await selectStep("No API keys needed for your choices.", [
-        { value: "go", label: "Continue →" },
-        { value: "skip", label: `Skip (keep: current)` },
-      ], (i) => i);
+      const r = await selectStep("No API keys needed for your choices.", [{ value: "go", label: "Continue →" }], (i) => i);
       if (r === BACK || r === CANCEL) return r;
       return {};
     }
-    // T35: Skip the whole keys step (keep current keys).
-    const first = await selectStep("API keys needed for your choices.", [
-      { value: "enter", label: "Enter API keys →" },
-      { value: "skip", label: `Skip (keep: current)` },
-    ], (i) => i);
-    if (first === BACK || first === CANCEL) return first;
-    if (first === 1) return {};
+    const have = (env: string): boolean => (flow.answers.keys[env] ?? "").trim() !== "";
+    let ask = reqs.filter((env) => !have(env));
+    if (ask.length === 0) {
+      // Every key is already in the home's .env: keep them, or type new ones.
+      const first = await selectStep("API keys are already saved for your choices.", [
+        { value: "keep", label: "Keep my saved keys →" },
+        { value: "change", label: "Enter new keys" },
+      ], (i) => i);
+      if (first === BACK || first === CANCEL) return first;
+      if (first === 0) return {};
+      ask = reqs;
+    }
     const keys = { ...flow.answers.keys };
-    for (const env of reqs) {
+    for (const env of ask) {
       const v = await lineStep(`Enter ${env} (input is hidden): `, true);
       if (v === BACK || v === CANCEL) return v;
       keys[env] = v.trim();
@@ -1268,7 +1280,7 @@ export async function runFullSetup(
     setStatus(stepTitle("search"));
     const curSearch = flow.answers.search.provider;
     const s = await cardStep(
-      "Web search (a search needs an index of the web. Nothing is scraped for free) (s skips)",
+      "Web search (s skips)",
       [
         { value: "none", label: "None", description: "Keep web search disabled (default)." },
         { value: "searxng", label: "SearXNG", description: detected !== undefined ? `Detected on ${detected}` : "Connect your self-hosted instance URL." },
@@ -1277,6 +1289,7 @@ export async function runFullSetup(
         { value: "skip", label: `Skip (keep: ${curSearch})` },
       ],
       (i) => i,
+      { above: new Text(ansi.gray("A search needs an index of the web. Nothing is scraped for free."), 0, 0) },
     );
     if (s === BACK || s === CANCEL) return s;
     if (s === 4) return {};
@@ -1334,8 +1347,13 @@ export async function runFullSetup(
     ];
     const saved = skillsSubmitted ? flow.answers.skills : savedSkillsList(dshHome);
     const checked = initialSkillChecks(items, saved, found);
-    const keepLabel = saved !== undefined && saved.length > 0 ? saved.join(", ") : "current";
-    const sel = await checkStep(`Skills: Space toggles, Enter continues, s skips (keep: ${keepLabel})`, items, checked);
+    const sel = await checkStep(
+      saved !== undefined && saved.length > 0
+        ? `Skills: Space toggles, Enter continues, s skips (keeps ${String(saved.length)} enabled)`
+        : "Skills: Space toggles, Enter continues, s skips (enables none)",
+      items,
+      checked,
+    );
     if (sel === BACK || sel === CANCEL) return sel;
     if (sel === SKIP) return {};
     skillsSubmitted = true;

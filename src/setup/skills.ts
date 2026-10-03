@@ -61,16 +61,43 @@ export const SKILL_SOURCES: ReadonlyArray<{ label: string; rel: string[] }> = [
 /** A skill name must be a single safe path segment (a folder name). */
 const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-/** Parses the `name:` / `description:` keys of a SKILL.md frontmatter block. */
+/**
+ * Parses the `name:` / `description:` keys of a SKILL.md frontmatter block.
+ *
+ * A value can sit on its own line, or continue on the indented lines under it: either as a
+ * folded (`>-`) or literal (`|`) block, or as a plain value wrapped over several lines. A
+ * description written that way used to come out as the bare indicator (`>-`).
+ */
 export function parseSkillFrontmatter(md: string): { name?: string; description?: string } {
   const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(md);
   if (m === null || m[1] === undefined) return {};
+  const lines = m[1].split(/\r?\n/);
   const out: { name?: string; description?: string } = {};
-  for (const line of m[1].split(/\r?\n/)) {
-    const kv = /^([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(line.trim());
+  const unquote = (v: string): string => v.replaceAll(/^["']|["']$/g, "");
+  for (let i = 0; i < lines.length; i += 1) {
+    const kv = /^([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(lines[i]!.trimEnd());
     if (kv === null || kv[1] === undefined || kv[2] === undefined) continue;
-    if (kv[1] === "name") out.name = kv[2].replaceAll(/^["']|["']$/g, "");
-    if (kv[1] === "description") out.description = kv[2].replaceAll(/^["']|["']$/g, "");
+    const key = kv[1];
+    let value = kv[2].trim();
+    // The indented lines that belong to this key.
+    const rest: string[] = [];
+    let j = i + 1;
+    while (j < lines.length && (lines[j]!.trim() === "" || /^\s+\S/.test(lines[j]!))) {
+      rest.push(lines[j]!);
+      j += 1;
+    }
+    while (rest.length > 0 && rest[rest.length - 1]!.trim() === "") rest.pop();
+    const block = /^([>|])[+-]?\d*$/.exec(value);
+    if (block !== null) {
+      const body = rest.map((l) => l.trim());
+      value = block[1] === "|" ? body.join("\n") : body.join(" ").replaceAll(/\s+/g, " ").trim();
+      i = j - 1;
+    } else if (rest.length > 0 && key !== "name") {
+      value = [value, ...rest.map((l) => l.trim())].filter((l) => l !== "").join(" ");
+      i = j - 1;
+    }
+    if (key === "name") out.name = unquote(value);
+    if (key === "description") out.description = unquote(value);
   }
   return out;
 }

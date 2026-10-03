@@ -548,3 +548,37 @@ describe("skills written by other people, shipped with kumo", () => {
     expect(pkg.files).toContain("skills");
   });
 });
+
+describe("parseSkillFrontmatter reads descriptions that wrap over several lines", async () => {
+  const { parseSkillFrontmatter } = await import("../src/setup/skills.js");
+  const wrap = (body: string): string => `---\n${body}\n---\nBODY`;
+
+  test("a folded block is one line", () => {
+    const meta = parseSkillFrontmatter(wrap("name: make-it-better\ndescription: >-\n  Design engineering principles\n  for making interfaces feel polished.\nversion: 1"));
+    expect(meta.name).toBe("make-it-better");
+    expect(meta.description).toBe("Design engineering principles for making interfaces feel polished.");
+  });
+
+  test("a literal block keeps its line breaks", () => {
+    const meta = parseSkillFrontmatter(wrap("name: x\ndescription: |\n  first\n  second"));
+    expect(meta.description).toBe("first\nsecond");
+  });
+
+  test("a plain value wrapped over indented lines is joined", () => {
+    const meta = parseSkillFrontmatter(wrap("name: x\ndescription: Use when the user wants\n  to do a thing."));
+    expect(meta.description).toBe("Use when the user wants to do a thing.");
+  });
+
+  test("single-line and quoted values are as before, and the next key is not swallowed", () => {
+    const meta = parseSkillFrontmatter(wrap('name: "quoted"\ndescription: \'one line\'\nlicense: MIT'));
+    expect(meta).toEqual({ name: "quoted", description: "one line" });
+  });
+
+  test("the bundled skills all have a real description", async () => {
+    const { readBundledSkills } = await import("../src/setup/skills.js");
+    for (const skill of await readBundledSkills(join(repoRoot, "skills"))) {
+      expect(skill.description, skill.name).not.toMatch(/^[>|][+-]?$/);
+      expect(skill.description.length, skill.name).toBeGreaterThan(10);
+    }
+  });
+});

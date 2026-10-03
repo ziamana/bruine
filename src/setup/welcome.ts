@@ -118,7 +118,8 @@ export class SetupCardPicker implements Component {
       const description = wrapTextWithAnsi(item.description ?? "", contentWidth).slice(0, 2);
       lines.push(`${" ".repeat(pad)}${marker}${top}`);
       lines.push(`${" ".repeat(pad)}  ${box.row(selected ? ansi.bold(ansi.text(title)) : title)}`);
-      for (let row = 0; row < 2; row++) {
+      // A card with nothing to say (the Skip card) is just its title, not two empty rows.
+      for (let row = 0; row < (description.length === 0 ? 0 : 2); row++) {
         const text = description[row] ?? "";
         lines.push(`${" ".repeat(pad)}  ${box.row(ansi.gray(text))}`);
       }

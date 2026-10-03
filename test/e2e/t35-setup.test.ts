@@ -467,6 +467,47 @@ test("first install → Yes to Space Bunny Free → its own route and key, nothi
   }
 });
 
+test("first install with a cloud model: no Skip trap on the main model, and the keys step goes straight to the key", async () => {
+  const home = await mkdtemp(join(tmpdir(), "kumo-t35-cloud-"));
+  const h = await SetupPty.start(home);
+  try {
+    await h.waitFor("Choose your setup");
+    await h.waitFor("Quick setup");
+    await h.pressN("down", 1);
+    h.press("enter");
+    await h.waitFor("AI servers: found, add, or remove");
+    for (let i = 0; i < 8 && !(await h.selectedLine()).includes("Continue →"); i++) {
+      await h.pressN("down", 1);
+    }
+    h.press("enter");
+    await h.waitFor("Free model");
+    h.press("enter"); // No
+    await h.until(() => h.text().includes("Role: main"), 20_000, "roles step");
+    // Nothing is kept on a first install, so there is no Skip row to fall into.
+    expect(h.text()).not.toContain("Skip (keep");
+    expect(h.text()).not.toContain("(s skips)");
+    h.press("enter"); // DeepSeek
+    await h.waitFor("Model id on deepseek-official");
+    h.press("enter");
+    await h.until(() => h.text().includes("Role: fast"), 20_000, "fast role");
+    expect(h.text()).not.toContain("(s skips)");
+    h.press("enter");
+    await h.until(() => h.text().includes("Role: vision"), 20_000, "vision role");
+    h.press("enter");
+    // A key is missing: the step asks for it, with no menu in front.
+    await h.waitFor("Enter DEEPSEEK_API_KEY (input is hidden):");
+    expect(h.text()).not.toContain("Enter API keys →");
+    // An empty key is refused on the step; the setup is still there.
+    h.press("enter");
+    await h.waitFor("DEEPSEEK_API_KEY is required");
+    await h.waitFor("Enter DEEPSEEK_API_KEY (input is hidden):");
+    expect(h.exit).toBeUndefined();
+  } finally {
+    await h.dump("t35-cloud-failure");
+    await h.close();
+  }
+});
+
 test("fresh setup offers Set up later and exits without writing configuration", async () => {
   const home = await mkdtemp(join(tmpdir(), "kumo-setup-later-"));
   const h = await SetupPty.start(home);
@@ -499,7 +540,7 @@ test("setup cards keep Mode, Search and the three Telemetry choices independentl
     await h.pressN("up", 1); h.press("enter"); // Ask instead of Auto
     await h.waitMenu();
     await h.pressN("down", 2); h.press("enter");
-    await h.waitFor("Web search (a search needs");
+    await h.waitFor("Nothing is scraped for free");
     await h.dump("t35-search-cards");
     h.press("enter"); // None
     await h.waitMenu();

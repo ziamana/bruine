@@ -175,12 +175,12 @@ describe("degradation (D3: throughput, then cache, then context)", () => {
 
   test("the place row gives up the head of a long path before the badge", () => {
     const f = new FooterComponent(UNICODE_ICONS, {
-      cwd: "/srv/deeply/nested/workspace/of/a/coding/agent/kumo",
+      cwd: "/srv/deeply/nested/workspace/of/a/coding/agent/bruine",
       home: HOME,
     });
     f.set({ badges: ["FULL ACCESS"], gitBranch: "feature/D3-status-bar" });
     const line = rows(f, 60)[0]!;
-    expect(line).toContain("coding/agent/kumo");
+    expect(line).toContain("coding/agent/bruine");
     expect(line).not.toContain("/srv/deeply");
     expect(line.trimEnd().endsWith("FULL ACCESS")).toBe(true);
     // Narrower still: the path keeps a tail, and the badge is the last thing to go.
@@ -274,24 +274,24 @@ describe("the paths it names (D3)", () => {
     // One rule for one answer: `displayPlace` (place.ts, tested in shell.test.ts).
     const f = new FooterComponent(UNICODE_ICONS, { cwd: `${HOME}/Bureau`, home: HOME });
     expect(rows(f, 60)[0]).toContain("~/Bureau");
-    const outside = new FooterComponent(UNICODE_ICONS, { cwd: "/srv/kumo", home: HOME });
-    expect(rows(outside, 60)[0]).toContain("/srv/kumo");
+    const outside = new FooterComponent(UNICODE_ICONS, { cwd: "/srv/bruine", home: HOME });
+    expect(rows(outside, 60)[0]).toContain("/srv/bruine");
   });
 
   test("a shortened name keeps the tail that names it", () => {
     // The same rule as the place row above the input (clipStart), so one path is
     // never shortened two ways in one frame.
-    expect(shortenHead("/srv/deep/nested/kumo", 30)).toBe("/srv/deep/nested/kumo");
-    expect(shortenHead("/srv/deep/nested/kumo", 12)).toBe("…nested/kumo");
-    expect(shortenHead("/srv/deep/nested/kumo", 4)).toBe("…umo");
-    expect(shortenHead("/srv/deep/nested/kumo", 20, true)).toContain("...");
+    expect(shortenHead("/srv/deep/nested/bruine", 30)).toBe("/srv/deep/nested/bruine");
+    expect(shortenHead("/srv/deep/nested/bruine", 12)).toBe("…sted/bruine");
+    expect(shortenHead("/srv/deep/nested/bruine", 4)).toBe("…ine");
+    expect(shortenHead("/srv/deep/nested/bruine", 20, true)).toContain("...");
   });
 
   test("a session says where it is without anything wiring it", () => {
     // The constructor reads the working directory once, so the row is never empty
     // in a real session; the test only has to say where it is looking.
-    const f = new FooterComponent(UNICODE_ICONS, { cwd: "/srv/kumo", home: HOME });
-    expect(rows(f, 60)[0]).toContain("/srv/kumo");
+    const f = new FooterComponent(UNICODE_ICONS, { cwd: "/srv/bruine", home: HOME });
+    expect(rows(f, 60)[0]).toContain("/srv/bruine");
     f.set({ cwd: `${HOME}/Bureau` });
     expect(rows(f, 60)[0]).toContain("~/Bureau");
   });
@@ -299,7 +299,7 @@ describe("the paths it names (D3)", () => {
 describe("the branch it names (D3)", () => {
   const made: string[] = [];
   const dir = (): string => {
-    const d = mkdtempSync(join(tmpdir(), "kumo-git-"));
+    const d = mkdtempSync(join(tmpdir(), "bruine-git-"));
     made.push(d);
     return d;
   };

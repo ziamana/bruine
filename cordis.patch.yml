@@ -1,29 +1,29 @@
-# The kumo-code bundle patch: an interactive terminal agent over dsh-base.
-# Inserts the kumo plugins (startup, repl, render, approval, web-search) and
+# The bruine bundle patch: an interactive terminal agent over dsh-base.
+# Inserts the bruine plugins (startup, repl, render, approval, web-search) and
 # the extra tool rows. Cache rule (ARCHITECTURE section 0): the system prompt
 # and the tools array are byte-identical all session long — modes are a
-# kumo-side gate + appended messages, never a prompt/tool swap.
+# bruine-side gate + appended messages, never a prompt/tool swap.
 
 # T36: only the harness identity is switched off here. The persona itself is
 # composed at boot by src/profile.ts into the profile's own patch layer, where
 # it carries the model's display name (a local route's model id is a .gguf
-# path) — and where the kumo-bench system-prompt variants are applied, without
+# path) — and where the bruine-bench system-prompt variants are applied, without
 # ever editing this file or dsh.
 - id: system-prompt
   config:
     includeHarnessIdentity: false
 
-# kumo's own search provider (SearXNG / Brave / Tavily, configured in
-# kumo.json; "none" by default). Never dsh-free-search. The provider registers
+# bruine's own search provider (SearXNG / Brave / Tavily, configured in
+# bruine.json; "none" by default). Never dsh-free-search. The provider registers
 # itself with the `web` runtime lazily, so no gating is needed here.
 - id: web
   config:
-    searchProvider: kumo
+    searchProvider: bruine
     fetchProvider: http
 
-# T26: kumo owns the USER skills root. Setup links/copies the chosen skills
+# T26: bruine owns the USER skills root. Setup links/copies the chosen skills
 # into $DSH_HOME/skills (dsh's dshHome root, unchanged), so repoint
-# agentsHome at a kumo-owned empty directory: `~/.agents/skills` is no longer
+# agentsHome at a bruine-owned empty directory: `~/.agents/skills` is no longer
 # read implicitly. Project skills (`.agents/skills`, `.dsh/skills` in the
 # workspace) keep working; `dshHomePath` resolves $DSH_HOME at boot, exactly
 # like the dsh-base rows for sessions/storages.
@@ -33,33 +33,33 @@
 
 # T31c: the session-title LLM request fires in parallel with the first turn
 # (dsh-session-title onMainRequest); on a single-slot local server it steals
-# ~1.6 s from the first answer (BOS timing proxy). KUMO_TITLE_LLM=off — set
+# ~1.6 s from the first answer (BOS timing proxy). BRUINE_TITLE_LLM=off — set
 # by the launcher when the default route is private/localhost — disables the
 # provider row; dsh then titles from the first prompt with NO request. Cloud
 # routes keep their LLM title.
 - id: session-title-llm
-  disabled: !!js process.env.KUMO_TITLE_LLM === 'off'
+  disabled: !!js process.env.BRUINE_TITLE_LLM === 'off'
 
-# T16: safety comes from kumo's own gate, not dsh's sandbox — commands really
-# run on the machine. The sandbox is left fully open; kumo's pre-tool gate is
+# T16: safety comes from bruine's own gate, not dsh's sandbox — commands really
+# run on the machine. The sandbox is left fully open; bruine's pre-tool gate is
 # the only permission layer, so dsh escalation never fires.
 - id: sandbox-policy
   config:
     mode: danger-full-access
     workspaceRoot: !!js process.cwd()
 
-# Pin approvals to "ask": when kumo's gate returns `ask`, the approval service
-# must actually reach kumo-approval's select.
+# Pin approvals to "ask": when bruine's gate returns `ask`, the approval service
+# must actually reach bruine-approval's select.
 - id: approval
   config:
     policy: ask
 
 # The presets service validates that the composed (sandbox, approval) pair
-# matches a preset: kumo-ask = sandbox off + approvals reach kumo's select.
+# matches a preset: bruine-ask = sandbox off + approvals reach bruine's select.
 - id: permission
   name: '@deepseek-ai/dsh-permission-presets'
   config:
-    defaultPreset: kumo-ask
+    defaultPreset: bruine-ask
     presets:
       read-only:
         sandbox: read-only
@@ -76,22 +76,22 @@
         approval: never
         name: No Sandbox
         description: No sandbox.
-      kumo-ask:
+      bruine-ask:
         sandbox: danger-full-access
         approval: ask
-        name: kumo gate
-        description: Sandbox off; kumo's own gate asks before risky actions.
+        name: bruine gate
+        description: Sandbox off; bruine's own gate asks before risky actions.
 
 # Keep the model-facing catalog fixed for each session. The launcher reads
-# kumo.json before dsh starts; an absent tools setting selects lean.
+# bruine.json before dsh starts; an absent tools setting selects lean.
 - id: plan-mode
-  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+  disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 - id: tool-subagent-control
-  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+  disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 - id: tool-subagent-list-agents
-  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+  disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 - id: tool-subagent-fork
-  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+  disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 
 # A sub-agent run in the background is a plain job in the lean catalog: job_output
 # reads it, job_kill stops it and /tasks lists it. The persistent mode needs
@@ -105,51 +105,51 @@
   config:
     provider: spawn
     toolName: subagent
-    backgroundMode: !!js (process.env.KUMO_TOOLS === 'full' && 'continuable') || 'one-shot'
+    backgroundMode: !!js (process.env.BRUINE_TOOLS === 'full' && 'continuable') || 'one-shot'
 - id: tool-workflow
-  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+  disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 - id: tool-goal
-  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+  disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 - id: tool-ralph
-  disabled: !!js process.env.KUMO_TOOLS !== 'full'
+  disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 
 - insert:
-    - id: kumo-startup
-      name: 'kumo-code/startup'
+    - id: bruine-startup
+      name: 'bruine/startup'
 
-    - id: kumo-repl
-      name: 'kumo-code/repl'
-      inject: [kumoStartup]
-      disabled: !!js process.env.KUMO_HEADLESS === '1'
+    - id: bruine-repl
+      name: 'bruine/repl'
+      inject: [bruineStartup]
+      disabled: !!js process.env.BRUINE_HEADLESS === '1'
 
-    - id: kumo-headless
-      name: 'kumo-code/headless'
-      inject: [kumoStartup]
-      disabled: !!js process.env.KUMO_HEADLESS !== '1'
+    - id: bruine-headless
+      name: 'bruine/headless'
+      inject: [bruineStartup]
+      disabled: !!js process.env.BRUINE_HEADLESS !== '1'
 
-    - id: kumo-render
-      name: 'kumo-code/render'
+    - id: bruine-render
+      name: 'bruine/render'
 
-    - id: kumo-herdr
-      name: 'kumo-code/herdr'
-      disabled: !!js process.env.KUMO_HEADLESS === '1'
+    - id: bruine-herdr
+      name: 'bruine/herdr'
+      disabled: !!js process.env.BRUINE_HEADLESS === '1'
 
-    - id: kumo-approval
-      name: 'kumo-code/approval'
+    - id: bruine-approval
+      name: 'bruine/approval'
 
-    - id: kumo-modes
-      name: 'kumo-code/modes'
+    - id: bruine-modes
+      name: 'bruine/modes'
 
-    - id: kumo-web-search
-      name: 'kumo-code/web-search'
+    - id: bruine-web-search
+      name: 'bruine/web-search'
 
     - id: tool-ask-user
       name: '@deepseek-ai/dsh-tool-ask-user'
 
     - id: tool-str-replace-editor
       name: '@deepseek-ai/dsh-tool-str-replace-editor'
-      disabled: !!js process.env.KUMO_TOOLS !== 'full'
+      disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 
     - id: tool-present
       name: '@deepseek-ai/dsh-tool-present'
-      disabled: !!js process.env.KUMO_TOOLS !== 'full'
+      disabled: !!js process.env.BRUINE_TOOLS !== 'full'

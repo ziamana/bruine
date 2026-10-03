@@ -6,7 +6,7 @@ import { describe, expect, test } from "vitest";
 import { parseSkillFrontmatter, readBundledSkills, syncSkills } from "../src/setup/skills.js";
 
 async function fakeBundled(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "kumo-skills-"));
+  const root = await mkdtemp(join(tmpdir(), "bruine-skills-"));
   for (const name of ["alpha", "beta"]) {
     await mkdir(join(root, name), { recursive: true });
     await writeFile(
@@ -35,14 +35,14 @@ describe("readBundledSkills", () => {
   });
 
   test("missing root → empty", async () => {
-    expect(await readBundledSkills(join(tmpdir(), "definitely-missing-kumo"))).toEqual([]);
+    expect(await readBundledSkills(join(tmpdir(), "definitely-missing-bruine"))).toEqual([]);
   });
 });
 
 describe("syncSkills (T21.6)", () => {
-  test("installs chosen; unchoosing removes only what kumo installed", async () => {
+  test("installs chosen; unchoosing removes only what bruine installed", async () => {
     const bundled = await fakeBundled();
-    const home = await mkdtemp(join(tmpdir(), "kumo-home-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-home-"));
     const dir = join(home, "skills");
     // an empty user home: only the bundled roots exist here (T26 scan is a no-op)
     const userHome = join(home, "userhome");
@@ -61,7 +61,7 @@ describe("syncSkills (T21.6)", () => {
       alpha: { name: "alpha", kind: "shipped", source: join(bundled, "alpha") },
     });
 
-    // a hand-made skill kumo must never remove
+    // a hand-made skill bruine must never remove
     await mkdir(join(dir, "mine"), { recursive: true });
     await writeFile(join(dir, "mine", "SKILL.md"), "mine\n");
 

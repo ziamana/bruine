@@ -1,7 +1,7 @@
 import { formatElapsed } from "../render/elapsed.js";
 import { type Component, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { clipCells, completeWords, dim, sanitize, splitReasoningSegments, thinkingWords } from "../render/reasoning.js";
-import { kumoIcons, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, type BruineIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 
 /**
@@ -30,7 +30,7 @@ export class ReasoningComponent implements Component {
   #started = false;
   #ended = false;
   #endTime = 0;
-  constructor(private now: () => number = Date.now, private icons: KumoIcons = kumoIcons()) {}
+  constructor(private now: () => number = Date.now, private icons: BruineIcons = bruineIcons()) {}
   get active(): boolean { return this.#started && !this.#ended; }
   /** True when a press on this block does something: a finished thought only. */
   get clickable(): boolean { return this.#ended; }

@@ -3,26 +3,26 @@ import { runtimeHome, configReadPath, configWritePath } from "../compat.js";
  * T37 — `/model` and `/provider`: the route, chosen without leaving the session.
  *
  * OpenCode shows every model in a `/models` dialog and every provider in
- * `ctrl+a`; kumo gets the same surface from what dsh already knows. The `llm`
+ * `ctrl+a`; bruine gets the same surface from what dsh already knows. The `llm`
  * runtime IS the catalogue: `listProviders()` for the live routes,
  * `listConfigurableProviders()` for the dormant ones, `listModels(provider)`
  * for what one route advertises right now. No models.dev-style catalog and no
  * cached JSON — a local llama.cpp server is the source of truth, and its
- * loaded model changes without kumo knowing.
+ * loaded model changes without bruine knowing.
  *
  * The switch itself is dsh's own seam: replacing `.current` on the selection
- * ref is exactly what kumo-effort does for the reasoning effort, so the change
+ * ref is exactly what bruine-effort does for the reasoning effort, so the change
  * reaches the NEXT request and nothing else. dsh appends its own durable
  * `[model changed: …]` notice, which is the cache-safe mechanism
  * (ARCHITECTURE §0 — never a prompt rewrite).
  * `agentDefaultModel.saveSelection` writes `agent-default-model` in
- * settings.yaml, so the choice survives a restart without kumo writing YAML.
+ * settings.yaml, so the choice survives a restart without bruine writing YAML.
  *
  * A model the server advertises but settings.yaml does not declare IS
  * accepted: dsh states that catalog membership is advisory and absence is not
  * a rejection, and refusing it would strand a llama.cpp user who just loaded a
  * new model. The picker says the model is not recorded yet, because its pretty
- * name and window stay unknown until `kumo setup` writes it.
+ * name and window stay unknown until `bruine setup` writes it.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { chmod, rename, writeFile } from "node:fs/promises";
@@ -31,15 +31,15 @@ import { join } from "node:path";
 import { matchesKey } from "@earendil-works/pi-tui";
 import { displayModel } from "../ui/footer.js";
 import { formatK } from "../ui/errors.js";
-import { readSettingsProviders, type SettingsProvider } from "../ui/kumo-ui.js";
-import { KUMO_EFFORT_SERVICE } from "./effort.js";
-import type { DshContext, KumoRepl } from "./ctx.js";
+import { readSettingsProviders, type SettingsProvider } from "../ui/bruine-ui.js";
+import { BRUINE_EFFORT_SERVICE } from "./effort.js";
+import type { DshContext, BruineRepl } from "./ctx.js";
 
 /** Stable Cordis plugin name. */
-export const name = "kumo-model";
+export const name = "bruine-model";
 
 /** Service published for the REPL slash router. */
-export const KUMO_MODEL_SERVICE = "kumoModel";
+export const BRUINE_MODEL_SERVICE = "bruineModel";
 
 /** One exact route. dsh's ModelSelection minus the effort. */
 export interface RouteRef {
@@ -243,7 +243,7 @@ export function dormantCount(llm: LlmLike | undefined, known: readonly string[])
  * The models one route may be switched to: the ones settings.yaml declares,
  * because a pi-ai route can only dispatch a model its profile configures.
  * What the server advertises on top of that is reported, not offered, so the
- * llama.cpp user who just loaded a new model is told to run `kumo setup`
+ * llama.cpp user who just loaded a new model is told to run `bruine setup`
  * instead of meeting a failed turn.
  */
 export function buildModelRows(
@@ -271,27 +271,27 @@ export function buildModelRows(
   return { rows, undeclared };
 }
 
-interface KumoJson {
+interface BruineJson {
   recentModels?: string[];
   [key: string]: unknown;
 }
 
-function kumoHome(): string {
+function bruineHome(): string {
   return runtimeHome();
 }
 
-function readKumoJson(): KumoJson {
+function readBruineJson(): BruineJson {
   try {
-    const path = configReadPath(kumoHome());
+    const path = configReadPath(bruineHome());
     if (!existsSync(path)) return {};
-    return JSON.parse(readFileSync(path, "utf8")) as KumoJson;
+    return JSON.parse(readFileSync(path, "utf8")) as BruineJson;
   } catch {
     return {};
   }
 }
 
 /**
- * Remember the routes just used in kumo.json (atomic, 0600, other keys kept).
+ * Remember the routes just used in bruine.json (atomic, 0600, other keys kept).
  * BOTH the route left and the route taken are recorded, newest first: a user
  * who switches once must be able to switch back with f2, and the model they
  * came from was never in the list before.
@@ -299,12 +299,12 @@ function readKumoJson(): KumoJson {
 export async function rememberRoutes(...keys: string[]): Promise<void> {
   const wanted = keys.filter((key) => !key.includes("//") && !key.endsWith("/"));
   if (wanted.length === 0) return;
-  const doc = readKumoJson();
+  const doc = readBruineJson();
   const recents = [...wanted, ...(doc.recentModels ?? [])].filter(
     (key, index, all) => all.indexOf(key) === index,
   );
   doc.recentModels = recents.slice(0, 8);
-  const path = configWritePath(kumoHome());
+  const path = configWritePath(bruineHome());
   // Unique temp name: two quick switches must not fight over one .tmp.
   const tmp = `${path}.${String(process.pid)}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`;
   await writeFile(tmp, `${JSON.stringify(doc, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -318,7 +318,7 @@ export async function rememberRoutes(...keys: string[]): Promise<void> {
 
 /**
  * `$DSH_HOME/.env` key NAMES only — a value never leaves this function.
- * kumo's own writer emits a bare `KEY=value`; a hand-edited file may prefix
+ * bruine's own writer emits a bare `KEY=value`; a hand-edited file may prefix
  * `export `, which dsh's dotenv loader accepts, so both are read.
  */
 export function readEnvKeys(dshHome?: string): Set<string> {
@@ -349,12 +349,12 @@ export class ModelPicker {
   private dshHome: string | undefined;
   /** `.env` key names, read once per command run. */
   #envKeys: Set<string> | undefined;
-  /** The pending kumo.json write (awaited by tests and by the reply). */
+  /** The pending bruine.json write (awaited by tests and by the reply). */
   persisted: Promise<void> = Promise.resolve();
   noticeShown = "";
 
   async attach(
-    repl: KumoRepl | undefined,
+    repl: BruineRepl | undefined,
     llm: LlmLike | undefined,
     defaultModel?: DefaultModelLike,
   ): Promise<void> {
@@ -459,7 +459,7 @@ export class ModelPicker {
 
   /**
    * Switch the live route. Replacing `.current` on the ref is dsh's own seam
-   * (kumo-effort does the same for the effort), so the change reaches the next
+   * (bruine-effort does the same for the effort), so the change reaches the next
    * request and leaves the system prompt and the tools alone.
    *
    * A model the route does not declare is refused HERE, not on the next turn:
@@ -474,7 +474,7 @@ export class ModelPicker {
     if (declared === undefined) {
       const text =
         `Model "${next.model}" is not configured on ${next.provider}. ` +
-        "Run kumo setup to record it.";
+        "Run bruine setup to record it.";
       if (opts.notice) this.ui?.showNotice?.(text, { red: true });
       return text;
     }
@@ -544,7 +544,7 @@ export class ModelPicker {
   async cycleRecent(step: number): Promise<string> {
     this.#envKeys = undefined;
     const known = this.providerRows().map((r) => r.id);
-    const recents = (readKumoJson().recentModels ?? []).filter((key) => {
+    const recents = (readBruineJson().recentModels ?? []).filter((key) => {
       const parsed = parseRouteArg(key, known);
       return parsed !== undefined && parsed.model !== "" && this.declaredModel(parsed.provider, parsed.model) !== undefined;
     });
@@ -569,7 +569,7 @@ export class ModelPicker {
     const parsed = parseRouteArg(arg, known);
     if (parsed === undefined) return `Unknown route "${arg}". Use "/model" to pick one.`;
     if (known.length > 0 && !known.includes(parsed.provider)) {
-      return `Unknown provider "${parsed.provider}". Configured: ${known.join(", ")}. Run kumo setup to add one.`;
+      return `Unknown provider "${parsed.provider}". Configured: ${known.join(", ")}. Run bruine setup to add one.`;
     }
     if (parsed.model === "") return `Pick a model on ${parsed.provider}: use "/model".`;
     return this.apply(parsed, { notice: true, remember: true });
@@ -582,7 +582,7 @@ export class ModelPicker {
     const rest = line.replace(/^\/model\s*/, "").trim();
     if (rest !== "") return this.setDirect(rest);
     const rows = this.providerRows();
-    if (rows.length === 0) return "No provider is configured. Run kumo setup.";
+    if (rows.length === 0) return "No provider is configured. Run bruine setup.";
     const current = this.current;
     if (this.ui?.askChoice === undefined) {
       // Non-TTY: the same facts, one line per provider.
@@ -598,13 +598,13 @@ export class ModelPicker {
     const provider = rows[picked];
     if (provider === undefined) return "Model: unchanged.";
     if (!provider.live) {
-      const text = `${provider.label} is not configured yet. Run kumo setup to add it.`;
+      const text = `${provider.label} is not configured yet. Run bruine setup to add it.`;
       this.ui.showNotice?.(text);
       return text;
     }
     const models = await this.modelRows(provider.id);
     if (models.rows.length === 0) {
-      const text = `${provider.label} has no model configured. Run kumo setup.`;
+      const text = `${provider.label} has no model configured. Run bruine setup.`;
       this.ui.showNotice?.(text, { red: true });
       return text;
     }
@@ -613,8 +613,8 @@ export class ModelPicker {
     // it is named here and the fix is one command, not a failed turn later.
     if (models.undeclared.length > 0) {
       this.ui.showNotice?.(
-        `${provider.label} also serves ${models.undeclared.length} model(s) kumo has not recorded ` +
-          `(${models.undeclared.slice(0, 3).join(", ")}${models.undeclared.length > 3 ? ", ..." : ""}): run kumo setup to add them.`,
+        `${provider.label} also serves ${models.undeclared.length} model(s) bruine has not recorded ` +
+          `(${models.undeclared.slice(0, 3).join(", ")}${models.undeclared.length > 3 ? ", ..." : ""}): run bruine setup to add them.`,
       );
     }
     const modelAt = models.rows.findIndex((row) => row.current);
@@ -644,22 +644,22 @@ export class ModelPicker {
     const all = /\ball\b/i.test(line);
     const current = this.current;
     const rows = this.providerRows(all);
-    if (rows.length === 0) return "No provider is configured. Run kumo setup.";
+    if (rows.length === 0) return "No provider is configured. Run bruine setup.";
     const lines = [`Providers (${String(rows.length)}):`];
     for (const row of rows) lines.push(`  ${providerLine(row, current, this.keyIsSet(row))}`);
     if (!all) {
       const more = dormantCount(this.llm, rows.map((row) => row.id));
       if (more > 0) {
         lines.push(
-          `  + ${String(more)} more kumo can add (deepseek, openrouter, openai, anthropic, google, xai, ...)`,
-          "  /provider all lists them · kumo setup adds one",
+          `  + ${String(more)} more bruine can add (deepseek, openrouter, openai, anthropic, google, xai, ...)`,
+          "  /provider all lists them · bruine setup adds one",
         );
       }
     }
     lines.push(
       current === undefined
         ? "No route in use: /model picks one."
-        : `In use: ${routeKey(current)} · /model switches · kumo setup adds a provider.`,
+        : `In use: ${routeKey(current)} · /model switches · bruine setup adds a provider.`,
     );
     return lines.join("\n");
   }
@@ -668,14 +668,14 @@ export class ModelPicker {
 export function apply(ctx: DshContext): void {
   const picker = new ModelPicker();
 
-  ctx.inject(["kumoRepl"], (c: any) => {
+  ctx.inject(["bruineRepl"], (c: any) => {
     void picker
-      .attach(c.kumoRepl as KumoRepl, ctx.get("llm") as LlmLike, ctx.get("agentDefaultModel") as DefaultModelLike)
+      .attach(c.bruineRepl as BruineRepl, ctx.get("llm") as LlmLike, ctx.get("agentDefaultModel") as DefaultModelLike)
       .then(() => {
         // T37: the effort plugin owns the levels of the model in use, so a route
         // switch must hand it the new one. Resolved here, after both plugins
         // have mounted, so their load order does not matter.
-        const effort = ctx.get(KUMO_EFFORT_SERVICE) as
+        const effort = ctx.get(BRUINE_EFFORT_SERVICE) as
           | { adoptRoute?(provider: string, model: string): Promise<void> }
           | undefined;
         picker.setEffort(effort === null ? undefined : effort);
@@ -683,7 +683,7 @@ export function apply(ctx: DshContext): void {
   });
 
   // Register in dsh's own commands service, so the T31 "/" palette lists both
-  // with a description (the seam kumo-effort uses for /effort).
+  // with a description (the seam bruine-effort uses for /effort).
   let registered = false;
   const register = (): void => {
     if (registered) return;
@@ -716,8 +716,8 @@ export function apply(ctx: DshContext): void {
   }
   ctx.inject(["commands"], register);
 
-  ctx.provide(KUMO_MODEL_SERVICE, picker);
+  ctx.provide(BRUINE_MODEL_SERVICE, picker);
 }
 
-/** The Cordis plugin object (mounted programmatically by kumo-repl). */
+/** The Cordis plugin object (mounted programmatically by bruine-repl). */
 export default { name, apply };

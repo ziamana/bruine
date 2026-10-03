@@ -1,8 +1,8 @@
 /**
- * T26 — "kumo reuses the skills you already have": scanning foreign skill
- * dirs, link/copy install into $DSH_HOME/skills, the `.kumo-installed.json`
+ * T26 — "bruine reuses the skills you already have": scanning foreign skill
+ * dirs, link/copy install into $DSH_HOME/skills, the `.bruine-installed.json`
  * manifest, the wizard's pre-check migration, the T26b migration at launch,
- * and the `kumo skills` command.
+ * and the `bruine skills` command.
  */
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -39,7 +39,7 @@ async function putSkill(dir: string, name: string, description: string): Promise
 
 /** A fake user home with skills under several agents' directories. */
 async function fakeUserHome(): Promise<string> {
-  const home = await mkdtemp(join(tmpdir(), "kumo-t26-home-"));
+  const home = await mkdtemp(join(tmpdir(), "bruine-t26-home-"));
   await putSkill(join(home, ".agents", "skills", "alpha"), "alpha", "from agents");
   await putSkill(join(home, ".claude", "skills", "alpha"), "alpha", "from claude");
   await putSkill(join(home, ".pi", "agent", "skills", "alpha"), "alpha", "from pi");
@@ -81,12 +81,12 @@ describe("scanFoundSkills (T26)", () => {
   });
 
   test("missing home and win32 pathMod: no crash, empty", async () => {
-    expect(await scanFoundSkills(join(tmpdir(), "definitely-missing-kumo-t26"))).toEqual([]);
+    expect(await scanFoundSkills(join(tmpdir(), "definitely-missing-bruine-t26"))).toEqual([]);
     expect(await scanFoundSkills("C:\\Users\\x", path.win32)).toEqual([]);
   });
 
   test("a skill folder symlinked into an agent root counts (common install shape)", async () => {
-    const base = await mkdtemp(join(tmpdir(), "kumo-t26-sym-"));
+    const base = await mkdtemp(join(tmpdir(), "bruine-t26-sym-"));
     const real = join(base, "elsewhere", "delta");
     await putSkill(real, "delta", "via symlink");
     const home = join(base, "home");
@@ -98,16 +98,16 @@ describe("scanFoundSkills (T26)", () => {
   });
 
   test("scanProjectSkills reads .agents/skills and .dsh/skills of the cwd", async () => {
-    const proj = await mkdtemp(join(tmpdir(), "kumo-t26-proj-"));
+    const proj = await mkdtemp(join(tmpdir(), "bruine-t26-proj-"));
     await putSkill(join(proj, ".agents", "skills", "one"), "one", "project one");
     await putSkill(join(proj, ".dsh", "skills", "two"), "two", "project two");
     expect((await scanProjectSkills(proj)).map((s) => s.name)).toEqual(["one", "two"]);
-    expect(await scanProjectSkills(join(tmpdir(), "definitely-missing-kumo-t26-p"))).toEqual([]);
+    expect(await scanProjectSkills(join(tmpdir(), "definitely-missing-bruine-t26-p"))).toEqual([]);
   });
 });
 
 test("/skills lists usable home and project skills and completes their names", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kumo-skills-menu-"));
+  const root = await mkdtemp(join(tmpdir(), "bruine-skills-menu-"));
   const homeSkills = join(root, "home", "skills");
   const project = join(root, "project");
   await putSkill(join(homeSkills, "apex"), "apex", "Adaptive work");
@@ -136,10 +136,10 @@ test("/skills lists usable home and project skills and completes their names", a
   expect(forced?.items.map((item) => item.value)).toEqual(["apex", "browser", "impeccable"]);
 });
 
-describe("syncSkills and the skills kumo ships", () => {
-  test("a skill the user linked keeps its link when kumo ships the same name", async () => {
+describe("syncSkills and the skills bruine ships", () => {
+  test("a skill the user linked keeps its link when bruine ships the same name", async () => {
     const home = await fakeUserHome();
-    const skillsDir = join(home, ".kumo", "skills");
+    const skillsDir = join(home, ".bruine", "skills");
     const bundled = join(home, "bundle");
     await putSkill(join(bundled, "beta"), "beta", "shipped copy");
     await syncSkills({ homeSkillsDir: skillsDir, bundledRoot: join(home, "no-bundle"), chosen: ["beta"], home });
@@ -151,7 +151,7 @@ describe("syncSkills and the skills kumo ships", () => {
 
   test("with no link of the user's, the shipped copy is installed", async () => {
     const home = await fakeUserHome();
-    const skillsDir = join(home, ".kumo", "skills");
+    const skillsDir = join(home, ".bruine", "skills");
     const bundled = join(home, "bundle");
     await putSkill(join(bundled, "beta"), "beta", "shipped copy");
     const r = await syncSkills({ homeSkillsDir: skillsDir, bundledRoot: bundled, chosen: ["beta"], home });
@@ -164,7 +164,7 @@ describe("syncSkills and the skills kumo ships", () => {
 describe("syncSkills links foreign skills (T26)", () => {
   test("accepted: source edits are visible through $DSH_HOME/skills/<name>/SKILL.md", async () => {
     const home = await fakeUserHome();
-    const skillsDir = join(home, ".kumo", "skills");
+    const skillsDir = join(home, ".bruine", "skills");
     const r = await syncSkills({
       homeSkillsDir: skillsDir,
       bundledRoot: join(home, "no-bundle"),
@@ -181,7 +181,7 @@ describe("syncSkills links foreign skills (T26)", () => {
         source: join(home, ".claude", "skills", "beta"),
       },
     ]);
-    // edit the skill where it lives (Claude Code): kumo sees the change…
+    // edit the skill where it lives (Claude Code): bruine sees the change…
     const src = join(home, ".claude", "skills", "beta", "SKILL.md");
     await writeFile(src, "---\nname: beta\ndescription: edited\n---\nNEW BODY\n");
     expect(await readFile(join(skillsDir, "beta", "SKILL.md"), "utf8")).toContain("NEW BODY");
@@ -189,7 +189,7 @@ describe("syncSkills links foreign skills (T26)", () => {
 
   test("accepted: unchecking a linked skill removes ONLY the link; source untouched", async () => {
     const home = await fakeUserHome();
-    const skillsDir = join(home, ".kumo", "skills");
+    const skillsDir = join(home, ".bruine", "skills");
     const src = join(home, ".claude", "skills", "beta");
     await syncSkills({ homeSkillsDir: skillsDir, bundledRoot: join(home, "no-bundle"), chosen: ["beta"], home });
     const r = await syncSkills({ homeSkillsDir: skillsDir, bundledRoot: join(home, "no-bundle"), chosen: [], home });
@@ -200,7 +200,7 @@ describe("syncSkills links foreign skills (T26)", () => {
 
   test("a user folder in $DSH_HOME/skills not in the manifest survives", async () => {
     const home = await fakeUserHome();
-    const skillsDir = join(home, ".kumo", "skills");
+    const skillsDir = join(home, ".bruine", "skills");
     await putSkill(join(skillsDir, "mine"), "mine", "hand-made");
     await syncSkills({ homeSkillsDir: skillsDir, bundledRoot: join(home, "no-bundle"), chosen: ["beta"], home });
     const r = await syncSkills({ homeSkillsDir: skillsDir, bundledRoot: join(home, "no-bundle"), chosen: [], home });
@@ -209,10 +209,10 @@ describe("syncSkills links foreign skills (T26)", () => {
   });
 
   test("shipped beats found for the same name: the copy is installed", async () => {
-    const bundled = await mkdtemp(join(tmpdir(), "kumo-t26-bundle-"));
-    await putSkill(join(bundled, "alpha"), "alpha", "kumo shipped");
+    const bundled = await mkdtemp(join(tmpdir(), "bruine-t26-bundle-"));
+    await putSkill(join(bundled, "alpha"), "alpha", "bruine shipped");
     const home = await fakeUserHome();
-    const skillsDir = join(home, ".kumo", "skills");
+    const skillsDir = join(home, ".bruine", "skills");
     await syncSkills({ homeSkillsDir: skillsDir, bundledRoot: bundled, chosen: ["alpha"], home });
     const [entry] = await readInstalledSkills(skillsDir);
     expect(entry).toMatchObject({ kind: "shipped", source: join(bundled, "alpha") });
@@ -222,7 +222,7 @@ describe("syncSkills links foreign skills (T26)", () => {
 
   test("linking failure falls back to a copy and says so", async () => {
     const home = await fakeUserHome();
-    const skillsDir = join(home, ".kumo", "skills");
+    const skillsDir = join(home, ".bruine", "skills");
     const r = await syncSkills({
       homeSkillsDir: skillsDir,
       bundledRoot: join(home, "no-bundle"),
@@ -252,10 +252,10 @@ describe("syncSkills links foreign skills (T26)", () => {
   });
 
   test("re-saving the same choice keeps the installed copy — and the user's edits to it", async () => {
-    const bundled = await mkdtemp(join(tmpdir(), "kumo-t26-bundle2-"));
-    await putSkill(join(bundled, "alpha"), "alpha", "kumo shipped");
+    const bundled = await mkdtemp(join(tmpdir(), "bruine-t26-bundle2-"));
+    await putSkill(join(bundled, "alpha"), "alpha", "bruine shipped");
     const home = await fakeUserHome();
-    const skillsDir = join(home, ".kumo", "skills");
+    const skillsDir = join(home, ".bruine", "skills");
     await syncSkills({ homeSkillsDir: skillsDir, bundledRoot: bundled, chosen: ["alpha"], home });
     await writeFile(join(skillsDir, "alpha", "SKILL.md"), "user tweaked the installed copy");
     const r = await syncSkills({ homeSkillsDir: skillsDir, bundledRoot: bundled, chosen: ["alpha"], home });
@@ -267,7 +267,7 @@ describe("syncSkills links foreign skills (T26)", () => {
 
   test("pre-T26 manifest rows (file lists) still remove their directories", async () => {
     const home = await fakeUserHome();
-    const skillsDir = join(home, ".kumo", "skills");
+    const skillsDir = join(home, ".bruine", "skills");
     await mkdir(join(skillsDir, "legacy"), { recursive: true });
     await writeFile(join(skillsDir, "legacy", "SKILL.md"), "old\n");
     await writeFile(
@@ -287,8 +287,8 @@ describe("syncSkills links foreign skills (T26)", () => {
 });
 
 describe("wizard skills-step defaults (T26)", () => {
-  test("savedSkillsList: kumo.json's list, or undefined when never saved", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-t26-pref-"));
+  test("savedSkillsList: bruine.json's list, or undefined when never saved", async () => {
+    const home = await mkdtemp(join(tmpdir(), "bruine-t26-pref-"));
     expect(savedSkillsList(home)).toBeUndefined();
     await writeFile(join(home, "bruine.json"), JSON.stringify({ mode: "full", skills: ["a", "b"] }));
     expect(savedSkillsList(home)).toEqual(["a", "b"]);
@@ -298,7 +298,7 @@ describe("wizard skills-step defaults (T26)", () => {
 
   test("first run of this version: everything found in ~/.agents is pre-checked", () => {
     const items: CheckItem[] = [
-      { value: "#h1", label: "Shipped with kumo", disabled: true },
+      { value: "#h1", label: "Shipped with bruine", disabled: true },
       { value: "shipped-one", label: "shipped-one" },
       { value: "#h2", label: "Found on this computer", disabled: true },
       { value: "alpha", label: "alpha" },
@@ -336,9 +336,9 @@ describe("wizard skills-step defaults (T26)", () => {
     expect(initialSkillChecks(items, ["other"], foundSkills)).toEqual(new Set([3]));
   });
 
-  test("first run: a recommended skill kumo ships is pre-checked too, and an ordinary shipped one is not", () => {
+  test("first run: a recommended skill bruine ships is pre-checked too, and an ordinary shipped one is not", () => {
     const items: CheckItem[] = [
-      { value: "#h", label: "Shipped with kumo", disabled: true },
+      { value: "#h", label: "Shipped with bruine", disabled: true },
       { value: "code-review", label: "code-review" },
       { value: "impeccable", label: "impeccable" },
       { value: "playwright-cli", label: "playwright-cli" },
@@ -348,7 +348,7 @@ describe("wizard skills-step defaults (T26)", () => {
 
   test("a saved list pre-checks exactly that; headers never check", () => {
     const items: CheckItem[] = [
-      { value: "#h1", label: "Shipped with kumo", disabled: true },
+      { value: "#h1", label: "Shipped with bruine", disabled: true },
       { value: "alpha", label: "alpha" },
       { value: "beta", label: "beta" },
     ];
@@ -361,7 +361,7 @@ describe("wizard skills-step defaults (T26)", () => {
 
 describe("migrateAgentsSkills (T26b)", () => {
   async function launchHomes(): Promise<{ userHome: string; skillsDir: string }> {
-    const base = await mkdtemp(join(tmpdir(), "kumo-t26b-"));
+    const base = await mkdtemp(join(tmpdir(), "bruine-t26b-"));
     const userHome = join(base, "user");
     for (const name of ["one", "two", "three"]) {
       await putSkill(join(userHome, ".agents", "skills", name), name, `the ${name} skill`);
@@ -369,7 +369,7 @@ describe("migrateAgentsSkills (T26b)", () => {
     await putSkill(join(userHome, ".claude", "skills", "four"), "four", "claude only"); // not .agents
     await mkdir(join(userHome, ".agents", "skills", "noname"), { recursive: true }); // not a skill
     await writeFile(join(userHome, ".agents", "skills", "noname", "SKILL.md"), "---\ndescription: x\n---\n");
-    return { userHome, skillsDir: join(base, "kumo", "skills") };
+    return { userHome, skillsDir: join(base, "bruine", "skills") };
   }
 
   test("accepted: no manifest + 3 valid .agents skills → 3 links + manifest", async () => {
@@ -402,8 +402,8 @@ describe("migrateAgentsSkills (T26b)", () => {
   });
 
   test("no .agents skills and no manifest → nothing invented, no marker", async () => {
-    const base = await mkdtemp(join(tmpdir(), "kumo-t26b-none-"));
-    const skillsDir = join(base, "kumo", "skills");
+    const base = await mkdtemp(join(tmpdir(), "bruine-t26b-none-"));
+    const skillsDir = join(base, "bruine", "skills");
     const r = await migrateAgentsSkills({ homeSkillsDir: skillsDir, home: join(base, "empty-user") });
     expect(r).toEqual({ linked: [], copied: [] });
     expect(existsSync(join(skillsDir, SKILLS_MANIFEST))).toBe(false);
@@ -426,24 +426,24 @@ describe("migrateAgentsSkills (T26b)", () => {
   });
 });
 
-describe("kumo launch migration (T26b)", () => {
+describe("bruine launch migration (T26b)", () => {
   // The user-home scan runs on os.homedir(); POSIX honours $HOME overrides.
   test.skipIf(process.platform === "win32")(
-    "kumo without a manifest links the .agents skills and says so once",
+    "bruine without a manifest links the .agents skills and says so once",
     async () => {
       const { localServerSettings, renderSettingsYaml } = await import("../src/setup/simple.js");
-      const base = await mkdtemp(join(tmpdir(), "kumo-t26b-launch-"));
+      const base = await mkdtemp(join(tmpdir(), "bruine-t26b-launch-"));
       const userHome = join(base, "user");
       await putSkill(join(userHome, ".agents", "skills", "kept"), "kept", "keep me loaded");
-      const kumoHome = join(base, "kumo");
+      const bruineHome = join(base, "bruine");
       // Pre-bake settings so launch skips the first-run setup entirely.
-      await mkdir(kumoHome, { recursive: true });
+      await mkdir(bruineHome, { recursive: true });
       const settings = localServerSettings(
         { baseUrl: "http://127.0.0.1:9/v1", models: ["nope"] },
         "nope",
       );
-      await writeFile(join(kumoHome, "settings.yaml"), renderSettingsYaml(settings));
-      await writeFile(join(kumoHome, "bruine.json"), JSON.stringify({ permissionMode: "full", search: { provider: "none" } }));
+      await writeFile(join(bruineHome, "settings.yaml"), renderSettingsYaml(settings));
+      await writeFile(join(bruineHome, "bruine.json"), JSON.stringify({ permissionMode: "full", search: { provider: "none" } }));
 
       const child = spawn(
         process.execPath,
@@ -452,34 +452,34 @@ describe("kumo launch migration (T26b)", () => {
           cwd: base,
           detached: true,
           stdio: ["ignore", "pipe", "pipe"],
-          env: { ...process.env, HOME: userHome, KUMO_HOME: kumoHome },
+          env: { ...process.env, HOME: userHome, BRUINE_HOME: bruineHome },
         },
       );
       let out = "";
       child.stdout?.on("data", (d) => { out += String(d); });
       child.stderr?.on("data", (d) => { out += String(d); });
-      const manifest = join(kumoHome, "skills", SKILLS_MANIFEST);
+      const manifest = join(bruineHome, "skills", SKILLS_MANIFEST);
       const t0 = Date.now();
       try {
         while (!existsSync(manifest)) {
           if (Date.now() - t0 > 90_000) throw new Error(`no migration manifest after 90s; output:\n${out}`);
           if (child.exitCode !== null && existsSync(manifest) === false && Date.now() - t0 > 5_000) {
-            throw new Error(`kumo exited ${String(child.exitCode)} before migrating; output:\n${out}`);
+            throw new Error(`bruine exited ${String(child.exitCode)} before migrating; output:\n${out}`);
           }
           await sleep(250);
         }
         // Give the announcement a tick to reach stdout (printed before dsh spawns).
         for (let i = 0; i < 20 && !out.includes("kept your 1 skill"); i++) await sleep(100);
-        expect(out).toContain("Setting up kumo (one time)…");
+        expect(out).toContain("Setting up bruine (one time)…");
         expect(out).toContain("Ready.");
         expect(out).not.toContain("Already up to date");
         expect(out).not.toContain("dependencies:");
         expect(out).toContain("kept your 1 skill from .agents/skills");
-        const entries = await readInstalledSkills(join(kumoHome, "skills"));
+        const entries = await readInstalledSkills(join(bruineHome, "skills"));
         expect(entries).toEqual([
           { name: "kept", kind: "linked", source: join(userHome, ".agents", "skills", "kept") },
         ]);
-        expect((await lstat(join(kumoHome, "skills", "kept"))).isSymbolicLink()).toBe(true);
+        expect((await lstat(join(bruineHome, "skills", "kept"))).isSymbolicLink()).toBe(true);
       } finally {
         const pid = child.pid;
         try {
@@ -494,38 +494,38 @@ describe("kumo launch migration (T26b)", () => {
   );
 });
 
-describe("kumo skills command (T26)", () => {
-  function runSkillsCli(kumoHome: string): string {
+describe("bruine skills command (T26)", () => {
+  function runSkillsCli(bruineHome: string): string {
     return execFileSync(process.execPath, [join(repoRoot, "dist", "bin.js"), "skills"], {
       encoding: "utf8",
-      env: { ...process.env, KUMO_HOME: kumoHome },
+      env: { ...process.env, BRUINE_HOME: bruineHome },
     });
   }
 
   test("prints enabled skills with kind and source, never content", async () => {
-    const bundled = await mkdtemp(join(tmpdir(), "kumo-t26-cli-"));
+    const bundled = await mkdtemp(join(tmpdir(), "bruine-t26-cli-"));
     await putSkill(join(bundled, "git-workflow"), "git-workflow", "ship it");
     const home = await fakeUserHome();
-    const kumoHome = join(home, ".kumo");
+    const bruineHome = join(home, ".bruine");
     await syncSkills({
-      homeSkillsDir: join(kumoHome, "skills"),
+      homeSkillsDir: join(bruineHome, "skills"),
       bundledRoot: bundled,
       chosen: ["git-workflow", "beta"],
       home,
     });
-    const out = runSkillsCli(kumoHome);
+    const out = runSkillsCli(bruineHome);
     expect(out).toContain(`git-workflow  shipped  ${join(bundled, "git-workflow")}`);
     expect(out).toContain(`beta  linked  ${join(home, ".claude", "skills", "beta")}`);
     expect(out).not.toContain("SECRET BODY");
   }, 30_000);
 
   test("nothing enabled → tells the user", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-t26-cli-empty-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-t26-cli-empty-"));
     expect(runSkillsCli(home)).toContain("No skills enabled");
   }, 30_000);
 });
 
-describe("skills written by other people, shipped with kumo", () => {
+describe("skills written by other people, shipped with bruine", () => {
   const theirs = ["impeccable", "make-interfaces-feel-better", "playwright-cli", "thermo-nuclear-code-quality-review", "youtube-transcript"];
 
   test("each carries its own license file and is named in THIRD_PARTY_NOTICES.md", async () => {

@@ -2,7 +2,7 @@ import { truncateToWidth, visibleWidth, type Component } from "@earendil-works/p
 import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { kumoIcons, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, type BruineIcons } from "../render/chars.js";
 import { clipStart } from "../render/reasoning.js";
 import { ansi } from "./theme.js";
 import { bgEnabled, onBg, paint, type PaletteRole } from "./palette.js";
@@ -31,7 +31,7 @@ export interface FooterState {
   /** Mode badges (PLAN / FULL ACCESS), set by the modes layer (T16). */
   badges?: string[];
   /**
-   * D3: where the tools run. Unset means the directory kumo was started in, so a
+   * D3: where the tools run. Unset means the directory bruine was started in, so a
    * session says where it is without anything having to wire it first.
    */
   cwd?: string;
@@ -132,7 +132,7 @@ export function readGitBranch(cwd: string): string | undefined {
 
 /**
  * A name that has to give up its head, by the same rule a path on screen follows:
- * `…/jets/kumo` still names the directory, `…/jets` names the wrong one.
+ * `…/jets/bruine` still names the directory, `…/jets` names the wrong one.
  */
 export function shortenHead(text: string, cells: number, ascii = false): string {
   return clipStart(text, cells, ascii ? "..." : "\u2026");
@@ -197,7 +197,7 @@ export class FooterComponent implements Component {
   #prefillMotion: { target: number; startedAt: number } | undefined;
   #tokenMotion: { from: TokenReadings; to: TokenReadings; startedAt: number } | undefined;
 
-  constructor(icons: KumoIcons = kumoIcons(), opts: { cwd?: string; home?: string } = {}) {
+  constructor(icons: BruineIcons = bruineIcons(), opts: { cwd?: string; home?: string } = {}) {
     this.#ascii = icons.think === "*";
     // Read once: the frame is painted on every keystroke, and a render must not be
     // a syscall. A directory change in the session arrives through `set`.

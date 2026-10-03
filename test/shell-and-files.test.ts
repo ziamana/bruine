@@ -13,7 +13,7 @@ describe("!command (UI polish 2026-09-26)", () => {
     expect(isShellLine("hello !x")).toBe(false);
   });
   test("runs in the cwd, shows output and exit code, never claims it went to the model", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "kumo-shell-"));
+    const dir = mkdtempSync(join(tmpdir(), "bruine-shell-"));
     writeFileSync(join(dir, "hello.txt"), "hi\n");
     const r = await runShell(process.platform === "win32" ? "dir /b" : "ls", dir);
     expect(r.code).toBe(0);
@@ -26,7 +26,7 @@ describe("!command (UI polish 2026-09-26)", () => {
 });
 
 describe("@ files without fd (UI polish 2026-09-26)", () => {
-  const root = mkdtempSync(join(tmpdir(), "kumo-files-"));
+  const root = mkdtempSync(join(tmpdir(), "bruine-files-"));
   mkdirSync(join(root, "src"));
   mkdirSync(join(root, "node_modules", "junk"), { recursive: true });
   writeFileSync(join(root, "src", "math.ts"), "");

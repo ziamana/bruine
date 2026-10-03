@@ -1,19 +1,19 @@
 import { Command } from "commander";
 import { parseCmdline } from "@deepseek-ai/dsh-cmdline";
-import type { DshContext, KumoStartup } from "./ctx.js";
+import type { DshContext, BruineStartup } from "./ctx.js";
 
 /** Stable Cordis plugin name. */
-export const name = "kumo-startup";
+export const name = "bruine-startup";
 
 /** Services required before argv can be parsed. */
 export const inject = ["cmdlineArgs"];
 
 /** The service provided by this plugin and injected by the REPL. */
-export const KUMO_STARTUP_SERVICE = "kumoStartup";
+export const BRUINE_STARTUP_SERVICE = "bruineStartup";
 
-function kumoCommand(): Command {
+function bruineCommand(): Command {
   const program = new Command()
-    .name("kumo")
+    .name("bruine")
     .description(
       "Interactive terminal agent. Type a message and press Enter; /exit or Ctrl+D quits.",
     )
@@ -25,27 +25,27 @@ function kumoCommand(): Command {
       "after",
       `
 Examples:
-  kumo                     start an interactive session
-  kumo "fix the tests"     start and send a first prompt
+  bruine                     start an interactive session
+  bruine "fix the tests"     start and send a first prompt
 `,
     );
   return program;
 }
 
 export function apply(ctx: DshContext): void {
-  const program = kumoCommand();
+  const program = bruineCommand();
   program.action(() => {
     const options = program.opts<{ print: string[]; outputFormat: string }>();
     if (options.print.length > 0) {
       if (!["text", "json", "stream-json"].includes(options.outputFormat)) {
         throw new Error("--output-format must be one of: text, json, stream-json");
       }
-      ctx.provide(KUMO_STARTUP_SERVICE, { headless: { prompts: options.print, format: options.outputFormat } });
+      ctx.provide(BRUINE_STARTUP_SERVICE, { headless: { prompts: options.print, format: options.outputFormat } });
       return;
     }
     const prompt = program.args.join(" ").trim();
-    const startup: KumoStartup = prompt === "" ? {} : { initialPrompt: prompt };
-    ctx.provide(KUMO_STARTUP_SERVICE, startup);
+    const startup: BruineStartup = prompt === "" ? {} : { initialPrompt: prompt };
+    ctx.provide(BRUINE_STARTUP_SERVICE, startup);
   });
   parseCmdline(ctx as any, program as any);
 }

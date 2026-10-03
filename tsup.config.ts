@@ -3,6 +3,7 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: {
     bin: "src/bin.ts",
+    compat: "src/compat.ts",
     "plugins/startup": "src/plugins/startup.ts",
     "plugins/repl": "src/plugins/repl.ts",
     "plugins/headless": "src/plugins/headless.ts",

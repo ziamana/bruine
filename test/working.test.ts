@@ -13,7 +13,7 @@ test.each([100, 60, 30])("activity fits %i columns and prioritizes state and tim
   }
 });
 test("reduced motion and ASCII keep a static recognizable status", () => {
-  process.env.KUMO_NO_ANIMATION = "1";
+  process.env.BRUINE_NO_ANIMATION = "1";
   const working = new WorkingComponent(() => 0, ASCII_ICONS);
   expect(working.active).toBe(false);
   expect(working.line(30).replace(/\x1b\[[0-9;]*m/g, "")).toBe("| Waiting for model 0s");

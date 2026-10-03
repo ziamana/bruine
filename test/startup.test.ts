@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { internals } from "@deepseek-ai/dsh-cmdline";
-import { apply, KUMO_STARTUP_SERVICE } from "../src/plugins/startup.js";
+import { apply, BRUINE_STARTUP_SERVICE } from "../src/plugins/startup.js";
 import { fakeCtx } from "./fakes.js";
 
 const realStdout = internals.stdout;
@@ -32,10 +32,10 @@ function run(args: string[]) {
   return { fake, exits };
 }
 
-describe("kumo-startup", () => {
+describe("bruine-startup", () => {
   test("positional words become the initial prompt", () => {
     const { fake, exits } = run(["fix", "the", "tests"]);
-    expect(fake.provided.get(KUMO_STARTUP_SERVICE)).toEqual({
+    expect(fake.provided.get(BRUINE_STARTUP_SERVICE)).toEqual({
       initialPrompt: "fix the tests",
     });
     expect(exits).toEqual([]);
@@ -43,12 +43,12 @@ describe("kumo-startup", () => {
 
   test("no args provides an empty startup", () => {
     const { fake } = run([]);
-    expect(fake.provided.get(KUMO_STARTUP_SERVICE)).toEqual({});
+    expect(fake.provided.get(BRUINE_STARTUP_SERVICE)).toEqual({});
   });
 
   test("headless flags publish ordered prompts and output format", () => {
     const { fake } = run(["-p", "first", "--print", "second", "--output-format", "json"]);
-    expect(fake.provided.get(KUMO_STARTUP_SERVICE)).toEqual({
+    expect(fake.provided.get(BRUINE_STARTUP_SERVICE)).toEqual({
       headless: { prompts: ["first", "second"], format: "json" },
     });
   });
@@ -56,12 +56,12 @@ describe("kumo-startup", () => {
   test("--help exits 0 without providing", () => {
     const { fake, exits } = run(["--help"]);
     expect(exits).toEqual([0]);
-    expect(fake.provided.has(KUMO_STARTUP_SERVICE)).toBe(false);
+    expect(fake.provided.has(BRUINE_STARTUP_SERVICE)).toBe(false);
   });
 
   test("-h exits 0 without providing", () => {
     const { fake, exits } = run(["-h"]);
     expect(exits).toEqual([0]);
-    expect(fake.provided.has(KUMO_STARTUP_SERVICE)).toBe(false);
+    expect(fake.provided.has(BRUINE_STARTUP_SERVICE)).toBe(false);
   });
 });

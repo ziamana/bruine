@@ -7,6 +7,6 @@ if ! command -v go >/dev/null 2>&1; then
   echo "no go toolchain on this machine" >&2
   exit 70
 fi
-echo "kumo-bench-check-mode: go-test"
-export GOCACHE="${GOCACHE:-/tmp/kumo-bench-gocache}"
+echo "bruine-bench-check-mode: go-test"
+export GOCACHE="${GOCACHE:-/tmp/bruine-bench-gocache}"
 exec go test ./...

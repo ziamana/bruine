@@ -16,7 +16,7 @@ const plain = (rows: string[]): string[] => rows.map(strip);
 
 /** A diff of one replaced line, in a file that really is on disk (numbers). */
 function numberedDiff(): FileDiff {
-  const dir = mkdtempSync(join(tmpdir(), "kumo-diff-"));
+  const dir = mkdtempSync(join(tmpdir(), "bruine-diff-"));
   const file = join(dir, "a.ts");
   writeFileSync(file, "const head = 0\nconst x = 1\nconst y = 3\n");
   const d = diffForCall("edit", JSON.stringify({ path: file, old_string: "const x = 2", new_string: "const x = 1" }));
@@ -89,12 +89,12 @@ describe("the two numberings", () => {
 
 describe("the bands, on a neutral block", () => {
   afterEach(() => {
-    process.env.KUMO_COLOR = "basic";
+    process.env.BRUINE_COLOR = "basic";
     resetColorDepth();
   });
 
   test("an added line and a removed one are painted the same way", () => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     const rows = renderDiff(numberedDiff(), 60);
     const add = rows[1]!;
@@ -133,7 +133,7 @@ describe("the bands, on a neutral block", () => {
   });
 
   test("no colour and no background: the sign still says which side is which", () => {
-    process.env.KUMO_COLOR = "none";
+    process.env.BRUINE_COLOR = "none";
     resetColorDepth();
     const rows = renderDiff(numberedDiff(), 60);
     expect(rows.join("")).not.toMatch(/\x1b\[/);

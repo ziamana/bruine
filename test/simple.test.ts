@@ -147,7 +147,7 @@ describe("renderSettingsYaml", () => {
 
 describe("writeEnvVar", () => {
   test("creates the file, owner-only where the platform has modes", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "kumo-env-"));
+    const dir = await mkdtemp(join(tmpdir(), "bruine-env-"));
     const envPath = join(dir, ".env");
     await writeEnvVar(envPath, "DEEPSEEK_API_KEY", "sk-1");
     expect(await readFile(envPath, "utf8")).toBe("DEEPSEEK_API_KEY=sk-1\n");
@@ -159,7 +159,7 @@ describe("writeEnvVar", () => {
   });
 
   test("replaces an existing key and keeps others", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "kumo-env-"));
+    const dir = await mkdtemp(join(tmpdir(), "bruine-env-"));
     const envPath = join(dir, ".env");
     await writeFile(envPath, "OTHER=1\nDEEPSEEK_API_KEY=old\n");
     await writeEnvVar(envPath, "DEEPSEEK_API_KEY", "new");
@@ -169,7 +169,7 @@ describe("writeEnvVar", () => {
 
 describe("simpleSetup", () => {
   test("local server found → settings.yaml written, no questions", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, asked } = fakeIO();
     const outcome = await simpleSetup(home, io, {
       ports: [8080],
@@ -182,18 +182,18 @@ describe("simpleSetup", () => {
     });
     expect(asked).toHaveLength(1); // web search offer, default answer ""
     expect(asked[0]).toContain("Web search");
-    const kumoJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
-    expect(kumoJson).toEqual({ mode: "simple", permissionMode: "auto", search: { provider: "none" } });
+    const bruineJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
+    expect(bruineJson).toEqual({ mode: "simple", permissionMode: "auto", search: { provider: "none" } });
     const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
     expect(parsed["agent-default-model"]).toEqual({ provider: "local", model: "llama3" });
     expect(parsed["llm-pi-ai"].providers.local.models).toEqual([{ id: "llama3", name: "llama3", reasoningEfforts: { off: null, low: "low" } }]);
-    expect(parsed["llm-pi-ai"].providers.local.apiKeyEnv).toBe("KUMO_LOCAL_API_KEY");
-    expect(await readFile(join(home, ".env"), "utf8")).toBe("KUMO_LOCAL_API_KEY=local\n");
+    expect(parsed["llm-pi-ai"].providers.local.apiKeyEnv).toBe("BRUINE_LOCAL_API_KEY");
+    expect(await readFile(join(home, ".env"), "utf8")).toBe("BRUINE_LOCAL_API_KEY=local\n");
   });
 
   // T11.1 — the key must NEVER go through the echoing question() prompt.
   test("no server, TTY → DeepSeek: key is read via secret(), never question()", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, asked, secretsAsked } = fakeIO({ answers: ["n", "2"], secrets: ["sk-abc"] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "deepseek" });
@@ -209,7 +209,7 @@ describe("simpleSetup", () => {
   });
 
   test("no server, TTY → OpenRouter key flow via secret()", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, secretsAsked } = fakeIO({ answers: ["n", "3"], secrets: ["sk-or-1"] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "openrouter" });
@@ -220,7 +220,7 @@ describe("simpleSetup", () => {
   });
 
   test("no server, TTY → the free model is offered first, as a yes or no that starts on no", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, asked } = fakeIO({ answers: ["", "2"], secrets: ["sk-abc"] });
     await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(asked[0]).toContain("Space Bunny Free");
@@ -232,7 +232,7 @@ describe("simpleSetup", () => {
   });
 
   test("yes to the free model → its route and its public key, no key asked", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, secretsAsked } = fakeIO({ answers: ["y"] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "free" });
@@ -241,20 +241,20 @@ describe("simpleSetup", () => {
     expect(parsed["agent-default-model"]).toEqual({ provider: "opencode-zen", model: "space-bunny-free" });
     expect(parsed["llm-pi-ai"].providers["opencode-zen"]).toMatchObject({
       baseURL: "https://opencode.ai/zen/v1",
-      apiKeyEnv: "KUMO_ZEN_API_KEY",
+      apiKeyEnv: "BRUINE_ZEN_API_KEY",
     });
-    expect(await readFile(join(home, ".env"), "utf8")).toBe("KUMO_ZEN_API_KEY=public\n");
+    expect(await readFile(join(home, ".env"), "utf8")).toBe("BRUINE_ZEN_API_KEY=public\n");
   });
 
   test("a local server found → the free model is not even mentioned", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, asked } = fakeIO();
     await simpleSetup(home, io, { ports: [8080], fetchImpl: okFetch([{ id: "llama3" }]) });
     expect(asked.some((q) => q.includes("Space Bunny"))).toBe(false);
   });
 
   test("4) Other cloud provider → a catalog provider by name, its key, a model by number", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, secretsAsked, out } = fakeIO({ answers: ["n", "4", "groq", "2"], secrets: ["gsk-1"] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome.kind).toBe("cloud");
@@ -268,7 +268,7 @@ describe("simpleSetup", () => {
   });
 
   test("4) an unknown provider goes back to the menu", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, out } = fakeIO({ answers: ["n", "4", "nonesuch", "2"], secrets: ["sk-1"] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(out.join("")).toContain('No provider named "nonesuch"');
@@ -276,7 +276,7 @@ describe("simpleSetup", () => {
   });
 
   test("empty key → skipped, nothing written", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io } = fakeIO({ answers: ["n", "2"], secrets: [""] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "skipped" });
@@ -284,7 +284,7 @@ describe("simpleSetup", () => {
   });
 
   test("no server, not a TTY → skipped with guidance", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, out, asked } = fakeIO({ isTTY: false });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "skipped" });
@@ -293,7 +293,7 @@ describe("simpleSetup", () => {
   });
 
   test("existing settings.yaml is never touched", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     await writeFile(join(home, "settings.yaml"), "agent-default-model:\n  provider: x\n  model: y\n");
     let probed = false;
     const outcome = await simpleSetup(home, fakeIO().io, {
@@ -322,7 +322,7 @@ describe("simpleSetup", () => {
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     const port = (server.address() as { port: number }).port;
     try {
-      const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+      const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
       // menu default (empty → 1), then the URL (without /v1), then pick model 2
       const { io } = fakeIO({ answers: ["n", "", `127.0.0.1:${port}`, "2", ""] });
       const outcome = await simpleSetup(home, io, { ports: [] });
@@ -334,14 +334,14 @@ describe("simpleSetup", () => {
       const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
       expect(parsed["llm-pi-ai"].providers.local.baseURL).toBe(`http://127.0.0.1:${port}/v1`);
       expect(parsed["agent-default-model"]).toEqual({ provider: "local", model: "model-b" });
-      expect(await readFile(join(home, ".env"), "utf8")).toBe("KUMO_LOCAL_API_KEY=local\n");
+      expect(await readFile(join(home, ".env"), "utf8")).toBe("BRUINE_LOCAL_API_KEY=local\n");
     } finally {
       await new Promise<void>((r) => server.close(() => r()));
     }
   });
 
   test("unreachable address → error, menu again, then a provider works", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, out } = fakeIO({ answers: ["n", "1", "http://127.0.0.1:1", "2"], secrets: ["sk-1"] });
     const outcome = await simpleSetup(home, io, { ports: [] });
     expect(outcome).toEqual({ kind: "deepseek" });
@@ -350,32 +350,32 @@ describe("simpleSetup", () => {
 
   // T15 — web search configuration step
 
-  test("Brave key during search step → kumo.json + .env", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+  test("Brave key during search step → bruine.json + .env", async () => {
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, secretsAsked } = fakeIO({
       answers: ["n", "2", "3"],
       secrets: ["sk-abc", "brave-1"],
     });
     await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(secretsAsked).toEqual(["DeepSeek API key: ", "Brave Search API key: "]);
-    const kumoJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
-    expect(kumoJson.search).toEqual({ provider: "brave", apiKeyEnv: "BRAVE_API_KEY" });
+    const bruineJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
+    expect(bruineJson.search).toEqual({ provider: "brave", apiKeyEnv: "BRAVE_API_KEY" });
     const env = await readFile(join(home, ".env"), "utf8");
     expect(env).toContain("BRAVE_API_KEY=brave-1");
     expect(env).toContain("DEEPSEEK_API_KEY=sk-abc");
   });
 
   test("Tavily key during search step", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io } = fakeIO({ answers: ["n", "2", "4"], secrets: ["sk-abc", "tav-1"] });
     await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
-    const kumoJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
-    expect(kumoJson.search).toEqual({ provider: "tavily", apiKeyEnv: "TAVILY_API_KEY" });
+    const bruineJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
+    expect(bruineJson.search).toEqual({ provider: "tavily", apiKeyEnv: "TAVILY_API_KEY" });
     expect(await readFile(join(home, ".env"), "utf8")).toContain("TAVILY_API_KEY=tav-1");
   });
 
   test("detected SearXNG → default URL used", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const fetchImpl: FetchLike = async (url) => {
       if (url.includes("/search?")) {
         return { ok: true, json: async () => ({ results: [{ url: "u", title: "t", content: "c" }] }) };
@@ -390,7 +390,7 @@ describe("simpleSetup", () => {
     const outcome = await simpleSetup(home, io, { ports: [8880], fetchImpl });
     expect(outcome.kind).toBe("local");
     expect(asked[0]).toContain("SearXNG detected on http://127.0.0.1:8888");
-    const kumoJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
-    expect(kumoJson.search).toEqual({ provider: "searxng", url: "http://127.0.0.1:8888" });
+    const bruineJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
+    expect(bruineJson.search).toEqual({ provider: "searxng", url: "http://127.0.0.1:8888" });
   });
 });

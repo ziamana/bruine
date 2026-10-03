@@ -48,8 +48,8 @@ describe("QuestionForm (T28A)", () => {
 
   test("the option Enter will pick is visibly the selected one (T55)", async () => {
     const { bgCode, resetColorDepth } = await import("../src/ui/palette.js");
-    const saved = process.env.KUMO_COLOR;
-    process.env.KUMO_COLOR = "truecolor";
+    const saved = process.env.BRUINE_COLOR;
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     try {
       const f = new QuestionForm([
@@ -68,16 +68,16 @@ describe("QuestionForm (T28A)", () => {
       expect(moved.find((l) => l.includes("2. B"))).toContain(bgCode("surface", "truecolor"));
       expect(moved.find((l) => l.includes("1. A"))).not.toContain(bgCode("surface", "truecolor"));
     } finally {
-      if (saved === undefined) delete process.env.KUMO_COLOR;
-      else process.env.KUMO_COLOR = saved;
+      if (saved === undefined) delete process.env.BRUINE_COLOR;
+      else process.env.BRUINE_COLOR = saved;
       resetColorDepth();
     }
   });
 
   test("the selection is never signalled by colour alone (T55)", async () => {
     const { resetColorDepth } = await import("../src/ui/palette.js");
-    const saved = process.env.KUMO_COLOR;
-    process.env.KUMO_COLOR = "basic";
+    const saved = process.env.BRUINE_COLOR;
+    process.env.BRUINE_COLOR = "basic";
     resetColorDepth();
     try {
       const f = new QuestionForm([
@@ -90,8 +90,8 @@ describe("QuestionForm (T28A)", () => {
       expect(selected.includes("→ 1.")).toBe(true);
       expect(other.includes("→ 2.")).toBe(false);
     } finally {
-      if (saved === undefined) delete process.env.KUMO_COLOR;
-      else process.env.KUMO_COLOR = saved;
+      if (saved === undefined) delete process.env.BRUINE_COLOR;
+      else process.env.BRUINE_COLOR = saved;
       resetColorDepth();
     }
   });
@@ -121,8 +121,8 @@ describe("QuestionForm (T28A)", () => {
 
   test("the question reads brighter than the chrome around it (T55)", async () => {
     const { NUAGE, contrastRatio, fgCode, resetColorDepth } = await import("../src/ui/palette.js");
-    const saved = process.env.KUMO_COLOR;
-    process.env.KUMO_COLOR = "truecolor";
+    const saved = process.env.BRUINE_COLOR;
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     try {
       const f = new QuestionForm([
@@ -139,13 +139,13 @@ describe("QuestionForm (T28A)", () => {
         contrastRatio(NUAGE.faint.hex, NUAGE.surface.hex),
       );
     } finally {
-      if (saved === undefined) delete process.env.KUMO_COLOR;
-      else process.env.KUMO_COLOR = saved;
+      if (saved === undefined) delete process.env.BRUINE_COLOR;
+      else process.env.BRUINE_COLOR = saved;
       resetColorDepth();
     }
   });
 
-  test("multi-select uses kumo's own checkbox, and the icon set decides it (T55)", async () => {
+  test("multi-select uses bruine's own checkbox, and the icon set decides it (T55)", async () => {
     const { ASCII_ICONS, UNICODE_ICONS } = await import("../src/render/chars.js");
     const form = (icons: typeof UNICODE_ICONS): QuestionForm =>
       new QuestionForm(
@@ -249,12 +249,12 @@ describe("QuestionForm (T28A)", () => {
     );
   });
 
-  test("suggestions toggle merges into kumo.json, default true", async () => {
+  test("suggestions toggle merges into bruine.json, default true", async () => {
     const { mkdtemp, readFile } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const { setSuggestionsChoice } = await import("../src/setup/full.js");
-    const home = await mkdtemp(join(tmpdir(), "kumo-sg-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-sg-"));
     await setSuggestionsChoice(home, false);
     expect(JSON.parse(await readFile(join(home, "bruine.json"), "utf8"))).toMatchObject({ suggestions: false });
     await setSuggestionsChoice(home, true);

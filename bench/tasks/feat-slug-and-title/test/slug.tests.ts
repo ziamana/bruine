@@ -7,7 +7,7 @@ test("lower case, words joined by one dash", () => {
 });
 
 test("punctuation is dropped", () => {
-  assert.equal(slugify("Kumo, the terminal agent!"), "kumo-the-terminal-agent");
+  assert.equal(slugify("Bruine, the terminal agent!"), "bruine-the-terminal-agent");
 });
 
 test("extra spaces and dashes collapse", () => {
@@ -19,5 +19,5 @@ test("symbols are not words", () => {
 });
 
 test("digits survive", () => {
-  assert.equal(slugify("kumo 27b"), "kumo-27b");
+  assert.equal(slugify("bruine 27b"), "bruine-27b");
 });

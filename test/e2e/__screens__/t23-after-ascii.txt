@@ -1,4 +1,4 @@
- kumo v0.0.1                                                                                        
+ bruine v0.0.1                                                                                        
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
 
   > Think in ASCII                                                                                
@@ -10,7 +10,7 @@
   > Read note.txt                                                                                 
 
   v read  note.txt  1.0s
-    > <path>/tmp/kumo-e2e-project-IwInCM/note.txt</path>
+    > <path>/tmp/bruine-e2e-project-IwInCM/note.txt</path>
       <type>file</type>
       <content>
       1: E2E_READ_SENTINEL

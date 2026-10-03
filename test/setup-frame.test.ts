@@ -16,7 +16,7 @@ test("a long title wraps and a short screen keeps the help visible", () => {
   expect(rows.join("\n").replace(/\x1b\[[0-9;]*m/g, "").replace(/[│|]/g, "").replace(/\s+/g, " ")).toContain("on your computer");
 });
 test("ASCII and no color use plain borders and key names", () => {
-  process.env.KUMO_ASCII = "1"; process.env.KUMO_COLOR = "none"; resetColorDepth();
+  process.env.BRUINE_ASCII = "1"; process.env.BRUINE_COLOR = "none"; resetColorDepth();
   const frame = new SetupFrame("Keys", { render: () => ["Continue →"], invalidate() {} }, { step: 3, help: "↑/↓ move · Enter select", rows: () => 30 });
   expect(frame.render(30).join("\n")).not.toMatch(/[^\x00-\x7f]/);
 });

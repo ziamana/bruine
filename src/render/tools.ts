@@ -1,4 +1,4 @@
-import { kumoIcons, type KumoIcons } from "./chars.js";
+import { bruineIcons, type BruineIcons } from "./chars.js";
 import { dim, type Screen } from "./reasoning.js";
 
 const CLEAR = "\r\x1b[2K";
@@ -56,10 +56,10 @@ export function toolSummary(rawArgs: string, tool: string, columns: number): str
 export class ToolCallView {
   #screen: Screen;
   #now: () => number;
-  #icons: KumoIcons;
+  #icons: BruineIcons;
   #calls = new Map<string, Call>();
 
-  constructor(screen: Screen, now: () => number = Date.now, icons: KumoIcons = kumoIcons()) {
+  constructor(screen: Screen, now: () => number = Date.now, icons: BruineIcons = bruineIcons()) {
     this.#screen = screen;
     this.#now = now;
     this.#icons = icons;

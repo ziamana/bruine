@@ -22,18 +22,18 @@ describe("flagMode (T11.2)", () => {
 });
 
 describe("buildLaunch", () => {
-  test("default home → DSH_HOME is the .kumo dir under home", () => {
+  test("default home → DSH_HOME is the .bruine dir under home", () => {
     const { env } = buildLaunch([], { PATH: "/usr/bin" }, "/home/tu44");
     expect(env.DSH_HOME).toBe(appHome({}, "/home/tu44"));
     expect([".bruine", ".kumo"]).toContain(path.basename(env.DSH_HOME));
   });
 
-  test("KUMO_HOME overrides DSH_HOME", () => {
-    const { env } = buildLaunch([], { KUMO_HOME: "/tmp/x" }, "/home/tu44");
+  test("BRUINE_HOME overrides DSH_HOME", () => {
+    const { env } = buildLaunch([], { BRUINE_HOME: "/tmp/x" }, "/home/tu44");
     expect(env.DSH_HOME).toBe("/tmp/x");
   });
 
-  test("argv is passed through after --profile kumo", () => {
+  test("argv is passed through after --profile bruine", () => {
     const { command, args } = buildLaunch(["fix the tests"], {}, "/home/x");
     expect(command).toBe("dsh");
     expect(args).toEqual(["--profile", "bruine", "fix the tests"]);
@@ -57,11 +57,11 @@ describe("buildLaunch", () => {
   });
 
   test("tool catalog defaults to lean and accepts the full setting", () => {
-    expect(buildLaunch([], { KUMO_TOOLS: "full" }, "/home/x").env.KUMO_TOOLS).toBe("lean");
-    expect(buildLaunch([], {}, "/home/x", { tools: "full" }).env.KUMO_TOOLS).toBe("full");
+    expect(buildLaunch([], { BRUINE_TOOLS: "full" }, "/home/x").env.BRUINE_TOOLS).toBe("lean");
+    expect(buildLaunch([], {}, "/home/x", { tools: "full" }).env.BRUINE_TOOLS).toBe("full");
   });
 
-  test("kumo.json telemetry opt-in does not disable (T14.3)", () => {
+  test("bruine.json telemetry opt-in does not disable (T14.3)", () => {
     const { env } = buildLaunch([], {}, "/home/x", { telemetry: true });
     expect(env.DSH_TELEMETRY_DISABLED).toBeUndefined();
   });
@@ -81,7 +81,7 @@ describe("buildLaunch", () => {
 });
 
 describe("resolveDshEntry (T14.2)", () => {
-  test("resolves the pinned @deepseek-ai/dsh copy bundled with kumo", () => {
+  test("resolves the pinned @deepseek-ai/dsh copy bundled with bruine", () => {
     const entry = resolveDshEntry();
     expect(entry).toBeDefined();
     expect(existsSync(entry as string)).toBe(true);
@@ -118,9 +118,9 @@ describe("localDefaultRoute (T31c)", () => {
     expect(localDefaultRoute("/h", read("not: [valid"))).toBe(false);
     expect(localDefaultRoute("/h", () => { throw new Error("ENOENT"); })).toBe(false);
   });
-  test("buildLaunch passes an injected KUMO_TITLE_LLM through", () => {
-    expect(buildLaunch([], {}, "/home").env.KUMO_TITLE_LLM).toBeUndefined();
-    const off = buildLaunch([], { KUMO_TITLE_LLM: "off" }, "/home");
-    expect(off.env.KUMO_TITLE_LLM).toBe("off");
+  test("buildLaunch passes an injected BRUINE_TITLE_LLM through", () => {
+    expect(buildLaunch([], {}, "/home").env.BRUINE_TITLE_LLM).toBeUndefined();
+    const off = buildLaunch([], { BRUINE_TITLE_LLM: "off" }, "/home");
+    expect(off.env.BRUINE_TITLE_LLM).toBe("off");
   });
 });

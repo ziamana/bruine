@@ -10,9 +10,9 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 70
 fi
 
-TASK_DIR="${KUMO_BENCH_TASK_DIR:-.}"
+TASK_DIR="${BRUINE_BENCH_TASK_DIR:-.}"
 
-echo "kumo-bench-check-mode: unittest"
+echo "bruine-bench-check-mode: unittest"
 if [ "$#" -gt 0 ]; then
   exec python3 -m unittest "$@"
 fi

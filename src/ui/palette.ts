@@ -1,6 +1,7 @@
+import { appEnv } from "../compat.js";
 import { visibleWidth } from "@earendil-works/pi-tui";
 /**
- * kumo's palette ("Nuage"): soft sky blues and lavender. 24-bit color when the
+ * bruine's palette ("Nuage"): soft sky blues and lavender. 24-bit color when the
  * terminal says so, a 256-color approximation otherwise, and the classic 16 ANSI
  * colors as the last resort (and in tests).
  *
@@ -11,17 +12,17 @@ import { visibleWidth } from "@earendil-works/pi-tui";
  * answers OSC 11 (setTerminalBackdrop), so the band also works on a light or
  * tinted terminal.
  *
- * KUMO_COLOR=truecolor|256|basic|none forces a depth; NO_COLOR disables color;
- * KUMO_BG=0 keeps every background transparent.
+ * BRUINE_COLOR=truecolor|256|basic|none forces a depth; NO_COLOR disables color;
+ * BRUINE_BG=0 keeps every background transparent.
  */
 
 export type ColorDepth = "truecolor" | "256" | "basic" | "none";
 
 export function detectColorDepth(env: NodeJS.ProcessEnv = process.env): ColorDepth {
-  const forced = env.KUMO_COLOR;
+  const forced = appEnv("COLOR", env);
   if (forced === "truecolor" || forced === "256" || forced === "basic" || forced === "none") return forced;
   if (env.NO_COLOR !== undefined && env.NO_COLOR !== "") return "none";
-  if (env.KUMO_ASCII === "1") return "basic";
+  if (appEnv("ASCII", env) === "1") return "basic";
   const ct = (env.COLORTERM ?? "").toLowerCase();
   if (ct === "truecolor" || ct === "24bit") return "truecolor";
   // Windows Terminal and VS Code always render 24-bit color.
@@ -255,14 +256,14 @@ function bgEscape(hex: string, basic: number, depth: ColorDepth): string {
   return `\x1b[${String(basic + 10)}m`;
 }
 
-/** KUMO_BG=0 (or none/off/false) keeps every background transparent. */
+/** BRUINE_BG=0 (or none/off/false) keeps every background transparent. */
 export function bgOptOut(env: NodeJS.ProcessEnv = process.env): boolean {
-  const v = (env.KUMO_BG ?? "").toLowerCase();
+  const v = (appEnv("BG", env) ?? "").toLowerCase();
   return v === "0" || v === "none" || v === "off" || v === "false";
 }
 
 /**
- * Whether kumo may paint a background at all. On 16 colors the ANSI background
+ * Whether bruine may paint a background at all. On 16 colors the ANSI background
  * codes are pure black or cyan, which reads as damage rather than as a surface,
  * so every painted surface is dropped there and the app falls back to the
  * terminal's own background.

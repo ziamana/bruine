@@ -8,7 +8,7 @@ import {
   standaloneRequest,
 } from "../src/plugins/suggest.js";
 
-const system = { role: "system", content: "You are Kumo." };
+const system = { role: "system", content: "You are Bruine." };
 const user = { role: "user", content: "hello" };
 const tools = [{ name: "bash" }, { name: "read" }];
 

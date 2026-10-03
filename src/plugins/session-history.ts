@@ -1,5 +1,5 @@
 import { Text, type Component } from "@earendil-works/pi-tui";
-import type { KumoIcons } from "../render/chars.js";
+import type { BruineIcons } from "../render/chars.js";
 import { AssistantTextComponent } from "../ui/assistant-text.js";
 import { QuestionCallComponent } from "../ui/question-call-component.js";
 import type { QuestionAnswer } from "../ui/questions.js";
@@ -46,7 +46,7 @@ export function sessionChoice(row: RecentSession): string {
 
 /** What a resumed conversation needs from the UI: the same entry points a live turn uses. */
 export interface ReplayUi {
-  icons: KumoIcons;
+  icons: BruineIcons;
   addUserPrompt(text: string): void;
   addChat(component: Component): void;
   addQuestionCall?(call: QuestionCallComponent): void;

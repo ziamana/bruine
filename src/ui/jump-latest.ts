@@ -25,17 +25,17 @@
  */
 
 import { stripTerminalSequences, visibleWidth, type Component } from "@earendil-works/pi-tui";
-import { kumoIcons, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, type BruineIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 import { paint } from "./palette.js";
 
 /** The pill, as one row of the frame. */
 export class JumpToLatest implements Component {
-  #icons: KumoIcons;
+  #icons: BruineIcons;
   /** True while the transcript window is away from the live edge. */
   visible = false;
 
-  constructor(icons: KumoIcons = kumoIcons()) {
+  constructor(icons: BruineIcons = bruineIcons()) {
     this.#icons = icons;
   }
 

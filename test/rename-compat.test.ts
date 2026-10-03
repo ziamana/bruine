@@ -58,3 +58,18 @@ test("creating the new profile preserves an existing old profile", async () => {
   expect(result.dir).toBe(join(home, "profiles", "bruine"));
   expect(readFileSync(join(legacy, "cordis.patch.yml"), "utf8")).toBe("# custom legacy patch\n[]\n");
 });
+
+test("legacy environment values reach the renamed launcher and renderers", async () => {
+  const { buildLaunch } = await import("../src/launch.js");
+  const { iconsFor, ASCII_ICONS, UNICODE_ICONS } = await import("../src/render/chars.js");
+  const { detectInstallKind, updateCommand } = await import("../src/update.js");
+  const env = { KUMO_HOME: "legacy-home", KUMO_ASCII: "1", KUMO_HEADLESS: "1" };
+  const launch = buildLaunch([], env, temp());
+  expect(launch.env.DSH_HOME).toBe("legacy-home");
+  expect(launch.env.BRUINE_ASCII).toBe("1");
+  expect(launch.env.BRUINE_HEADLESS).toBe("1");
+  expect(iconsFor(env)).toBe(ASCII_ICONS);
+  expect(iconsFor({ ...env, BRUINE_ASCII: "0", LANG: "en_US.UTF-8" })).toBe(UNICODE_ICONS);
+  expect(detectInstallKind("/prefix/node_modules/kumo-code/dist/bin.js")).toBe("npm");
+  expect(updateCommand("npm")).toEqual(["npm", "install", "-g", "bruine@latest"]);
+});

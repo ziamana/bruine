@@ -1,5 +1,5 @@
 /**
- * Server discovery for kumo setup (T21.1): localhost ports, opt-in /24 scans
+ * Server discovery for bruine setup (T21.1): localhost ports, opt-in /24 scans
  * of PRIVATE interfaces only, and explicit Tailscale peers. A public address
  * is rejected before any request goes out.
  */
@@ -138,7 +138,7 @@ export function isTailscaleIPv4(ip: string): boolean {
   return p[0] === 100 && p[1] !== undefined && p[1] >= 64 && p[1] <= 127;
 }
 
-/** IPv4 addresses of the private /8 /12 /16 ranges kumo may scan. */
+/** IPv4 addresses of the private /8 /12 /16 ranges bruine may scan. */
 export function privateInterfaceIPv4(
   ifs: NodeJS.Dict<NetworkInterfaceInfo[]> = networkInterfaces(),
 ): string[] {
@@ -390,7 +390,7 @@ export function currentModelsSummary(discoveries: Discovered[]): string {
  * T31c: is the default model route a local/private server (llama.cpp, Ollama,
  * LM Studio on the LAN)? On those the parallel session-title request steals
  * the single slot from the first answer (BOS timing proxy), so the launcher
- * exports KUMO_TITLE_LLM=off and the bundle patch disables the provider row.
+ * exports BRUINE_TITLE_LLM=off and the bundle patch disables the provider row.
  */
 export function localDefaultRoute(
   dshHome: string,

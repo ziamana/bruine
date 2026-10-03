@@ -1,7 +1,7 @@
 import { colorDepth, paint } from "../ui/palette.js";
 import { dropSpinner, rainLevel } from "../ui/rain.js";
 import stringWidth from "string-width";
-import { kumoIcons, withoutEmoji, type KumoIcons } from "./chars.js";
+import { bruineIcons, withoutEmoji, type BruineIcons } from "./chars.js";
 
 export interface Screen { write(s: string): void; columns: number; }
 /** Readable, quiet reasoning; no terminal-specific dimming on body text. */
@@ -55,7 +55,7 @@ export function clipCells(text: string, width: number, ellipsis = "…"): string
 /**
  * Keep the end, truncating on a grapheme boundary and counting cells.
  *
- * A path is named by its tail: `projets/kumo` says more than `projets`, so a
+ * A path is named by its tail: `projets/bruine` says more than `projets`, so a
  * label too long for its row loses its head and keeps the cells it has room for.
  */
 export function clipStart(text: string, width: number, ellipsis = "…"): string {
@@ -77,11 +77,11 @@ export function clipStart(text: string, width: number, ellipsis = "…"): string
 
 export const SPINNER_FRAMES = ["·", "✢", "✺", "✶", "✻", "✽", "✻", "✶", "✺", "✢"];
 export const ASCII_SPINNER_FRAMES = ["-", "\\", "|", "/"];
-export function spinnerFrame(elapsed: number, icons: KumoIcons): string {
+export function spinnerFrame(elapsed: number, icons: BruineIcons): string {
   const frames = icons.think === "*" ? ASCII_SPINNER_FRAMES : SPINNER_FRAMES;
   return frames[Math.floor(Math.max(0, elapsed) / 100) % frames.length]!;
 }
-export function thinkingText(sentence: string, columns: number, elapsed: number, icons: KumoIcons): string {
+export function thinkingText(sentence: string, columns: number, elapsed: number, icons: BruineIcons): string {
   return clipCells(`${dropSpinner(elapsed, rainLevel(), icons.think === "*")} Thinking${sentence ? `  ${sentence}` : ""}`, columns, icons.think === "*" ? "..." : "…");
 }
 
@@ -95,7 +95,7 @@ export function completeWords(current: string): string[] {
 }
 
 /** Subtitle style (T25.3): longest fitting suffix, never leading ellipsis. */
-export function thinkingWords(words: string[], columns: number, elapsed: number, icons: KumoIcons): string {
+export function thinkingWords(words: string[], columns: number, elapsed: number, icons: BruineIcons): string {
   const prefix = `${dropSpinner(elapsed, rainLevel(), icons.think === "*")} Thinking`;
   const ellipsis = icons.think === "*" ? "..." : "…";
   if (words.length === 0) return clipCells(prefix, columns, ellipsis);
@@ -110,7 +110,7 @@ export function thinkingWords(words: string[], columns: number, elapsed: number,
   return `${prefix}  ${clipCells(last, avail, ellipsis)}`;
 }
 /** Compatibility helper for callers needing a clipped reasoning sentence. */
-export function visible(s: string, columns: number, icons: KumoIcons = kumoIcons()): string {
+export function visible(s: string, columns: number, icons: BruineIcons = bruineIcons()): string {
   return clipCells(s.trimStart(), Math.max(0, columns - 1 - stringWidth(`${icons.think} `)));
 }
 
@@ -122,7 +122,7 @@ export class ReasoningLine {
   #current = "";
   #lastFinished = "";
   #startTime = 0;
-  constructor(private screen: Screen, private now: () => number = Date.now, private icons: KumoIcons = kumoIcons()) {}
+  constructor(private screen: Screen, private now: () => number = Date.now, private icons: BruineIcons = bruineIcons()) {}
   get active(): boolean { return this.#active; }
   push(delta: string): void {
     if (delta === "") return;

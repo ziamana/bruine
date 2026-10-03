@@ -12,7 +12,7 @@ const saved = { ...process.env };
 afterEach(() => { process.env = { ...saved }; resetColorDepth(); });
 test.each([100, 60, 30])("a complete turn fits %i columns at every color depth", width => {
   for (const depth of ["truecolor", "256", "basic", "none"] as const) {
-    process.env.KUMO_COLOR = depth; resetColorDepth();
+    process.env.BRUINE_COLOR = depth; resetColorDepth();
     const t = new ChatTranscript(UNICODE_ICONS);
     t.addChild(userMessageComponent("Read the project and check its tests"));
     const r = new ReasoningComponent(() => 0); r.push("Inspect the project first "); t.addChild(r);
@@ -29,7 +29,7 @@ test.each([100, 60, 30])("a complete turn fits %i columns at every color depth",
   }
 });
 test("transparent ASCII blocks have a rail and no background", () => {
-  process.env.KUMO_COLOR = "truecolor"; process.env.KUMO_BG = "0"; resetColorDepth();
+  process.env.BRUINE_COLOR = "truecolor"; process.env.BRUINE_BG = "0"; resetColorDepth();
   const t = new ChatTranscript(ASCII_ICONS); t.addChild(new ToolCallComponent("read", () => 0, ASCII_ICONS));
   const text = t.render(30).join("\n"); expect(text).toContain("|"); expect(text).not.toContain("\x1b[48;");
 });
@@ -41,7 +41,7 @@ test("block text and secondary text meet AA", () => {
 });
 
 test("a diff block is neutral, and the two bands are the only colour in it", () => {
-  process.env.KUMO_COLOR = "truecolor"; resetColorDepth();
+  process.env.BRUINE_COLOR = "truecolor"; resetColorDepth();
   const edit = new ToolCallComponent("edit", () => 0);
   edit.setArgs(JSON.stringify({ path: "/nope/x.ts", old_string: "a\nb\n", new_string: "a\nc\nd\n" }));
   edit.result(true, "");
@@ -62,7 +62,7 @@ test("a diff block is neutral, and the two bands are the only colour in it", () 
 });
 
 test("a diff block at 30 columns and in ASCII: no band, and the sign still reads", () => {
-  process.env.KUMO_COLOR = "truecolor"; process.env.KUMO_BG = "0"; resetColorDepth();
+  process.env.BRUINE_COLOR = "truecolor"; process.env.BRUINE_BG = "0"; resetColorDepth();
   const edit = new ToolCallComponent("edit", () => 0);
   edit.setArgs(JSON.stringify({ path: "/nope/x.ts", old_string: "a\nb\n", new_string: "a\nc\nd\n" }));
   edit.result(true, "");

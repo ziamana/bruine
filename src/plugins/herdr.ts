@@ -1,11 +1,12 @@
+import { appEnv } from "../compat.js";
 /**
- * T62 — herdr integration: kumo reports its state.
+ * T62 — herdr integration: bruine reports its state.
  *
  * Inside a herdr pane (`HERDR_ENV=1`, `HERDR_SOCKET_PATH` and `HERDR_PANE_ID`
  * all set) this plugin reports `idle` / `working` / `blocked` so `herdr agent
- * list`, `herdr agent wait` and notifications work with kumo like with
+ * list`, `herdr agent wait` and notifications work with bruine like with
  * OpenCode or Claude Code. Outside herdr (any variable missing, or a
- * headless `kumo -p` run) it registers nothing and opens nothing.
+ * headless `bruine -p` run) it registers nothing and opens nothing.
  *
  * Rules (from the ticket): fire and forget, requests chained so they arrive
  * in order, 500 ms timeout per request, every error swallowed silently.
@@ -16,7 +17,7 @@ import net from "node:net";
 import type { DshContext } from "./ctx.js";
 
 /** Stable Cordis plugin name. */
-export const name = "kumo-herdr";
+export const name = "bruine-herdr";
 
 /** The states herdr knows. `unknown` is herdr-side only, never sent. */
 export type HerdrState = "idle" | "working" | "blocked";
@@ -186,7 +187,7 @@ export class HerdrReporter {
     let line: string;
     try {
       line = JSON.stringify({
-        id: `kumo:${String(Date.now())}:${randomSuffix()}`,
+        id: `bruine:${String(Date.now())}:${randomSuffix()}`,
         method,
         params: { ...params, seq },
       });
@@ -219,8 +220,8 @@ export class HerdrReporter {
       if (sid === undefined) return;
       this.#enqueue("pane.report_agent", {
         pane_id: this.paneId,
-        source: "kumo",
-        agent: "kumo",
+        source: "bruine",
+        agent: "bruine",
         state,
         agent_session_id: sid,
       });
@@ -234,8 +235,8 @@ export class HerdrReporter {
     try {
       this.#enqueue("pane.report_agent_session", {
         pane_id: this.paneId,
-        source: "kumo",
-        agent: "kumo",
+        source: "bruine",
+        agent: "bruine",
         agent_session_id: sessionId,
         session_start_source: "new",
       });
@@ -249,8 +250,8 @@ export class HerdrReporter {
     try {
       this.#enqueue("pane.release_agent", {
         pane_id: this.paneId,
-        source: "kumo",
-        agent: "kumo",
+        source: "bruine",
+        agent: "bruine",
       });
     } catch {
       // silent by rule
@@ -316,8 +317,8 @@ export function apply(ctx: DshContext, opts?: HerdrApplyOptions): () => void {
     return noop;
   }
   // Zero cost outside herdr, and never in a headless run (the patch also
-  // disables this plugin when KUMO_HEADLESS=1).
-  if (env === undefined || process.env.KUMO_HEADLESS === "1") return noop;
+  // disables this plugin when BRUINE_HEADLESS=1).
+  if (env === undefined || appEnv("HEADLESS") === "1") return noop;
 
   const paneId = env.paneId;
   const endpoint = endpointFor(env.socketPath);
@@ -345,7 +346,7 @@ export function apply(ctx: DshContext, opts?: HerdrApplyOptions): () => void {
     try {
       if (repl === undefined || agent === undefined) return false;
       if (agent === liveAgent()) return true;
-      const modes = ctx.get("kumoModes") as { governs?(a: unknown): boolean } | undefined;
+      const modes = ctx.get("bruineModes") as { governs?(a: unknown): boolean } | undefined;
       if (modes !== undefined && typeof modes.governs === "function") {
         try {
           return modes.governs(agent) === true;
@@ -393,7 +394,7 @@ export function apply(ctx: DshContext, opts?: HerdrApplyOptions): () => void {
 
   // Approval and question waits: blocked while the user is asked, working
   // once answered. Outermost middleware (this plugin mounts before
-  // kumo-approval), so the select opening is inside next(). Never breaks
+  // bruine-approval), so the select opening is inside next(). Never breaks
   // the chain: foreign agents delegate, errors propagate after reporting.
   const trackWait = (req: { agent?: unknown }, next: () => unknown): unknown => {
     let ours = false;
@@ -443,10 +444,10 @@ export function apply(ctx: DshContext, opts?: HerdrApplyOptions): () => void {
   }
 
   try {
-    ctx.inject(["kumoRepl"], (c: any) => {
+    ctx.inject(["bruineRepl"], (c: any) => {
       try {
         if (disposed) return;
-        const service = c?.kumoRepl as { agent?: unknown } | undefined;
+        const service = c?.bruineRepl as { agent?: unknown } | undefined;
         if (service === undefined || service === null || service.agent === undefined) return;
         if (repl === service) return;
         repl = service;
@@ -568,7 +569,7 @@ export function apply(ctx: DshContext, opts?: HerdrApplyOptions): () => void {
     } catch {
       // silent by rule
     }
-    // Last word, fire and forget: the pane stops showing kumo.
+    // Last word, fire and forget: the pane stops showing bruine.
     try {
       reporter.release();
     } catch {

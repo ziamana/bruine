@@ -58,19 +58,19 @@ const scripts: ScriptedResponse[] = [
 
 beforeAll(async () => {
   fake = await startFakeModelServer(scripts);
-  home = await mkdtemp(join(tmpdir(), "kumo-cache-home-"));
-  project = await mkdtemp(join(tmpdir(), "kumo-cache-proj-"));
+  home = await mkdtemp(join(tmpdir(), "bruine-cache-home-"));
+  project = await mkdtemp(join(tmpdir(), "bruine-cache-proj-"));
   await writeFile(join(project, "a.ts"), "export const a = 1;\n");
   await writeFile(join(project, "AGENTS.md"), "# AGENTS\nBe kind.\n");
 
-  // Pre-bake a kumo home pointing at the fake server, permission full (the
+  // Pre-bake a bruine home pointing at the fake server, permission full (the
   // scenario has no interactive approvals), search none.
   const settings = localServerSettings(
     { baseUrl: `http://127.0.0.1:${String(fake.port)}/v1`, models: ["cache-test-model"] },
     "cache-test-model",
   );
   await writeFile(join(home, "settings.yaml"), renderSettingsYaml(settings));
-  await writeFile(join(home, ".env"), "KUMO_LOCAL_API_KEY=local\n");
+  await writeFile(join(home, ".env"), "BRUINE_LOCAL_API_KEY=local\n");
   await writeFile(
     join(home, "bruine.json"),
     JSON.stringify({ mode: "simple", search: { provider: "none" }, permissionMode: "full" }, null, 2),
@@ -85,7 +85,7 @@ beforeAll(async () => {
   expect(entry).toBeDefined();
   const add = spawnSync(
     process.execPath,
-    [entry as string, "plugin", "--profile", "kumo", "add", repoRoot],
+    [entry as string, "plugin", "--profile", "bruine", "add", repoRoot],
     { stdio: ["ignore", "pipe", "pipe"], env, cwd: repoRoot },
   );
   expect(add.status, String(add.stderr)).toBe(0);
@@ -102,10 +102,10 @@ describe("Cache Hunter (T17)", () => {
     async () => {
       const env: Record<string, string> = {
         ...(process.env as Record<string, string>),
-        KUMO_HOME: home,
+        BRUINE_HOME: home,
         DSH_TELEMETRY_DISABLED: "1",
         // T30: the launch update check must never touch the network here.
-        KUMO_NO_UPDATE_CHECK: "1",
+        BRUINE_NO_UPDATE_CHECK: "1",
       };
       const child = spawn(process.execPath, [join(repoRoot, "dist", "bin.js")], {
         cwd: project,
@@ -120,7 +120,7 @@ describe("Cache Hunter (T17)", () => {
       });
       child.on("close", (code) => {
         childExited = true;
-        if (code !== 0) childError += `\nkumo exited ${String(code)}`;
+        if (code !== 0) childError += `\nbruine exited ${String(code)}`;
       });
 
       const mainRequests = (): OpenAiRequestLike[] =>
@@ -133,7 +133,7 @@ describe("Cache Hunter (T17)", () => {
         () => mainRequests().length >= 1,
         120_000,
         "first turn",
-        () => `kumo exited: ${String(childExited)}; stderr: ${childError.slice(-900).replace(/[\x1b\r\n]+/g, "|")}; recorded: ${String(fake.requests.length)} (mains ${String(mainRequests().length)}); sample: ${JSON.stringify(fake.requests.slice(0, 2).map((r) => { const b = r.body as OpenAiRequestLike; return { roles: (b.messages ?? []).map((m) => `${m.role}:${typeof m.content}`).join(","), top: Object.keys(b).join(","), system: typeof (b as any).system === "string" ? (b as any).system.slice(0, 40) : (b as any).system }; })).slice(0, 3)}`,
+        () => `bruine exited: ${String(childExited)}; stderr: ${childError.slice(-900).replace(/[\x1b\r\n]+/g, "|")}; recorded: ${String(fake.requests.length)} (mains ${String(mainRequests().length)}); sample: ${JSON.stringify(fake.requests.slice(0, 2).map((r) => { const b = r.body as OpenAiRequestLike; return { roles: (b.messages ?? []).map((m) => `${m.role}:${typeof m.content}`).join(","), top: Object.keys(b).join(","), system: typeof (b as any).system === "string" ? (b as any).system.slice(0, 40) : (b as any).system }; })).slice(0, 3)}`,
       );
 
       // Plan ON (no LLM request — slash command + appended announcement).
@@ -169,10 +169,10 @@ describe("Cache Hunter (T17)", () => {
       await waitFor(() => mainRequests().length >= 6, 60_000, "tool round trip after compaction");
       await new Promise((r) => setTimeout(r, 2500));
       child.stdin!.write("/exit\n");
-      await waitFor(() => childExited, 20_000, "kumo exit");
+      await waitFor(() => childExited, 20_000, "bruine exit");
       if (!childExited) {
         child.stdin!.write("/exit\n");
-        await waitFor(() => childExited, 60_000, "kumo exit (second /exit)");
+        await waitFor(() => childExited, 60_000, "bruine exit (second /exit)");
       }
 
       const mains = mainRequests();

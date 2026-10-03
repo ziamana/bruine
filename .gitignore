@@ -2,7 +2,7 @@ node_modules
 dist
 
 # test scratch dirs
-.tmp-kumo-*
+.tmp-bruine-*
 
 # raw local test logs (contain machine paths)
 test/e2e/*-output.txt

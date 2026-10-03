@@ -9,7 +9,7 @@ const tty = process.stdout.isTTY;
 afterEach(() => { process.env = { ...saved }; process.stdout.isTTY = tty; vi.useRealTimers(); });
 function animatedFooter() {
   vi.useFakeTimers(); vi.setSystemTime(0); process.stdout.isTTY = true;
-  delete process.env.CI; delete process.env.KUMO_ASCII; delete process.env.KUMO_NO_ANIMATION;
+  delete process.env.CI; delete process.env.BRUINE_ASCII; delete process.env.BRUINE_NO_ANIMATION;
   process.env.TERM = "xterm-256color";
   return new FooterComponent(UNICODE_ICONS, { cwd: "/tmp", home: "/tmp" });
 }
@@ -62,7 +62,7 @@ test("session reset discards the previous animation and totals", () => {
 
 test.each(["reduced", "non-tty", "ascii"] as const)("%s settles immediately at the end", mode => {
   const footer = animatedFooter();
-  if (mode === "reduced") process.env.KUMO_NO_ANIMATION = "1";
+  if (mode === "reduced") process.env.BRUINE_NO_ANIMATION = "1";
   if (mode === "non-tty") process.stdout.isTTY = false;
   const target = mode === "ascii" ? new FooterComponent(ASCII_ICONS, { cwd: "/tmp" }) : footer;
   target.set({ inputTokens: 100 }); target.beginTurn(); target.set({ inputTokens: 1600 }); target.endTurn();

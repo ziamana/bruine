@@ -3,7 +3,7 @@
  * (`bench/variants/<name>.yml`), applied through the same persona section the
  * product uses: the runner writes the composed persona into the bench home's
  * profile patch. dsh is never edited, and the baseline variant composes
- * byte-for-byte the prompt a plain `kumo` run gets.
+ * byte-for-byte the prompt a plain `bruine` run gets.
  */
 import { readFile } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
@@ -67,7 +67,7 @@ export function variantPersona(variant: Variant, modelName: string): Persona {
  */
 export function variantPatch(persona: Persona): string {
   return (
-    "# kumo-bench profile patch (T36). Generated per run; do not edit.\n" +
+    "# bruine-bench profile patch (T36). Generated per run; do not edit.\n" +
     personaPatch(persona) +
     "- id: session-persistence-jsonl\n" +
     "  config:\n" +

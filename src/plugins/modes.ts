@@ -1,4 +1,4 @@
-import { runtimeHome, configReadPath } from "../compat.js";
+import { appEnv, runtimeHome, configReadPath } from "../compat.js";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -7,13 +7,13 @@ import { Text } from "@earendil-works/pi-tui";
 import { dim } from "../render/reasoning.js";
 import { askJudge, judgePrompt, JUDGE_MAX_COMMAND_CHARS, type JudgeLlm, type JudgeRoute, type JudgeVerdict } from "../gate/judge.js";
 import { decide, parseArgs, ruleKey, type PermissionMode } from "../gate/rules.js";
-import type { DshContext, KumoRepl } from "./ctx.js";
+import type { DshContext, BruineRepl } from "./ctx.js";
 
 /** Stable Cordis plugin name. */
-export const name = "kumo-modes";
+export const name = "bruine-modes";
 
 /** Service published for the REPL (Tab / Shift+Tab / slash commands) and approvals. */
-export const KUMO_MODES_SERVICE = "kumoModes";
+export const BRUINE_MODES_SERVICE = "bruineModes";
 
 export const PLAN_ON_TEXT = "Plan mode is on: do not modify files or run modifying commands.";
 export const PLAN_OFF_TEXT = "Plan mode is off.";
@@ -21,20 +21,20 @@ export const PLAN_OFF_TEXT = "Plan mode is off.";
 /** Announcement texts injected to the model; never shown as user chat. */
 export const MODE_ANNOUNCEMENTS: ReadonlySet<string> = new Set([PLAN_ON_TEXT, PLAN_OFF_TEXT]);
 
-export const NOTICE_PLAN_ON = "Plan mode: kumo reads and plans, no file changes. Shift+Tab to leave.";
-export const NOTICE_PLAN_OFF = "Build mode: kumo can change files again.";
-export const NOTICE_ASK = "Ask: kumo asks before every command and file change.";
-export const NOTICE_AUTO = "Auto: kumo decides, risky actions still ask.";
-export const NOTICE_FULL = "Full access: kumo never asks. Shift+Tab to leave.";
+export const NOTICE_PLAN_ON = "Plan mode: bruine reads and plans, no file changes. Shift+Tab to leave.";
+export const NOTICE_PLAN_OFF = "Build mode: bruine can change files again.";
+export const NOTICE_ASK = "Ask: bruine asks before every command and file change.";
+export const NOTICE_AUTO = "Auto: bruine decides, risky actions still ask.";
+export const NOTICE_FULL = "Full access: bruine never asks. Shift+Tab to leave.";
 
-export const FULL_CONFIRM_TITLE = "Enable full access? kumo will run commands and edit files without asking.";
+export const FULL_CONFIRM_TITLE = "Enable full access? bruine will run commands and edit files without asking.";
 
 /**
  * T42: the reason a headless run gives when the rule table says `ask`. It names
  * both ways out, because "denied" with no way forward is a dead end in a script.
  */
 export const NO_TERMINAL_DENY =
-  "kumo has no terminal to ask on (headless run). Re-run with --permission-mode full, " +
+  "bruine has no terminal to ask on (headless run). Re-run with --permission-mode full, " +
   "or --dangerously-skip-permissions, or narrow the task to what the gate allows.";
 
 export interface ModesLogEntry {
@@ -44,7 +44,7 @@ export interface ModesLogEntry {
   via: string;
 }
 
-export interface KumoModesService {
+export interface BruineModesService {
   readonly plan: boolean;
   readonly permission: PermissionMode;
   togglePlan(): void;
@@ -68,7 +68,7 @@ export interface KumoModesService {
 
 const PERMISSION_ORDER: PermissionMode[] = ["ask", "auto", "full"];
 
-function readKumoJson(env: NodeJS.ProcessEnv = process.env): Record<string, unknown> {
+function readBruineJson(env: NodeJS.ProcessEnv = process.env): Record<string, unknown> {
   try {
     const home = runtimeHome(env);
     const path = configReadPath(home);
@@ -80,15 +80,16 @@ function readKumoJson(env: NodeJS.ProcessEnv = process.env): Record<string, unkn
 }
 
 function readDefaultMode(env: NodeJS.ProcessEnv = process.env): PermissionMode {
-  if (env.KUMO_HEADLESS === "1" && (env.KUMO_PERMISSION_MODE === "ask" || env.KUMO_PERMISSION_MODE === "auto" || env.KUMO_PERMISSION_MODE === "full")) {
-    return env.KUMO_PERMISSION_MODE;
+  const permission = appEnv("PERMISSION_MODE", env);
+  if (appEnv("HEADLESS", env) === "1" && (permission === "ask" || permission === "auto" || permission === "full")) {
+    return permission;
   }
-  const doc = readKumoJson(env) as { permissionMode?: unknown; access?: unknown };
+  const doc = readBruineJson(env) as { permissionMode?: unknown; access?: unknown };
   const v = doc.permissionMode ?? doc.access;
   return v === "auto" || v === "full" || v === "ask" ? v : "auto";
 }
 
-export class Modes implements KumoModesService {
+export class Modes implements BruineModesService {
   plan = false;
   permission: PermissionMode = "ask";
   readonly log: ModesLogEntry[] = [];
@@ -126,7 +127,7 @@ export class Modes implements KumoModesService {
     for (const cb of this.#listeners) cb();
   }
 
-  /** T42: point the gate at a REPL-less agent. See KumoModesService.govern. */
+  /** T42: point the gate at a REPL-less agent. See BruineModesService.govern. */
   govern(agent: unknown): void {
     this.governed = agent;
   }
@@ -210,8 +211,8 @@ function execSummary(toolName: string, args: Record<string, unknown>): string {
 }
 
 function judgeRoute(ctx: DshContext): JudgeRoute {
-  // kumo.json models.fast, falling back to the main selection.
-  const models = readKumoJson().models as
+  // bruine.json models.fast, falling back to the main selection.
+  const models = readBruineJson().models as
     | { fast?: { provider?: string; model?: string } }
     | undefined;
   const fast = models?.fast;
@@ -253,9 +254,9 @@ export function apply(ctx: DshContext): void {
     return owned.has(subject);
   };
 
-  let repl: KumoRepl | undefined;
-  ctx.inject(["kumoRepl"], (c: any) => {
-    repl = c.kumoRepl;
+  let repl: BruineRepl | undefined;
+  ctx.inject(["bruineRepl"], (c: any) => {
+    repl = c.bruineRepl;
     const ui = repl?.ui;
     if (ui !== undefined) {
       const anyUi = ui as unknown as {
@@ -316,7 +317,7 @@ export function apply(ctx: DshContext): void {
     }
   });
 
-  ctx.provide(KUMO_MODES_SERVICE, modes);
+  ctx.provide(BRUINE_MODES_SERVICE, modes);
 
   const judge = async (toolName: string, summary: string): Promise<JudgeVerdict> => {
     // T18.7: oversized commands are never sent to the model.
@@ -325,16 +326,16 @@ export function apply(ctx: DshContext): void {
     const route = judgeRoute(ctx);
     const message = createUserMessage({
       content: [{ type: "text", text: judgePrompt(`${toolName} ${summary}`) }],
-      source: { kind: "plugin", plugin: "kumo-modes" },
+      source: { kind: "plugin", plugin: "bruine-modes" },
     });
     return askJudge(llm, route, [message]);
   };
 
-  // The gate (T16.C): kumo's own pre-tool decision. The tools array and the
+  // The gate (T16.C): bruine's own pre-tool decision. The tools array and the
   // system prompt never change, so the prompt cache survives mode flips.
   let screenUi: { screen: { write(s: string): void }; icons: { fail: string } } | undefined;
-  ctx.inject(["kumoRender"], (c: any) => {
-    screenUi = c.kumoRender?.screen;
+  ctx.inject(["bruineRender"], (c: any) => {
+    screenUi = c.bruineRender?.screen;
   });
   let judgeWarned = false;
   const reportUnavailable = (reason: string): void => {

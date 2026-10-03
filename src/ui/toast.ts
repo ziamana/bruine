@@ -2,7 +2,7 @@
  * T56 — the corner notice.
  *
  * A confirmation is not a notice: `showNotice` (the line above the editor) says
- * what mode kumo is in and stays 3 s, because a mode is a state you may need to
+ * what mode bruine is in and stays 3 s, because a mode is a state you may need to
  * read twice. This one says what just happened, once, in the corner, and gets
  * out of the way. Mixing the two would either bury the mode or spam the corner.
  *

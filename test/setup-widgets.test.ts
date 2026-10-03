@@ -59,7 +59,7 @@ test.each([100, 60, 30])("setup cards, theme and summary fit %i columns with a c
   const rows = cards.render(width);
   expect(plain(rows)).toContain("Choice 4");
   expect(rows.length).toBeLessThanOrEqual(15);
-  const summary = new SetupSummary([{ label: "Main", value: "local · Ornith 9B" }, { label: "Telemetry", value: "no" }], "/tmp/kumo");
+  const summary = new SetupSummary([{ label: "Main", value: "local · Ornith 9B" }, { label: "Telemetry", value: "no" }], "/tmp/bruine");
   expect(plain(summary.render(width))).toMatch(/Telemetry\s+no/);
   for (const row of [...rows, ...new SetupThemePicker("dark").render(width), ...summary.render(width)]) expect(visibleWidth(row)).toBeLessThanOrEqual(width);
 });

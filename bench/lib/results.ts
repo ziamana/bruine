@@ -22,8 +22,8 @@ export interface HeaderRow {
   timeoutMinutes: number;
   /** Tools catalog under test. */
   tools: string;
-  /** dsh/kumo version that produced the run. */
-  kumo: string;
+  /** dsh/bruine version that produced the run. */
+  bruine: string;
   node: string;
   /** The persona the variant composed, for the record. */
   persona: Persona;
@@ -44,7 +44,7 @@ export interface RunRow {
   repeat: number;
   status: RunStatus;
   pass: boolean;
-  /** Wall-clock seconds for the kumo run (not the check). */
+  /** Wall-clock seconds for the bruine run (not the check). */
   wallSec: number;
   outputTokens: number | null;
   inputTokens: number | null;

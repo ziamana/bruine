@@ -1,10 +1,10 @@
-import { configReadPath } from "../compat.js";
+import { appEnv, configReadPath } from "../compat.js";
 import { Text } from "@earendil-works/pi-tui";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MainRequestMemory, sameRoute, shouldSuggest, sharedPrefixRequest, standaloneRequest } from "./suggest.js";
 import { ReasoningLine, dim, type Screen } from "../render/reasoning.js";
-import { kumoIcons, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, type BruineIcons } from "../render/chars.js";
 import { TextStream } from "../render/text.js";
 import { ToolCallView } from "../render/tools.js";
 import { ReasoningComponent } from "../ui/reasoning-component.js";
@@ -18,26 +18,26 @@ import type { TurnActivity } from "../ui/turn-activity.js";
 import { SessionSpend } from "../ui/spend.js";
 import { ansi } from "../ui/theme.js";
 import { TaskPanel, taskItems, type TaskItem } from "../ui/task-panel.js";
-import { readSettingsRoute } from "../ui/kumo-ui.js";
+import { readSettingsRoute } from "../ui/bruine-ui.js";
 import { appendErrorLog, describeLlmError, fetchAvailableModels, formatK } from "../ui/errors.js";
-import type { DshContext, KumoRepl } from "./ctx.js";
+import type { DshContext, BruineRepl } from "./ctx.js";
 
 /** Stable Cordis plugin name. */
-export const name = "kumo-render";
+export const name = "bruine-render";
 
-/** The service provided by this plugin and injected by kumo-approval. */
-export const KUMO_RENDER_SERVICE = "kumoRender";
+/** The service provided by this plugin and injected by bruine-approval. */
+export const BRUINE_RENDER_SERVICE = "bruineRender";
 
-/** The screen-drawing surface kumo owns for non-TTY (piped) output. */
+/** The screen-drawing surface bruine owns for non-TTY (piped) output. */
 export interface ScreenUi {
   screen: Screen;
-  icons: KumoIcons;
+  icons: BruineIcons;
   reasoning: ReasoningLine;
   text: TextStream;
   tools: ToolCallView;
 }
 
-/** What kumo-approval can ask this service. */
+/** What bruine-approval can ask this service. */
 export interface RenderService {
   screen?: ScreenUi;
   describe?: (callId: string) => { tool: string; summary: string } | undefined;
@@ -54,7 +54,7 @@ export function stdoutScreen(): Screen {
   };
 }
 
-export function createUi(screen: Screen, icons: KumoIcons = kumoIcons()): ScreenUi {
+export function createUi(screen: Screen, icons: BruineIcons = bruineIcons()): ScreenUi {
   return {
     screen,
     icons,
@@ -103,7 +103,7 @@ function reported(value: unknown): number | undefined {
 export function attachTui(
   ctx: DshContext,
   agent: { session: any },
-  ui: NonNullable<KumoRepl["ui"]> & { activity?: TurnActivity; showWorking?: () => void },
+  ui: NonNullable<BruineRepl["ui"]> & { activity?: TurnActivity; showWorking?: () => void },
   service: RenderService,
   getAgent?: () => { session: any },
 ): () => void {
@@ -187,7 +187,7 @@ export function attachTui(
     let comp = tools.get(id);
     if (comp === undefined) {
       // A question has a shape of its own: the call is drawn from its first byte, and
-      // the form's answers settle it (KumoUi hands them to the registered call). The
+      // the form's answers settle it (BruineUi hands them to the registered call). The
       // repaint hook is what the reveal writes through, so a question is watched being
       // written instead of jumping from one model-sized piece to the next.
       const question = toolName === "ask_user_question"
@@ -209,7 +209,7 @@ export function attachTui(
   const footerState = (): Record<string, unknown> =>
     (ui as unknown as { footer?: { state?: Record<string, unknown> } }).footer?.state ?? {};
 
-  /** T33b: one red actionable line + one dim hint; detail only to kumo.log. */
+  /** T33b: one red actionable line + one dim hint; detail only to bruine.log. */
   /**
    * T59: publish what the turn did to the files, once the receipt is on screen.
    *
@@ -721,7 +721,7 @@ export function attachTui(
 
 /**
  * Screen wiring for non-TTY (piped) runs: raw-ANSI renderers. Kept for
- * `echo "x" | kumo` usage and CI smoke tests.
+ * `echo "x" | bruine` usage and CI smoke tests.
  */
 export function attach(
   ctx: Pick<DshContext, "on">,
@@ -870,15 +870,15 @@ export function attach(
 
 export function apply(ctx: DshContext): void {
   const service: RenderService = {};
-  if (process.env.KUMO_HEADLESS === "1") {
-    ctx.provide(KUMO_RENDER_SERVICE, service);
+  if (appEnv("HEADLESS") === "1") {
+    ctx.provide(BRUINE_RENDER_SERVICE, service);
     return;
   }
   if (process.stdin.isTTY === true && process.stdout.isTTY === true) {
     // TUI mode: components only; the screen service stays empty.
-    ctx.provide(KUMO_RENDER_SERVICE, service);
-    ctx.inject(["kumoRepl"], (c: any) => {
-      const repl: KumoRepl | undefined = c.kumoRepl;
+    ctx.provide(BRUINE_RENDER_SERVICE, service);
+    ctx.inject(["bruineRepl"], (c: any) => {
+      const repl: BruineRepl | undefined = c.bruineRepl;
       if (repl?.agent !== undefined && repl.ui !== undefined) {
         // Follow service.agent live so /new (same service object, new agent)
         // keeps rendering without re-provisioning (Cordis forbids re-provide).
@@ -889,9 +889,9 @@ export function apply(ctx: DshContext): void {
   }
   const ui = createUi(stdoutScreen());
   service.screen = ui;
-  ctx.provide(KUMO_RENDER_SERVICE, service);
-  ctx.inject(["kumoRepl"], (c: any) => {
-    const repl: KumoRepl | undefined = c.kumoRepl;
+  ctx.provide(BRUINE_RENDER_SERVICE, service);
+  ctx.inject(["bruineRepl"], (c: any) => {
+    const repl: BruineRepl | undefined = c.bruineRepl;
     if (repl?.agent !== undefined) attach(ctx, repl.agent, ui);
   });
 }

@@ -1,7 +1,7 @@
 /**
- * T30 — update check + `kumo update`: the pure half (registry check with a
+ * T30 — update check + `bruine update`: the pure half (registry check with a
  * fake fetch, the 24 h cache, semver, the off switches, install-kind
- * detection) plus the persistent notice on the KumoUi shell.
+ * detection) plus the persistent notice on the BruineUi shell.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -18,7 +18,7 @@ import {
   formatUpdateNotice,
   noticeForStartup,
   parseSemver,
-  readKumoJsonDoc,
+  readBruineJsonDoc,
   readUpdateCache,
   readUpdateCheckChoice,
   setUpdateCheck,
@@ -27,13 +27,13 @@ import {
   UPDATE_CACHE_FILE,
   type FetchLike,
 } from "../src/update.js";
-import { KumoUi } from "../src/ui/kumo-ui.js";
+import { BruineUi } from "../src/ui/bruine-ui.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 async function freshHome(): Promise<string> {
-  return await mkdtemp(join(tmpdir(), "kumo-t30-"));
+  return await mkdtemp(join(tmpdir(), "bruine-t30-"));
 }
 
 /** A fake registry: counts calls, answers with one version or fails. */
@@ -132,13 +132,13 @@ describe("checkForUpdate (T30)", () => {
 });
 
 describe("off switches (T30)", () => {
-  test("accepted: KUMO_NO_UPDATE_CHECK=1 → zero requests", async () => {
+  test("accepted: BRUINE_NO_UPDATE_CHECK=1 → zero requests", async () => {
     const home = await freshHome();
     const reg = fakeRegistry();
     const r = await checkForUpdate({
       dshHome: home,
       fetchImpl: reg.fetchImpl,
-      env: { KUMO_NO_UPDATE_CHECK: "1" },
+      env: { BRUINE_NO_UPDATE_CHECK: "1" },
       isTTY: true,
     });
     expect(r).toEqual({ ran: "disabled" });
@@ -154,24 +154,24 @@ describe("off switches (T30)", () => {
     expect(updateCheckEnabled({ env: {}, isTTY: true })).toBe(true); // default on
   });
 
-  test("kumo.json updateCheck survives the merge and keeps the other fields", async () => {
+  test("bruine.json updateCheck survives the merge and keeps the other fields", async () => {
     const home = await freshHome();
     await writeFile(join(home, "bruine.json"), JSON.stringify({ mode: "full", telemetry: false }, null, 2));
     await setUpdateCheck(home, false);
-    const doc = await readKumoJsonDoc(home);
+    const doc = await readBruineJsonDoc(home);
     expect(doc).toMatchObject({ mode: "full", telemetry: false, updateCheck: false });
     expect(readUpdateCheckChoice(doc)).toBe(false);
     await setUpdateCheck(home, true);
-    expect(readUpdateCheckChoice(await readKumoJsonDoc(home))).toBe(true);
+    expect(readUpdateCheckChoice(await readBruineJsonDoc(home))).toBe(true);
     // No POSIX mode bits on Windows: privacy there is an ACL, not a 0600.
     if (process.platform !== "win32") {
       expect((await stat(join(home, "bruine.json"))).mode & 0o777).toBe(0o600);
     }
   });
 
-  test("kumo.json missing → readUpdateCheckChoice undefined (default on)", async () => {
+  test("bruine.json missing → readUpdateCheckChoice undefined (default on)", async () => {
     const home = await freshHome();
-    expect(readUpdateCheckChoice(await readKumoJsonDoc(home))).toBeUndefined();
+    expect(readUpdateCheckChoice(await readBruineJsonDoc(home))).toBeUndefined();
   });
 });
 
@@ -179,47 +179,47 @@ describe("update notice text (T30)", () => {
   test("accepted: newer → the exact line; same or older → nothing", () => {
     const cache = { checkedAt: 1, latest: "0.3.0" };
     expect(noticeForStartup({ cache, current: "0.2.0" })).toBe(
-      "kumo 0.3.0 is available (you have 0.2.0). Run: kumo update",
+      "bruine 0.3.0 is available (you have 0.2.0). Run: bruine update",
     );
     expect(noticeForStartup({ cache: { checkedAt: 1, latest: "0.2.0" }, current: "0.2.0" })).toBeUndefined();
     expect(noticeForStartup({ cache: { checkedAt: 1, latest: "0.1.0" }, current: "0.2.0" })).toBeUndefined();
     expect(noticeForStartup({ cache: undefined, current: "0.2.0" })).toBeUndefined();
-    expect(formatUpdateNotice("2.0.0", "1.9.9")).toBe("kumo 2.0.0 is available (you have 1.9.9). Run: kumo update");
+    expect(formatUpdateNotice("2.0.0", "1.9.9")).toBe("bruine 2.0.0 is available (you have 1.9.9). Run: bruine update");
   });
 });
 
 describe("detectInstallKind (T30)", () => {
   test("accepted: npm / pnpm / bun / developer, posix and win32", () => {
-    expect(detectInstallKind("/usr/local/lib/node_modules/kumo-code/dist/bin.js")).toBe("npm");
+    expect(detectInstallKind("/usr/local/lib/node_modules/bruine/dist/bin.js")).toBe("npm");
     expect(
-      detectInstallKind("C:\\Users\\x\\AppData\\Roaming\\npm\\node_modules\\kumo-code\\dist\\bin.js"),
+      detectInstallKind("C:\\Users\\x\\AppData\\Roaming\\npm\\node_modules\\bruine\\dist\\bin.js"),
     ).toBe("npm");
     expect(
-      detectInstallKind("/home/x/.local/share/pnpm/global/5/node_modules/kumo-code/dist/bin.js"),
+      detectInstallKind("/home/x/.local/share/pnpm/global/5/node_modules/bruine/dist/bin.js"),
     ).toBe("pnpm");
     expect(
       detectInstallKind(
-        "/home/x/.pnpm-store/v3/files/kumo-code/node_modules/.pnpm/kumo-code@0.2.0/node_modules/kumo-code/dist/bin.js",
+        "/home/x/.pnpm-store/v3/files/bruine/node_modules/.pnpm/bruine@0.2.0/node_modules/bruine/dist/bin.js",
       ),
     ).toBe("pnpm");
     expect(
-      detectInstallKind("C:\\Users\\x\\AppData\\Local\\pnpm\\node_modules\\kumo-code\\dist\\bin.js"),
+      detectInstallKind("C:\\Users\\x\\AppData\\Local\\pnpm\\node_modules\\bruine\\dist\\bin.js"),
     ).toBe("pnpm");
-    expect(detectInstallKind("/home/x/.bun/install/global/node_modules/kumo-code/dist/bin.js")).toBe("bun");
+    expect(detectInstallKind("/home/x/.bun/install/global/node_modules/bruine/dist/bin.js")).toBe("bun");
     expect(
-      detectInstallKind("C:\\Users\\x\\.bun\\install\\global\\node_modules\\kumo-code\\dist\\bin.js"),
+      detectInstallKind("C:\\Users\\x\\.bun\\install\\global\\node_modules\\bruine\\dist\\bin.js"),
     ).toBe("bun");
-    expect(detectInstallKind("/home/x/projets/kumo/dist/bin.js")).toBe("developer");
-    expect(detectInstallKind("C:\\Users\\x\\projets\\kumo\\dist\\bin.js")).toBe("developer");
+    expect(detectInstallKind("/home/x/projets/bruine/dist/bin.js")).toBe("developer");
+    expect(detectInstallKind("C:\\Users\\x\\projets\\bruine\\dist\\bin.js")).toBe("developer");
     // a git checkout parked under node_modules is still developer only when
     // the package dir is the real one; keep the documented order honest:
-    expect(detectInstallKind("/srv/kumo/node_modules/kumo-code/dist/bin.js")).toBe("npm");
+    expect(detectInstallKind("/srv/bruine/node_modules/bruine/dist/bin.js")).toBe("npm");
   });
 
   test("updateCommand is exact per kind; developer runs nothing", () => {
-    expect(updateCommand("npm")).toEqual(["npm", "install", "-g", "kumo-code@latest"]);
-    expect(updateCommand("pnpm")).toEqual(["pnpm", "add", "-g", "kumo-code@latest"]);
-    expect(updateCommand("bun")).toEqual(["bun", "add", "-g", "kumo-code@latest"]);
+    expect(updateCommand("npm")).toEqual(["npm", "install", "-g", "bruine@latest"]);
+    expect(updateCommand("pnpm")).toEqual(["pnpm", "add", "-g", "bruine@latest"]);
+    expect(updateCommand("bun")).toEqual(["bun", "add", "-g", "bruine@latest"]);
     expect(updateCommand("developer")).toBeUndefined();
   });
 });
@@ -251,18 +251,18 @@ class FakeTerminal implements Terminal {
 const strip = (s: string): string =>
   s.replace(/\r/g, "").replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
 
-describe("KumoUi persistent update notice (T30)", () => {
-  async function uiWithCache(latest: string): Promise<KumoUi> {
+describe("BruineUi persistent update notice (T30)", () => {
+  async function uiWithCache(latest: string): Promise<BruineUi> {
     const home = await freshHome();
     await writeFile(
       join(home, UPDATE_CACHE_FILE),
       JSON.stringify({ checkedAt: Date.now(), latest }),
       "utf8",
     );
-    vi.stubEnv("KUMO_HOME", home);
-    vi.stubEnv("KUMO_NO_UPDATE_CHECK", "");
+    vi.stubEnv("BRUINE_HOME", home);
+    vi.stubEnv("BRUINE_NO_UPDATE_CHECK", "");
     vi.stubEnv("CI", "");
-    const ui = new KumoUi(
+    const ui = new BruineUi(
       "0.2.0",
       { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} },
       new FakeTerminal(),
@@ -279,7 +279,7 @@ describe("KumoUi persistent update notice (T30)", () => {
   test("newer cached version → notice above the editor; gone after the first submit", async () => {
     const ui = await uiWithCache("0.3.0");
     const text = ui.tui.render(80).map(strip).join("\n");
-    expect(text).toContain("kumo 0.3.0 is available (you have 0.2.0). Run: kumo update");
+    expect(text).toContain("bruine 0.3.0 is available (you have 0.2.0). Run: bruine update");
     ui.editor.onSubmit?.("first prompt");
     const after = ui.tui.render(80).map(strip).join("\n");
     expect(after).not.toContain("0.3.0 is available");
@@ -293,7 +293,7 @@ describe("KumoUi persistent update notice (T30)", () => {
   });
 });
 
-describe("kumo update command (T30)", () => {
+describe("bruine update command (T30)", () => {
   test("developer install prints the git message and runs nothing", () => {
     // dist/bin.js inside a git checkout realpath-detects as developer.
     const out = execFileSync(process.execPath, [join(repoRoot, "dist", "bin.js"), "update"], {

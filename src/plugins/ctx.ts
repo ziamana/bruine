@@ -1,13 +1,13 @@
 /**
- * Minimal structural view of the Cordis/dsh context surface kumo plugins use.
- * Kept local on purpose: kumo must not type-couple to a specific copy of
+ * Minimal structural view of the Cordis/dsh context surface bruine plugins use.
+ * Kept local on purpose: bruine must not type-couple to a specific copy of
  * @deepseek-ai/cordis (the runtime context comes from dsh's own tree).
  */
 import type { ClipboardImage } from "../image/clipboard.js";
 import type { VisionAnswer } from "../image/vision.js";
 export interface DshContext {
   get(service: string): any;
-  /** Mount another Cordis plugin (T34: kumo-effort from kumo-repl). */
+  /** Mount another Cordis plugin (T34: bruine-effort from bruine-repl). */
   plugin?(plugin: unknown, config?: unknown): unknown;
   provide(name: string, value: unknown): void;
   inject(services: string[], callback: (ctx: any) => void): void;
@@ -19,14 +19,14 @@ export interface DshContext {
   };
 }
 
-/** The service published by kumo-startup and consumed by kumo-repl. */
-export interface KumoStartup {
+/** The service published by bruine-startup and consumed by bruine-repl. */
+export interface BruineStartup {
   initialPrompt?: string;
   headless?: { prompts: string[]; format: "text" | "json" | "stream-json" };
 }
 
-/** The service published by kumo-repl once its agent exists. */
-export interface KumoRepl {
+/** The service published by bruine-repl once its agent exists. */
+export interface BruineRepl {
   agent: any;
   /**
    * T34: the dsh ModelSelectionRef holder. dsh reads `.current` at prompt

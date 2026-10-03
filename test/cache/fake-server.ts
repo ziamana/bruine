@@ -112,7 +112,7 @@ export function isSuggestionRequest(body: OpenAiRequestLike): boolean {
   return JSON.stringify(last?.content ?? "").includes("Suggest the user's most likely next message");
 }
 
-/** A main-session request carries kumo's persona; one-shot calls (titles…) and the suggestion riding on it do not count. */
+/** A main-session request carries bruine's persona; one-shot calls (titles…) and the suggestion riding on it do not count. */
 export function isMainSessionRequest(body: OpenAiRequestLike): boolean {
   return !isSuggestionRequest(body) && systemMessageOf(body).includes("terminal coding agent");
 }

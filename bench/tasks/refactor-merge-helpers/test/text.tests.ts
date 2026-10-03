@@ -11,7 +11,7 @@ test("searchKey keeps its behaviour", () => {
 });
 
 test("dedupeKey keeps its behaviour", () => {
-  assert.equal(dedupeKey(" Kumo  Bench "), "kumo bench");
+  assert.equal(dedupeKey(" Bruine  Bench "), "bruine bench");
 });
 
 test("the three are the same normaliser", () => {

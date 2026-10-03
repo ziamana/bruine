@@ -10,21 +10,21 @@ import { runtimeHome, configReadPath, configWritePath } from "../compat.js";
  * ARCHITECTURE §0).
  *
  * The command lives in dsh's `commands` service (name "effort"), so the
- * T31 "/" palette lists it automatically; kumo's own slash router delegates
- * through the kumoEffort service. ctrl+e cycles the levels (TTY).
+ * T31 "/" palette lists it automatically; bruine's own slash router delegates
+ * through the bruineEffort service. ctrl+e cycles the levels (TTY).
  */
 import { existsSync, readFileSync } from "node:fs";
 import { chmod, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { matchesKey } from "@earendil-works/pi-tui";
-import type { DshContext, KumoRepl } from "./ctx.js";
+import type { DshContext, BruineRepl } from "./ctx.js";
 
 /** Stable Cordis plugin name. */
-export const name = "kumo-effort";
+export const name = "bruine-effort";
 
 /** Service published for the REPL (slash router) and other plugins. */
-export const KUMO_EFFORT_SERVICE = "kumoEffort";
+export const BRUINE_EFFORT_SERVICE = "bruineEffort";
 
 /** "auto" hands the choice back to the provider (no effort on the wire). */
 export type EffortArg = "auto" | string;
@@ -52,7 +52,7 @@ export function isBinaryLevels(levels: readonly string[]): boolean {
 /** What the footer and the notice show for one level (never a wire value). */
 export function effortLabel(levels: readonly string[], level: string | undefined): string {
   if (level === "off") return "off";
-  // Unset (or a model kumo has no switch for): the provider decides → "auto".
+  // Unset (or a model bruine has no switch for): the provider decides → "auto".
   if (level === undefined || levels.length === 0) return "auto";
   return isBinaryLevels(levels) ? "on" : level;
 }
@@ -60,9 +60,9 @@ export function effortLabel(levels: readonly string[], level: string | undefined
 /**
  * T34 default effort — `on` for a binary local template, `medium` when the
  * template has real effort words — applied ONLY to local routes where setup
- * actually detected a chat template (`kumo.json models.<role>.template`).
+ * actually detected a chat template (`bruine.json models.<role>.template`).
  * Ollama, LM Studio and cloud routes are left exactly as the provider
- * decided (undefined): without a template kumo has no honest switch.
+ * decided (undefined): without a template bruine has no honest switch.
  */
 export function defaultLevelFor(
   provider: string,
@@ -76,7 +76,7 @@ export function defaultLevelFor(
   return levels.includes("medium") ? "medium" : on[0];
 }
 
-/** Does kumo.json hold a setup-detected template for this exact route? */
+/** Does bruine.json hold a setup-detected template for this exact route? */
 export function hasTemplateForRoute(
   doc: {
     models?: Record<string, { provider?: string; model?: string; template?: unknown } | undefined>;
@@ -90,7 +90,7 @@ export function hasTemplateForRoute(
   return false;
 }
 
-/** kumo.json `reasoningEffort` lookup: exact model id, then trailing-glob. */
+/** bruine.json `reasoningEffort` lookup: exact model id, then trailing-glob. */
 export function savedLevelFor(
   map: Record<string, string> | undefined,
   model: string,
@@ -117,34 +117,34 @@ export function normalizeLevelArg(
   return levels.includes(a) ? a : undefined;
 }
 
-interface KumoJson {
+interface BruineJson {
   reasoningEffort?: Record<string, string>;
   models?: Record<string, { provider?: string; model?: string } | undefined>;
   [key: string]: unknown;
 }
 
-function kumoHome(): string {
+function bruineHome(): string {
   return runtimeHome();
 }
 
-function readKumoJson(): KumoJson {
+function readBruineJson(): BruineJson {
   try {
-    const path = configReadPath(kumoHome());
+    const path = configReadPath(bruineHome());
     if (!existsSync(path)) return {};
-    return JSON.parse(readFileSync(path, "utf8")) as KumoJson;
+    return JSON.parse(readFileSync(path, "utf8")) as BruineJson;
   } catch {
     return {};
   }
 }
 
-/** Remember one model's effort in kumo.json (atomic, other keys kept). */
+/** Remember one model's effort in bruine.json (atomic, other keys kept). */
 export async function persistLevel(model: string, level: string | "auto"): Promise<void> {
-  const doc = readKumoJson();
+  const doc = readBruineJson();
   const map = { ...(doc.reasoningEffort ?? {}) };
   if (level === "auto") delete map[model];
   else map[model] = level;
   doc.reasoningEffort = map;
-  const path = configWritePath(kumoHome());
+  const path = configWritePath(bruineHome());
   // Unique temp name: rapid ctrl+e presses must not fight over one .tmp.
   const tmp = `${path}.${String(process.pid)}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`;
   await writeFile(tmp, `${JSON.stringify(doc, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -169,7 +169,7 @@ export class Effort {
 
   /** Wire it to the live session; applies the saved/default level once. */
   async attach(
-    repl: KumoRepl | undefined,
+    repl: BruineRepl | undefined,
     llm: { resolveModelInfo?(p: string, m: string): Promise<any> } | undefined,
   ): Promise<void> {
     const selection = repl?.selection?.current;
@@ -197,7 +197,7 @@ export class Effort {
     model: string,
     llm: { resolveModelInfo?(p: string, m: string): Promise<any> } | undefined,
   ): Promise<void> {
-    const doc = readKumoJson();
+    const doc = readBruineJson();
     // T37: an effort the live selection still carries wins, so an explicit
     // choice survives a route switch to a model that offers the same levels.
     const carried = this.holder?.current?.reasoningEffort;
@@ -231,7 +231,7 @@ export class Effort {
   }
 
   noticeShown = "";
-  /** The pending kumo.json write (awaited by tests and /effort replies). */
+  /** The pending bruine.json write (awaited by tests and /effort replies). */
   persisted: Promise<void> = Promise.resolve();
 
   /** The visible order: off first, then the model's thinking levels. */
@@ -326,8 +326,8 @@ export function apply(ctx: DshContext): void {
   const effort = new Effort();
 
   // Discover the live session once the REPL published its agent.
-  ctx.inject(["kumoRepl"], (c: any) => {
-    void effort.attach(c.kumoRepl as KumoRepl, ctx.get("llm"));
+  ctx.inject(["bruineRepl"], (c: any) => {
+    void effort.attach(c.bruineRepl as BruineRepl, ctx.get("llm"));
   });
 
   // Register in dsh's own commands service (T31 palette lists it from here).
@@ -358,8 +358,8 @@ export function apply(ctx: DshContext): void {
   }
   ctx.inject(["commands"], register);
 
-  ctx.provide(KUMO_EFFORT_SERVICE, effort);
+  ctx.provide(BRUINE_EFFORT_SERVICE, effort);
 }
 
-/** The Cordis plugin object (mounted programmatically by kumo-repl). */
+/** The Cordis plugin object (mounted programmatically by bruine-repl). */
 export default { name, apply };

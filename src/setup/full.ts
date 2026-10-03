@@ -1,7 +1,7 @@
 import { configReadPath, configWritePath, manifestReadPath } from "../compat.js";
 import { isAscii } from "../render/chars.js";
 /**
- * The kumo setup wizard (T21): pi-tui SelectList/checkbox steps; Esc goes
+ * The bruine setup wizard (T21): pi-tui SelectList/checkbox steps; Esc goes
  * back one step keeping every answer, ctrl+c quits; files are written ONCE,
  * from the summary screen's Save, and never after a cancel.
  */
@@ -63,7 +63,7 @@ import {
   type SearchChoice,
   type SetupIO,
 } from "./simple.js";
-import { readKumoJsonDoc, readUpdateCheckChoice, setUpdateCheck } from "../update.js";
+import { readBruineJsonDoc, readUpdateCheckChoice, setUpdateCheck } from "../update.js";
 import { parse as parseYaml } from "yaml";
 import { terminalMotionAllowed } from "../ui/logo-motion.js";
 import { CenteredPanel, SetupFrame } from "./frame.js";
@@ -78,9 +78,9 @@ type StepResult = Outcome<Partial<SetupAnswers>> | "saved";
 // T35 Skip: a select/check step resolved via the `s` key or the last Skip item.
 type Skippable<T> = Outcome<T | typeof SKIP>;
 
-/** Merge `suggestions` into kumo.json (0600, atomic); keeps every other key. */
+/** Merge `suggestions` into bruine.json (0600, atomic); keeps every other key. */
 export async function setSuggestionsChoice(dshHome: string, value: boolean): Promise<void> {
-  const doc = (await readKumoJsonDoc(dshHome)) as Record<string, unknown>;
+  const doc = (await readBruineJsonDoc(dshHome)) as Record<string, unknown>;
   doc.suggestions = value;
   const file = configWritePath(dshHome);
   await mkdir(dshHome, { recursive: true });
@@ -92,7 +92,7 @@ export async function setSuggestionsChoice(dshHome: string, value: boolean): Pro
 export interface WizardOptions {
   fetchImpl?: ScanOptions["fetchImpl"];
   terminal?: Terminal;
-  /** Pre-filled answers (from `kumo setup` over an existing install). */
+  /** Pre-filled answers (from `bruine setup` over an existing install). */
   prefill?: SetupAnswers;
   /** Override where the shipped skills live (tests). */
   bundledSkillsRoot?: string;
@@ -111,7 +111,7 @@ export function bundledSkillsRoot(): string {
 
 /** ── prefill from an existing install (T35: settings.yaml source of truth) ── */
 
-interface KumoJsonShape {
+interface BruineJsonShape {
   mode?: string;
   models?: Record<
     string,
@@ -170,11 +170,11 @@ function readEnvFile(dshHome: string): Record<string, string> {
 }
 
 export function loadPrefill(dshHome: string): SetupAnswers | undefined {
-  let kumoDoc: KumoJsonShape | undefined;
+  let bruineDoc: BruineJsonShape | undefined;
   try {
-    kumoDoc = JSON.parse(readFileSync(configReadPath(dshHome), "utf8")) as KumoJsonShape;
+    bruineDoc = JSON.parse(readFileSync(configReadPath(dshHome), "utf8")) as BruineJsonShape;
   } catch {
-    kumoDoc = undefined;
+    bruineDoc = undefined;
   }
   let settingsDoc: SettingsYamlShape | undefined;
   try {
@@ -182,15 +182,15 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
   } catch {
     settingsDoc = undefined;
   }
-  if (kumoDoc === undefined && settingsDoc === undefined) return undefined;
+  if (bruineDoc === undefined && settingsDoc === undefined) return undefined;
 
   const answers = defaultAnswers();
   // T35: keep the originals for round-trip preservation (never touched by steps).
   if (settingsDoc !== undefined) {
     answers.settingsOrig = JSON.parse(JSON.stringify(settingsDoc)) as SetupAnswers["settingsOrig"];
   }
-  if (kumoDoc !== undefined) {
-    answers.kumoOrig = JSON.parse(JSON.stringify(kumoDoc)) as Record<string, unknown>;
+  if (bruineDoc !== undefined) {
+    answers.bruineOrig = JSON.parse(JSON.stringify(bruineDoc)) as Record<string, unknown>;
   }
 
   const discoveries: Discovered[] = [];
@@ -231,10 +231,10 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
         });
       }
       if (models.length === 0) continue;
-      // Template rides in kumo.json (T34 round-trip); attach the first match.
+      // Template rides in bruine.json (T34 round-trip); attach the first match.
       let template: TemplateCaps | undefined;
       for (const r of ["main", "fast", "vision"] as const) {
-        const ref = kumoDoc?.models?.[r];
+        const ref = bruineDoc?.models?.[r];
         if (ref?.provider === pName && ref.model !== undefined && models.includes(ref.model) && ref.template !== undefined) {
           template = ref.template;
           break;
@@ -264,7 +264,7 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
   const byProvider = (pName: string): Discovered | undefined =>
     discoveries.find((d) => d.providerName === pName);
 
-  // Roles from agent-default-model (settings.yaml truth) + kumo.json models.
+  // Roles from agent-default-model (settings.yaml truth) + bruine.json models.
   const def = settingsDoc?.["agent-default-model"] as { provider?: unknown; model?: unknown } | undefined;
   if (typeof def?.provider === "string" && typeof def?.model === "string" && def.provider !== "" && def.model !== "") {
     const pName = def.provider;
@@ -275,36 +275,36 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
       const d = byProvider(pName);
       if (d !== undefined) {
         const info = d.modelInfos.find((m) => m.id === mId);
-        const kumoRef = (["main", "fast", "vision"] as const)
-          .map((r) => kumoDoc?.models?.[r])
+        const bruineRef = (["main", "fast", "vision"] as const)
+          .map((r) => bruineDoc?.models?.[r])
           .find((r) => r?.provider === pName && r.model === mId);
         roles.main = {
           discovered: d,
           model: mId,
           ...(info?.contextWindow !== undefined ? { contextWindow: info.contextWindow } : {}),
-          ...(d.template !== undefined || kumoRef?.template !== undefined
+          ...(d.template !== undefined || bruineRef?.template !== undefined
             ? {}
             : {}),
         };
-        // Attach template from kumo.json when the settings discovery lacks it.
-        if (d.template === undefined && kumoRef?.template !== undefined) {
-          roles.main = { ...roles.main, discovered: { ...d, template: kumoRef.template } };
-          d.template = kumoRef.template;
-        } else if (kumoRef?.contextWindow !== undefined && info?.contextWindow === undefined) {
-          roles.main = { ...roles.main, contextWindow: kumoRef.contextWindow };
+        // Attach template from bruine.json when the settings discovery lacks it.
+        if (d.template === undefined && bruineRef?.template !== undefined) {
+          roles.main = { ...roles.main, discovered: { ...d, template: bruineRef.template } };
+          d.template = bruineRef.template;
+        } else if (bruineRef?.contextWindow !== undefined && info?.contextWindow === undefined) {
+          roles.main = { ...roles.main, contextWindow: bruineRef.contextWindow };
         }
       } else {
-        // Default points at an unknown provider: fall back to kumo.json refs below.
+        // Default points at an unknown provider: fall back to bruine.json refs below.
       }
     }
   }
-  // kumo.json fast/vision (and main fallback when settings has no default).
-  if (kumoDoc?.models !== undefined) {
+  // bruine.json fast/vision (and main fallback when settings has no default).
+  if (bruineDoc?.models !== undefined) {
     for (const role of ["main", "fast", "vision"] as const) {
       if (role === "main" && roles.main !== undefined) {
         // Main already from settings default; still merge template/context when
-        // kumo.json carries them (Aron's minimal kumo.json has template only).
-        const ref = kumoDoc.models[role];
+        // bruine.json carries them (Aron's minimal bruine.json has template only).
+        const ref = bruineDoc.models[role];
         const curDiscovered = roles.main.discovered;
         if (ref?.provider !== undefined && ref.model !== undefined && curDiscovered !== undefined) {
           const cur = roles.main;
@@ -317,7 +317,7 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
         }
         continue;
       }
-      const ref = kumoDoc.models[role];
+      const ref = bruineDoc.models[role];
       if (ref?.provider === undefined || ref.model === undefined) continue;
       if (isCloudRoute(ref.provider)) {
         roles[role] = { cloud: ref.provider, model: ref.model };
@@ -336,7 +336,7 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
         };
         continue;
       }
-      // Fall back to a baseUrl ref (old kumo.json shape).
+      // Fall back to a baseUrl ref (old bruine.json shape).
       const pick = roleFromModelRef({
         provider: ref.provider,
         model: ref.model,
@@ -345,7 +345,7 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
         ...(ref.template !== undefined ? { template: ref.template } : {}),
       });
       if (pick === undefined) {
-        // Local provider name without baseUrl (Aron's minimal kumo.json) but
+        // Local provider name without baseUrl (Aron's minimal bruine.json) but
         // no matching settings discovery (should not happen when settings has
         // the default): skip — settings default already covers main.
         continue;
@@ -382,7 +382,7 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
   answers.discoveries = discoveries;
   answers.roles = roles;
   answers.keys = readEnvFile(dshHome);
-  const doc = kumoDoc;
+  const doc = bruineDoc;
   if (doc !== undefined) {
     if (doc.permissionMode === "ask" || doc.permissionMode === "auto" || doc.permissionMode === "full") {
       answers.permissionMode = doc.permissionMode;
@@ -395,7 +395,7 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
     if (Array.isArray(doc.skills)) {
       answers.skills = doc.skills.map((s) => String(s));
     } else {
-      // T35: a pre-T26 kumo.json has no `skills`: keep what is installed, or a
+      // T35: a pre-T26 bruine.json has no `skills`: keep what is installed, or a
       // Save that changed only the theme would uninstall every skill.
       const installed = installedSkillsList(dshHome);
       if (installed !== undefined) answers.skills = installed;
@@ -413,8 +413,8 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
     if (pref === "light") answers.theme = "light";
     else answers.theme = "dark";
   }
-  // T35: settings.yaml only (no kumo.json) — the manifest still guards skills.
-  if (kumoDoc === undefined) {
+  // T35: settings.yaml only (no bruine.json) — the manifest still guards skills.
+  if (bruineDoc === undefined) {
     const installed = installedSkillsList(dshHome);
     if (installed !== undefined) answers.skills = installed;
   }
@@ -423,7 +423,7 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
 
 /** ── T26 skills-step helpers (pure, unit-testable) ────────────────── */
 
-/** Skills persisted in kumo.json; `undefined` = never saved (pre-T26 install). */
+/** Skills persisted in bruine.json; `undefined` = never saved (pre-T26 install). */
 export function savedSkillsList(dshHome: string): string[] | undefined {
   try {
     const doc = JSON.parse(
@@ -436,8 +436,8 @@ export function savedSkillsList(dshHome: string): string[] | undefined {
 }
 
 /**
- * T35: what kumo actually installed, from the T26 manifest. This is the
- * prefill source when kumo.json predates the `skills` key: without it, a Save
+ * T35: what bruine actually installed, from the T26 manifest. This is the
+ * prefill source when bruine.json predates the `skills` key: without it, a Save
  * that touched only the theme would plan `chosen: []` and uninstall every
  * skill the manifest records.
  */
@@ -452,7 +452,7 @@ export function installedSkillsList(dshHome: string): string[] | undefined {
 }
 
 /**
- * Skills the setup pre-checks on a first run: the ones kumo ships (see THIRD_PARTY_NOTICES.md)
+ * Skills the setup pre-checks on a first run: the ones bruine ships (see THIRD_PARTY_NOTICES.md)
  * and the same names found on the computer, in whichever agent's folder. A found one is
  * linked from where it lives, never copied. `browser` is a user's own variant of the shipped
  * `playwright-cli`; either is pre-checked when it exists.
@@ -467,9 +467,9 @@ export const RECOMMENDED_SKILLS: readonly string[] = [
 ];
 
 /**
- * Rows pre-checked when entering the skills step: the saved list when kumo
+ * Rows pre-checked when entering the skills step: the saved list when bruine
  * knows one; otherwise the T26 migration default — every skill found in
- * `.agents/skills` in the user home, the behavior dsh had before kumo took over USER skills.
+ * `.agents/skills` in the user home, the behavior dsh had before bruine took over USER skills.
  * Same name shipped AND found: the shipped row wins (one entry per name).
  */
 export function initialSkillChecks(
@@ -499,7 +499,7 @@ export async function runFullSetup(
   const tui: TUI = new TuiMainScreen(terminal);
   const root = new Container();
   const flow = new SetupFlow(opts.prefill ?? defaultAnswers());
-  let status = "kumo setup";
+  let status = "bruine setup";
   let keyHelp = "↑/↓ move  ·  Enter choose or continue  ·  Esc back  ·  Ctrl+C quit";
   let escapeStaysOnWelcome = false;
   let welcomeShowing = false;
@@ -531,11 +531,11 @@ export async function runFullSetup(
   let activeFocus: (Component & { clearFilter?: () => boolean }) | undefined;
   let activeResolve: ((o: Outcome<never>) => void) | null = null;
   // T26 skills step: before the first submit the pre-checked rows come from
-  // kumo.json (or, for a pre-T26 first run, from the user-home `.agents` migration
+  // bruine.json (or, for a pre-T26 first run, from the user-home `.agents` migration
   // default); after it, from the answers kept across Esc/back.
   let skillsSubmitted = false;
   // T30: the update-check toggle rides on the Telemetry step and is merged
-  // into kumo.json from the Summary's Save (flow.ts owns the other fields).
+  // into bruine.json from the Summary's Save (flow.ts owns the other fields).
   let updateCheckChoice = true;
   let updateCheckLoaded = false;
   // T28B: same ride for the ghost-suggestion toggle (default true).
@@ -581,7 +581,7 @@ export async function runFullSetup(
       for (const c of built.below ?? []) box.addChild(c);
       frameShowing = !welcomeShowing;
       if (frameShowing) {
-        root.addChild(new SetupFrame(title || (displayStep === undefined ? "Kumo setup" : stepTitle(displayStep).split("  (step")[0]!), box, {
+        root.addChild(new SetupFrame(title || (displayStep === undefined ? "Bruine setup" : stepTitle(displayStep).split("  (step")[0]!), box, {
           ...(displayStep === undefined ? {} : { step: STEPS.indexOf(displayStep) + 1 }),
           help: keyHelp,
           rows: () => terminal.rows,
@@ -589,7 +589,7 @@ export async function runFullSetup(
             const extra = [...(built.above ?? []), ...(built.below ?? [])].reduce((n, c) => n + c.render(width).length, 0);
             (built.widget as Component & { setHeight?: (rows: number) => void }).setHeight?.(Math.max(1, rows - extra));
           },
-          status: () => status === "kumo setup" || status === "Kumo setup" || (displayStep !== undefined && status === stepTitle(displayStep)) ? "" : status,
+          status: () => status === "bruine setup" || status === "Bruine setup" || (displayStep !== undefined && status === stepTitle(displayStep)) ? "" : status,
         }));
       } else root.addChild(box);
       activeFocus = built.focus;
@@ -725,7 +725,7 @@ export async function runFullSetup(
 
     const showWelcome = async (): Promise<Outcome<true>> => {
       keyHelp = "Enter continue  ·  Ctrl+C quit";
-      status = "Kumo setup";
+      status = "Bruine setup";
       escapeStaysOnWelcome = true;
       welcomeShowing = true;
       displayStep = undefined;
@@ -780,7 +780,7 @@ export async function runFullSetup(
         [
           { value: "simple", label: "Quick setup", description: "Recommended · get started with a few guided choices.", recommended: true },
           { value: "full", label: "Customize setup", description: "Choose models, access, search, tools, and appearance." },
-          { value: "later", label: "Set up later", description: "Leave everything unchanged. Run kumo setup when you’re ready." },
+          { value: "later", label: "Set up later", description: "Leave everything unchanged. Run bruine setup when you’re ready." },
         ],
         (i) => i === 0 ? "simple" : i === 1 ? "full" : "later",
       );
@@ -857,7 +857,7 @@ export async function runFullSetup(
     if (!updateCheckLoaded) {
       updateCheckLoaded = true;
       try {
-        updateCheckChoice = readUpdateCheckChoice(await readKumoJsonDoc(dshHome)) ?? true;
+        updateCheckChoice = readUpdateCheckChoice(await readBruineJsonDoc(dshHome)) ?? true;
       } catch {
         updateCheckChoice = true;
       }
@@ -865,18 +865,18 @@ export async function runFullSetup(
     if (!suggestionsLoaded) {
       suggestionsLoaded = true;
       try {
-        const doc = (await readKumoJsonDoc(dshHome)) as { suggestions?: boolean };
+        const doc = (await readBruineJsonDoc(dshHome)) as { suggestions?: boolean };
         suggestionsChoice = doc.suggestions ?? true;
       } catch {
         suggestionsChoice = true;
       }
     }
-    status = "Kumo setup";
+    status = "Bruine setup";
     keyHelp = "↑/↓ move  ·  Enter open  ·  Esc back  ·  Ctrl+C quit";
     for (;;) {
       displayStep = undefined;
       const pick = await selectStep(
-        "Kumo setup",
+        "Bruine setup",
         [
           { value: "models", label: "Models" },
           { value: "mode", label: "Access mode" },
@@ -927,7 +927,7 @@ export async function runFullSetup(
         } catch (err) {
           setStatus(`! ${(err as Error).message}`);
           await sleep(1600);
-          status = "Kumo setup";
+          status = "Bruine setup";
           keyHelp = "↑/↓ move  ·  Enter open  ·  Esc back  ·  Ctrl+C quit";
           continue;
         }
@@ -944,12 +944,12 @@ export async function runFullSetup(
         }
         // BACK from a single step = back to menu, discarding nothing (apply
         // already merged only on success; BACK merges nothing).
-        status = "Kumo setup";
+        status = "Bruine setup";
         keyHelp = "↑/↓ move  ·  Enter open  ·  Esc back  ·  Ctrl+C quit";
       } catch (err) {
         setStatus(`! ${(err as Error).message}. Try again`);
         await sleep(1400);
-        status = "Kumo setup";
+        status = "Bruine setup";
       }
     }
   }
@@ -1208,7 +1208,7 @@ export async function runFullSetup(
     );
     items.push({ value: "cloud", label: "Cloud provider…  (DeepSeek, Anthropic, OpenAI, Google, OpenRouter, Groq, and more; needs an API key)" });
     // T35: Skip (keep current) on the main pick skips the whole Roles step.
-    // Preselect the current role so `kumo setup` shows what is there.
+    // Preselect the current role so `bruine setup` shows what is there.
     let initial: number | undefined;
     let skipLabel = "Skip (keep: none)";
     if (opts.required === true) {
@@ -1324,7 +1324,7 @@ export async function runFullSetup(
       "Default access mode (s skips)",
       [
         { value: "ask", label: "Ask", description: "Confirm every command and write." },
-        { value: "auto", label: isAscii() ? "Auto *" : "Auto ★", description: "Kumo decides; risky actions still ask.", recommended: true },
+        { value: "auto", label: isAscii() ? "Auto *" : "Auto ★", description: "Bruine decides; risky actions still ask.", recommended: true },
         { value: "full", label: "Full access", description: "Commands and writes run without asking." },
         { value: "skip", label: `Skip (keep: ${cur})` },
       ],
@@ -1335,7 +1335,7 @@ export async function runFullSetup(
     if (m === 3) return {};
     const mode = ["ask", "auto", "full"][m] as PermissionModeValue;
     if (mode === "full") {
-      const conf = await lineStep("FULL ACCESS means kumo runs anything. Type full to confirm: ");
+      const conf = await lineStep("FULL ACCESS means bruine runs anything. Type full to confirm: ");
       if (conf === BACK || conf === CANCEL) return conf;
       if (conf.trim() !== "full") throw new Error("confirmation failed. Staying on this step");
     }
@@ -1387,8 +1387,8 @@ export async function runFullSetup(
 
   async function stepSkills(bundled: SkillMeta[]): Promise<StepResult> {
     displayStep = "skills";
-    // T26: three groups — shipped with kumo, found on this computer, and
-    // (read-only) skills in this project, which kumo never manages. A name
+    // T26: three groups — shipped with bruine, found on this computer, and
+    // (read-only) skills in this project, which bruine never manages. A name
     // both shipped and found keeps ONE row: the shipped one wins.
     const allFound = await scanFoundSkills(homedir());
     const shippedNames = new Set(bundled.map((s) => s.name));
@@ -1400,7 +1400,7 @@ export async function runFullSetup(
       return { skills: [] };
     }
     const items: CheckItem[] = [
-      { value: "#shipped", label: "Shipped with kumo", disabled: true },
+      { value: "#shipped", label: "Shipped with bruine", disabled: true },
       ...bundled.map((s) => ({ value: s.name, label: s.name, description: s.description })),
       { value: "#found", label: "Found on this computer", disabled: true },
       ...found.map((s) => ({
@@ -1447,7 +1447,7 @@ export async function runFullSetup(
     displayStep = "telemetry";
     if (!updateCheckLoaded) {
       updateCheckLoaded = true;
-      updateCheckChoice = readUpdateCheckChoice(await readKumoJsonDoc(dshHome)) ?? true;
+      updateCheckChoice = readUpdateCheckChoice(await readBruineJsonDoc(dshHome)) ?? true;
     }
     const curTele = flow.answers.telemetry ? "yes" : "no";
     const sel = await cardStep("Share anonymous usage data with DeepSeek Harness? (s skips)", [
@@ -1458,7 +1458,7 @@ export async function runFullSetup(
     if (sel === BACK || sel === CANCEL) return sel;
     if (sel === 2) return {};
     const u = await cardStep(
-      "Check npm once a day for a newer kumo and note it at startup? (nothing is sent but the version query)",
+      "Check npm once a day for a newer bruine and note it at startup? (nothing is sent but the version query)",
       [
         { value: "yes", label: "Yes", description: "Check npm daily and show available updates at startup.", recommended: true },
         { value: "no", label: "No", description: "Keep automatic update checks disabled." },
@@ -1471,7 +1471,7 @@ export async function runFullSetup(
     if (!suggestionsLoaded) {
       suggestionsLoaded = true;
       try {
-        const doc = (await readKumoJsonDoc(dshHome)) as { suggestions?: boolean };
+        const doc = (await readBruineJsonDoc(dshHome)) as { suggestions?: boolean };
         suggestionsChoice = doc.suggestions ?? true;
       } catch {
         suggestionsChoice = true;
@@ -1522,7 +1522,7 @@ export async function runFullSetup(
     if (choice === BACK || choice === CANCEL) return choice;
     if (choice === 0) {
       await flow.save({ dshHome, bundledSkillsRoot: bundledRoot, bundledSkills: bundled });
-      // T30: `updateCheck` lives in kumo.json next to the fields the flow
+      // T30: `updateCheck` lives in bruine.json next to the fields the flow
       // owns; flow.buildPlan stays untouched, so merge it after the save.
       await setUpdateCheck(dshHome, updateCheckChoice);
       // T28B: same merge for the suggestions toggle.

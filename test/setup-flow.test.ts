@@ -62,7 +62,7 @@ describe("SetupFlow step machine (T21)", () => {
   });
 
   test("cancel blocks Save and writes nothing", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-flow-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-flow-"));
     const flow = walkedFlow();
     flow.cancel();
     await expect(
@@ -73,7 +73,7 @@ describe("SetupFlow step machine (T21)", () => {
   });
 
   test("Save before the summary step is refused", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-flow-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-flow-"));
     const flow = walkedFlow();
     await expect(
       flow.save({ dshHome: home, bundledSkillsRoot: "", bundledSkills: [] }),
@@ -82,7 +82,7 @@ describe("SetupFlow step machine (T21)", () => {
 });
 
 describe("buildPlan (T21 + context window)", () => {
-  test("local main → settings has server contextWindow and reasoningEfforts; kumo.json + env", async () => {
+  test("local main → settings has server contextWindow and reasoningEfforts; bruine.json + env", async () => {
     const flow = walkedFlow();
     flow.submit({ roles: { main: { discovered: server1, model: "m1" } } });
     flow.submit({});
@@ -92,7 +92,7 @@ describe("buildPlan (T21 + context window)", () => {
     flow.submit({ theme: "high-contrast" });
     flow.submit({ telemetry: false });
     const plan = flow.buildPlan({
-      dshHome: "/home/x/.kumo",
+      dshHome: "/home/x/.bruine",
       bundledSkillsRoot: "/pkg/skills",
       bundledSkills: [],
     });
@@ -100,7 +100,7 @@ describe("buildPlan (T21 + context window)", () => {
     expect(parsed["llm-pi-ai"].providers.local).toMatchObject({
       api: "openai-completions",
       baseURL: "http://127.0.0.1:8080/v1",
-      apiKeyEnv: "KUMO_LOCAL_API_KEY",
+      apiKeyEnv: "BRUINE_LOCAL_API_KEY",
     });
     expect(parsed["llm-pi-ai"].providers.local.models).toEqual([
       {
@@ -111,21 +111,21 @@ describe("buildPlan (T21 + context window)", () => {
       },
     ]);
     expect(parsed["agent-default-model"]).toEqual({ provider: "local", model: "m1" });
-    // dsh only accepts light/dark/system; high-contrast maps to dark + kumo.json
+    // dsh only accepts light/dark/system; high-contrast maps to dark + bruine.json
     expect(parsed["ui-theme"]).toEqual({ preference: "dark" });
-    const kumoJson = JSON.parse(plan.kumoJson);
-    expect(kumoJson.theme).toBe("high-contrast");
-    expect(kumoJson.models.main).toEqual({
+    const bruineJson = JSON.parse(plan.bruineJson);
+    expect(bruineJson.theme).toBe("high-contrast");
+    expect(bruineJson.models.main).toEqual({
       provider: "local",
       model: "m1",
       baseUrl: "http://127.0.0.1:8080/v1",
       contextWindow: 100096,
     });
-    expect(kumoJson.models.fast).toEqual(kumoJson.models.main); // fast defaults to main
-    expect(kumoJson).not.toHaveProperty("models.vision");
-    expect(kumoJson.permissionMode).toBe("ask");
-    expect(kumoJson.telemetry).toBe(false);
-    expect(plan.env).toContainEqual(["KUMO_LOCAL_API_KEY", "local"]);
+    expect(bruineJson.models.fast).toEqual(bruineJson.models.main); // fast defaults to main
+    expect(bruineJson).not.toHaveProperty("models.vision");
+    expect(bruineJson.permissionMode).toBe("ask");
+    expect(bruineJson.telemetry).toBe(false);
+    expect(plan.env).toContainEqual(["BRUINE_LOCAL_API_KEY", "local"]);
   });
 
   test("server that does not know its context: the typed value is written", () => {
@@ -169,13 +169,13 @@ describe("buildPlan (T21 + context window)", () => {
     expect(plan.env).toContainEqual(["DEEPSEEK_API_KEY", "sk-d"]);
     expect(plan.env).toContainEqual(["OPENROUTER_API_KEY", "sk-o"]);
     // no local server chosen → no dummy key
-    expect(plan.env.some(([name]) => name === "KUMO_LOCAL_API_KEY")).toBe(false);
+    expect(plan.env.some(([name]) => name === "BRUINE_LOCAL_API_KEY")).toBe(false);
   });
 });
 
 describe("Save + prefill round-trip (T21)", () => {
   test("saved files reload into the same answers", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-pre-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-pre-"));
     let flow = walkedFlow();
     flow.submit({ roles: { main: { discovered: server1, model: "m1" }, vision: { cloud: "openrouter", model: "x" } } });
     flow.submit({ keys: { OPENROUTER_API_KEY: "sk-o" } });
@@ -221,7 +221,7 @@ describe("Space Bunny Free (the yes or no of the roles step)", () => {
       displayName: "OpenCode Zen",
       api: "openai-completions",
       baseURL: "https://opencode.ai/zen/v1",
-      apiKeyEnv: "KUMO_ZEN_API_KEY",
+      apiKeyEnv: "BRUINE_ZEN_API_KEY",
     });
     expect(parsed["llm-pi-ai"].providers["opencode-zen"].models[0]).toMatchObject({
       id: "space-bunny-free",
@@ -229,8 +229,8 @@ describe("Space Bunny Free (the yes or no of the roles step)", () => {
     });
     expect(parsed["agent-default-model"]).toEqual({ provider: "opencode-zen", model: "space-bunny-free" });
     const names = p.env.map(([name]) => name);
-    expect(p.env).toContainEqual(["KUMO_ZEN_API_KEY", "public"]);
-    expect(names).not.toContain("KUMO_LOCAL_API_KEY");
+    expect(p.env).toContainEqual(["BRUINE_ZEN_API_KEY", "public"]);
+    expect(names).not.toContain("BRUINE_LOCAL_API_KEY");
   });
 
   test("the gateway refuses every key but its public one, so that is the one written", () => {
@@ -262,10 +262,10 @@ describe("Space Bunny Free (the yes or no of the roles step)", () => {
     const p = flow.buildPlan({ dshHome: "/h", bundledSkillsRoot: "/p", bundledSkills: [] });
     const parsed = parseYaml(p.settingsYaml) as Record<string, any>;
     const providers = parsed["llm-pi-ai"].providers as Record<string, any>;
-    expect(providers["opencode-zen"].apiKeyEnv).toBe("KUMO_ZEN_API_KEY");
+    expect(providers["opencode-zen"].apiKeyEnv).toBe("BRUINE_ZEN_API_KEY");
     const local = Object.values(providers).find((prov) => prov.baseURL === server1.baseUrl);
-    expect(local.apiKeyEnv).toBe("KUMO_LOCAL_API_KEY");
-    expect(p.env).toContainEqual(["KUMO_ZEN_API_KEY", "public"]);
-    expect(p.env).toContainEqual(["KUMO_LOCAL_API_KEY", "local"]);
+    expect(local.apiKeyEnv).toBe("BRUINE_LOCAL_API_KEY");
+    expect(p.env).toContainEqual(["BRUINE_ZEN_API_KEY", "public"]);
+    expect(p.env).toContainEqual(["BRUINE_LOCAL_API_KEY", "local"]);
   });
 });

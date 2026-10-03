@@ -33,13 +33,13 @@ import {
   NO_STORE_NOTICE,
   type AttachmentStoreLike,
 } from "../src/image/attach.js";
-import { KumoUi } from "../src/ui/kumo-ui.js";
+import { BruineUi } from "../src/ui/bruine-ui.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
 import { strip } from "./fakes.js";
 
 const savedDshHome = process.env.DSH_HOME;
 beforeAll(() => {
-  process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "kumo-t29-test-"));
+  process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "bruine-t29-test-"));
 });
 afterAll(() => {
   if (savedDshHome === undefined) delete process.env.DSH_HOME;
@@ -167,7 +167,7 @@ describe("readClipboardImage", () => {
 });
 
 describe("readImageFile", () => {
-  const dir = mkdtempSync(join(tmpdir(), "kumo-t29-img-"));
+  const dir = mkdtempSync(join(tmpdir(), "bruine-t29-img-"));
 
   test("a real PNG file is read and named after its leaf", async () => {
     const file = join(dir, "shot.png");
@@ -401,7 +401,7 @@ class FakeTerminal implements Terminal {
 describe("pasting an image into the editor", () => {
   const makeUi = async () => {
     const terminal = new FakeTerminal();
-    const ui = new KumoUi(
+    const ui = new BruineUi(
       "test",
       { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} },
       terminal,
@@ -411,7 +411,7 @@ describe("pasting an image into the editor", () => {
     return { ui, terminal };
   };
   const anImage = async (): Promise<ClipboardRead> => ({ kind: "image", image: pngImage() });
-  const painted = (ui: KumoUi): string => ui.tui.render(80).map(strip).join("\n");
+  const painted = (ui: BruineUi): string => ui.tui.render(80).map(strip).join("\n");
 
   test("a clipboard image becomes a chip plus pending bytes, never base64 in the buffer", async () => {
     const { ui } = await makeUi();
@@ -470,7 +470,7 @@ describe("pasting an image into the editor", () => {
   });
 
   test("a dropped image path becomes the same chip", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "kumo-t29-drop-"));
+    const dir = mkdtempSync(join(tmpdir(), "bruine-t29-drop-"));
     const file = join(dir, "drop.png");
     writeFileSync(file, PNG);
     const { ui } = await makeUi();
@@ -490,7 +490,7 @@ describe("pasting an image into the editor", () => {
   });
 
   test("a dropped path arrives as one bracketed paste and becomes a chip", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "kumo-t29-brack-"));
+    const dir = mkdtempSync(join(tmpdir(), "bruine-t29-brack-"));
     const file = join(dir, "dropped.png");
     writeFileSync(file, PNG);
     const { ui, terminal } = await makeUi();

@@ -1,3 +1,4 @@
+import { appEnv } from "../compat.js";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -15,7 +16,7 @@ import { pathToFileURL } from "node:url";
 export function canLink(): boolean {
   // A link is invisible on a terminal that ignores OSC 8 and a liability on one
   // that mis-parses it, so the ASCII fallback stays plain.
-  return process.env.KUMO_NO_LINKS !== "1";
+  return appEnv("NO_LINKS") !== "1";
 }
 
 /**

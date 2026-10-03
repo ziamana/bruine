@@ -1,17 +1,17 @@
 import type { EditorTheme, MarkdownTheme, SelectListTheme } from "@earendil-works/pi-tui";
 
-import { isAscii, kumoIcons, type KumoIcons } from "../render/chars.js";
+import { isAscii, bruineIcons, type BruineIcons } from "../render/chars.js";
 import { bgEnabled, onBg, paint } from "./palette.js";
 import { highlightCode } from "./highlight.js";
 
 /**
- * Color helpers for the kumo pi-tui theme, backed by the Nuage palette
+ * Color helpers for the bruine pi-tui theme, backed by the Nuage palette
  * (palette.ts): 24-bit when the terminal supports it, the classic 16 ANSI
  * codes otherwise (same codes as before, so basic terminals and tests see no
  * change). No chalk dependency.
  *
  * The three background helpers fall back to plain foreground text when the
- * terminal cannot paint a background (16 colors, NO_COLOR, KUMO_BG=0), so no
+ * terminal cannot paint a background (16 colors, NO_COLOR, BRUINE_BG=0), so no
  * caller has to gate them.
  */
 export const ansi = {
@@ -49,7 +49,7 @@ export const editorTheme: EditorTheme = {
   selectList: selectListTheme,
 };
 
-export const markdownThemeFor = (icons: KumoIcons = kumoIcons()): MarkdownTheme => {
+export const markdownThemeFor = (icons: BruineIcons = bruineIcons()): MarkdownTheme => {
   // One gutter for every code block, on every line of it: the language label
   // when the fence carries one, and the same bare rule when it does not, so a
   // block without a language is not a block of another kind.

@@ -1,6 +1,6 @@
 /**
- * T36 — kumo-bench runner tests. Everything here runs without a model server:
- * the kumo process is `bench/tools/fake-kumo.mjs`, which writes the session log
+ * T36 — bruine-bench runner tests. Everything here runs without a model server:
+ * the bruine process is `bench/tools/fake-bruine.mjs`, which writes the session log
  * dsh would have written and "solves" the task the way the test asks it to.
  */
 import { execFile, spawn } from "node:child_process";
@@ -15,18 +15,18 @@ import { parseOptions, parseRoute, routeSlug, usage } from "../bench/lib/options
 import { buildPlan, listTasks, readTaskPrompt, resolveTasks, taskKind, type Task } from "../bench/lib/tasks.js";
 import { pickRoute, readSettingsRoutes, routeKeyEnv, routeModelName } from "../bench/lib/route.js";
 import { readVariant, variantPersona, variantPatch } from "../bench/lib/variant.js";
-import { benchEnv, benchHomeKumoJson, benchHomeSettings, sessionsRoot, writeBenchHome } from "../bench/lib/home.js";
+import { benchEnv, benchHomeBruineJson, benchHomeSettings, sessionsRoot, writeBenchHome } from "../bench/lib/home.js";
 import { metricsFromRows, readRunMetrics, readSessionRows } from "../bench/lib/session.js";
 import { appendRun, doneKeys, ensureHeader, readHeader, readRuns, resultsPath, type HeaderRow, type RunRow } from "../bench/lib/results.js";
 import { summaryTable, taskTable, variantStats } from "../bench/lib/summary.js";
-import { runCheck, runKumo } from "../bench/lib/exec.js";
+import { runCheck, runBruine } from "../bench/lib/exec.js";
 import { composePersona, isManagedPersonaPatch, modelDisplayName, resolveModelDisplayName } from "../src/profile.js";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const tasksDir = join(root, "bench", "tasks");
 const variantsDir = join(root, "bench", "variants");
-const fakeKumo = join(root, "bench", "tools", "fake-kumo.mjs");
+const fakeBruine = join(root, "bench", "tools", "fake-bruine.mjs");
 /**
  * `--import` takes a specifier, not a path: a bare `D:\...` is read as a URL
  * with the scheme `d:` and node throws ERR_UNSUPPORTED_ESM_URL_SCHEME.
@@ -40,7 +40,7 @@ const SETTINGS = [
   "      displayName: Local Server",
   "      api: openai-completions",
   "      baseURL: http://127.0.0.1:8081/v1",
-  "      apiKeyEnv: KUMO_LOCAL_API_KEY",
+  "      apiKeyEnv: BRUINE_LOCAL_API_KEY",
   "      models:",
   "        - id: /models/ornith-9b-q4.gguf",
   "          name: Ornith 9B",
@@ -55,7 +55,7 @@ async function tempDir(prefix: string): Promise<string> {
   return mkdtemp(join(tmpdir(), prefix));
 }
 
-/** Run the bench CLI end to end with the fake kumo. */
+/** Run the bench CLI end to end with the fake bruine. */
 async function runBench(args: string[], env: Record<string, string> = {}): Promise<{ code: number; out: string }> {
   try {
     const { stdout, stderr } = await execFileAsync(
@@ -78,7 +78,7 @@ async function runBench(args: string[], env: Record<string, string> = {}): Promi
 }
 
 describe("bench options", () => {
-  const ctx = { root, kumo: ["node", "dist/bin.js"], settings: "/home/x/.kumo/settings.yaml" };
+  const ctx = { root, bruine: ["node", "dist/bin.js"], settings: "/home/x/.bruine/settings.yaml" };
 
   test("defaults: dsh variant, three repeats, ten minutes", () => {
     const opts = parseOptions(["--route", "local/ornith"], ctx);
@@ -87,7 +87,7 @@ describe("bench options", () => {
     expect(opts.timeoutMinutes).toBe(10);
     expect(opts.tasks).toEqual([]);
     expect(opts.resume).toBe(false);
-    expect(opts.kumo).toEqual(["node", "dist/bin.js"]);
+    expect(opts.bruine).toEqual(["node", "dist/bin.js"]);
   });
 
   test("--tasks takes a comma list, --repeat and --timeout numbers", () => {
@@ -101,9 +101,9 @@ describe("bench options", () => {
     expect(opts.resume).toBe(true);
   });
 
-  test("--kumo replaces the whole command", () => {
-    const opts = parseOptions(["--route", "local/x", "--kumo", "node", "fake.mjs", "--repeat", "1"], ctx);
-    expect(opts.kumo).toEqual(["node", "fake.mjs"]);
+  test("--bruine replaces the whole command", () => {
+    const opts = parseOptions(["--route", "local/x", "--bruine", "node", "fake.mjs", "--repeat", "1"], ctx);
+    expect(opts.bruine).toEqual(["node", "fake.mjs"]);
   });
 
   test("relative paths resolve against the repo root", () => {
@@ -200,32 +200,32 @@ describe("bench persona (T36: the model display name, not the file path)", () =>
 
   test("the display name is read from settings.yaml, and never throws", () => {
     const read = () => SETTINGS;
-    expect(resolveModelDisplayName("/home/x/.kumo", read)).toBe("Ornith 9B");
-    expect(resolveModelDisplayName("/home/x/.kumo", () => "{{{ not yaml")).toBeUndefined();
+    expect(resolveModelDisplayName("/home/x/.bruine", read)).toBe("Ornith 9B");
+    expect(resolveModelDisplayName("/home/x/.bruine", () => "{{{ not yaml")).toBeUndefined();
   });
 
   test("a patch the user took over is left alone", () => {
-    expect(isManagedPersonaPatch("# kumo user overrides. Edit this file, not cordis.yml.\n[]\n")).toBe(true);
-    expect(isManagedPersonaPatch("# kumo user overrides.\n# system-prompt row written by kumo (T36).\n")).toBe(true);
+    expect(isManagedPersonaPatch("# bruine user overrides. Edit this file, not cordis.yml.\n[]\n")).toBe(true);
+    expect(isManagedPersonaPatch("# bruine user overrides.\n# system-prompt row written by bruine (T36).\n")).toBe(true);
     expect(isManagedPersonaPatch("# mine\n- id: something-else\n")).toBe(false);
   });
 });
 
 describe("bench route", () => {
   test("the route is read out of a real settings.yaml", async () => {
-    const dir = await tempDir("kumo-bench-settings-");
+    const dir = await tempDir("bruine-bench-settings-");
     const path = join(dir, "settings.yaml");
     await writeFile(path, SETTINGS, "utf8");
     const routes = await readSettingsRoutes(path);
     const route = pickRoute(routes, "local", "/models/ornith-9b-q4.gguf");
     expect(routeModelName(route, "/models/ornith-9b-q4.gguf")).toBe("Ornith 9B");
-    expect(routeKeyEnv(route)).toBe("KUMO_LOCAL_API_KEY");
+    expect(routeKeyEnv(route)).toBe("BRUINE_LOCAL_API_KEY");
     expect(route.config["baseURL"]).toBe("http://127.0.0.1:8081/v1");
     await rm(dir, { recursive: true, force: true });
   });
 
   test("an unknown provider names the ones that exist", async () => {
-    const dir = await tempDir("kumo-bench-settings-");
+    const dir = await tempDir("bruine-bench-settings-");
     const path = join(dir, "settings.yaml");
     await writeFile(path, SETTINGS, "utf8");
     const routes = await readSettingsRoutes(path);
@@ -260,7 +260,7 @@ describe("bench variants", () => {
     }
   });
 
-  test("the patch kumo writes carries the composed persona", async () => {
+  test("the patch bruine writes carries the composed persona", async () => {
     const patch = variantPatch(variantPersona(await readVariant(variantsDir, "plan"), "Ornith 9B"));
     expect(patch).toContain("- id: system-prompt");
     expect(patch).toContain("includeHarnessIdentity: false");
@@ -272,7 +272,7 @@ describe("bench variants", () => {
 describe("bench home", () => {
   const route = {
     provider: "local",
-    config: { baseURL: "http://127.0.0.1:8081/v1", apiKeyEnv: "KUMO_LOCAL_API_KEY", models: [] },
+    config: { baseURL: "http://127.0.0.1:8081/v1", apiKeyEnv: "BRUINE_LOCAL_API_KEY", models: [] },
   };
 
   test("the bench home is the route under test, in full access mode", () => {
@@ -281,33 +281,33 @@ describe("bench home", () => {
     expect((settings["llm-pi-ai"] as { providers: Record<string, unknown> }).providers["local"]).toEqual(
       route.config,
     );
-    const kumoJson = benchHomeKumoJson({ route, model: "ornith" });
-    expect(kumoJson["permissionMode"]).toBe("full");
-    expect((kumoJson["search"] as { provider: string }).provider).toBe("none");
+    const bruineJson = benchHomeBruineJson({ route, model: "ornith" });
+    expect(bruineJson["permissionMode"]).toBe("full");
+    expect((bruineJson["search"] as { provider: string }).provider).toBe("none");
   });
 
-  test("the environment is scrubbed: no inherited route, no stray kumo home", () => {
+  test("the environment is scrubbed: no inherited route, no stray bruine home", () => {
     const env = benchEnv(
       { home: "/tmp/bench-home", route, tools: "lean", repoRoot: "/repo" },
       {
         PATH: "/usr/bin",
         OPENAI_API_KEY: "secret",
         DSH_HOME: "/home/x/.dsh",
-        KUMO_HOME: "/home/x/.kumo",
-        KUMO_TOOLS: "full",
+        BRUINE_HOME: "/home/x/.bruine",
+        BRUINE_TOOLS: "full",
       },
     );
     expect(env["PATH"]).toBe("/usr/bin");
     expect(env["OPENAI_API_KEY"]).toBeUndefined();
     expect(env["DSH_HOME"]).toBe("/tmp/bench-home");
-    expect(env["KUMO_HOME"]).toBe("/tmp/bench-home");
-    expect(env["KUMO_TOOLS"]).toBe("lean");
-    expect(env["KUMO_BENCH_TOOLS"]).toBe(join("/repo", "bench", "tools"));
-    expect(env["KUMO_LOCAL_API_KEY"]).toBe("bench");
+    expect(env["BRUINE_HOME"]).toBe("/tmp/bench-home");
+    expect(env["BRUINE_TOOLS"]).toBe("lean");
+    expect(env["BRUINE_BENCH_TOOLS"]).toBe(join("/repo", "bench", "tools"));
+    expect(env["BRUINE_LOCAL_API_KEY"]).toBe("bench");
   });
 
   test("writing the home links the bundles offline and installs the variant persona", async () => {
-    const home = await tempDir("kumo-bench-home-");
+    const home = await tempDir("bruine-bench-home-");
     await writeBenchHome({
       home,
       repoRoot: root,
@@ -320,7 +320,7 @@ describe("bench home", () => {
     const patch = await readFile(join(home, "profiles", "bruine", "cordis.patch.yml"), "utf8");
     expect(patch).toContain("Ornith 9B");
     expect(patch).toContain("Match the existing code style");
-    expect(existsSync(join(home, "profiles", "bruine", "node_modules", "kumo-code", "package.json"))).toBe(true);
+    expect(existsSync(join(home, "profiles", "bruine", "node_modules", "bruine", "package.json"))).toBe(true);
     expect(existsSync(join(home, "profiles", "bruine", "node_modules", "@deepseek-ai", "dsh-base", "package.json"))).toBe(true);
     await rm(home, { recursive: true, force: true });
   });
@@ -349,7 +349,7 @@ describe("bench session metrics", () => {
   });
 
   test("a zstd log is read, a broken line is skipped", async () => {
-    const home = await tempDir("kumo-bench-sessions-");
+    const home = await tempDir("bruine-bench-sessions-");
     const dir = join(home, "sessions", "--bench--", "session-1");
     await mkdir(dir, { recursive: true });
     await writeFile(
@@ -366,7 +366,7 @@ describe("bench session metrics", () => {
   });
 
   test("no session log at all is reported, not scored", async () => {
-    const home = await tempDir("kumo-bench-sessions-");
+    const home = await tempDir("bruine-bench-sessions-");
     const metrics = await readRunMetrics(sessionsRoot(home));
     expect(metrics.toolCalls).toBeNull();
     expect(metrics.unreadable).toContain("no session log");
@@ -383,7 +383,7 @@ describe("bench results", () => {
     repeat: 1,
     timeoutMinutes: 10,
     tools: "lean",
-    kumo: "kumo-code 0.0.1",
+    bruine: "bruine 0.0.1",
     node: "v22.0.0",
     persona: composePersona("Ornith 9B"),
     props: { ok: true, baseUrl: "http://127.0.0.1:8081/v1", model: "ornith", nCtx: 32768, templateHash: "abc123" },
@@ -398,7 +398,7 @@ describe("bench results", () => {
   });
 
   test("runs on another server preset are refused, not appended", async () => {
-    const dir = await tempDir("kumo-bench-results-");
+    const dir = await tempDir("bruine-bench-results-");
     const file = resultsPath(dir, "2026-09-26", "local-ornith", "dsh");
     expect(await ensureHeader(file, header())).toBe("written");
     expect(await ensureHeader(file, header())).toBe("kept");
@@ -408,7 +408,7 @@ describe("bench results", () => {
   });
 
   test("the header records the persona, the /props and the sampler state", async () => {
-    const dir = await tempDir("kumo-bench-results-");
+    const dir = await tempDir("bruine-bench-results-");
     const file = resultsPath(dir, "2026-09-26", "local-ornith", "plan");
     await ensureHeader(
       file,
@@ -426,7 +426,7 @@ describe("bench results", () => {
   });
 
   test("a half-written last line is ignored, so a kill loses nothing else", async () => {
-    const dir = await tempDir("kumo-bench-results-");
+    const dir = await tempDir("bruine-bench-results-");
     const file = resultsPath(dir, "2026-09-26", "local-ornith", "dsh");
     await ensureHeader(file, header());
     await appendRun(file, {
@@ -462,7 +462,7 @@ describe("bench summary", () => {
     repeat: 2,
     timeoutMinutes: 10,
     tools: "lean",
-    kumo: "kumo-code 0.0.1",
+    bruine: "bruine 0.0.1",
     node: "v22",
     persona: composePersona("Ornith 9B"),
     props: { ok: true, nCtx: 32768 },
@@ -533,14 +533,14 @@ describe("bench summary", () => {
 });
 
 describe("bench exec", () => {
-  test("the wall clock stops a kumo that never comes back", async () => {
-    const dir = await tempDir("kumo-bench-exec-");
+  test("the wall clock stops a bruine that never comes back", async () => {
+    const dir = await tempDir("bruine-bench-exec-");
     const log = join(dir, "run.log");
-    const result = await runKumo({
-      command: [process.execPath, fakeKumo],
+    const result = await runBruine({
+      command: [process.execPath, fakeBruine],
       prompt: "do the thing",
       cwd: dir,
-      env: { ...process.env, FAKE_KUMO_HANG: "1" },
+      env: { ...process.env, FAKE_BRUINE_HANG: "1" },
       timeoutMs: 1200,
       logPath: log,
     });
@@ -552,8 +552,8 @@ describe("bench exec", () => {
   });
 
   test("a spawn that does not exist is an error, not a silent pass", async () => {
-    const dir = await tempDir("kumo-bench-exec-");
-    const result = await runKumo({
+    const dir = await tempDir("bruine-bench-exec-");
+    const result = await runBruine({
       command: [join(dir, "no-such-binary")],
       prompt: "x",
       cwd: dir,
@@ -567,16 +567,16 @@ describe("bench exec", () => {
   });
 
   test("check.sh: 0 is a pass, non-zero a failure, 70 'cannot check here'", async () => {
-    const dir = await tempDir("kumo-bench-check-");
+    const dir = await tempDir("bruine-bench-check-");
     const write = async (body: string, name = "check.sh"): Promise<string> => {
       const path = join(dir, name);
       await writeFile(path, body, "utf8");
       return path;
     };
-    await write("#!/usr/bin/env sh\necho kumo-bench-check-mode: node-test\nexit 0\n");
+    await write("#!/usr/bin/env sh\necho bruine-bench-check-mode: node-test\nexit 0\n");
     expect(runCheck(dir).passed).toBe(true);
     expect(runCheck(dir).mode).toBe("node-test");
-    await write("#!/usr/bin/env sh\necho kumo-bench-check-mode: unittest\nexit 1\n");
+    await write("#!/usr/bin/env sh\necho bruine-bench-check-mode: unittest\nexit 1\n");
     expect(runCheck(dir).passed).toBe(false);
     await write("#!/usr/bin/env sh\nexit 70\n");
     const unknown = runCheck(dir);
@@ -586,11 +586,11 @@ describe("bench exec", () => {
   });
 });
 
-describe("bench end to end (fake kumo)", () => {
+describe("bench end to end (fake bruine)", () => {
   test("one task, one repeat: a row is written, the summary prints, --resume skips", async () => {
-    const results = await tempDir("kumo-bench-e2e-results-");
-    const work = await tempDir("kumo-bench-e2e-work-");
-    const home = await tempDir("kumo-bench-e2e-home-");
+    const results = await tempDir("bruine-bench-e2e-results-");
+    const work = await tempDir("bruine-bench-e2e-work-");
+    const home = await tempDir("bruine-bench-e2e-home-");
     const settings = join(home, "settings.yaml");
     await writeFile(settings, SETTINGS, "utf8");
     const task = join(work, "task", "demo");
@@ -602,7 +602,7 @@ describe("bench end to end (fake kumo)", () => {
     );
     await writeFile(
       join(task, "check.sh"),
-      "#!/usr/bin/env sh\nset -eu\necho kumo-bench-check-mode: file-report\n[ \"$(cat solved.txt 2>/dev/null)\" = done ]\n",
+      "#!/usr/bin/env sh\nset -eu\necho bruine-bench-check-mode: file-report\n[ \"$(cat solved.txt 2>/dev/null)\" = done ]\n",
       "utf8",
     );
 
@@ -621,11 +621,11 @@ describe("bench end to end (fake kumo)", () => {
       results,
       "--work-dir",
       join(work, "run"),
-      "--kumo",
+      "--bruine",
       process.execPath,
-      fakeKumo,
+      fakeBruine,
     ];
-    const first = await runBench([...args], { FAKE_KUMO_SOLVE: "solved.txt", FAKE_KUMO_CONTENT: "done" });
+    const first = await runBench([...args], { FAKE_BRUINE_SOLVE: "solved.txt", FAKE_BRUINE_CONTENT: "done" });
     expect(first.out, first.out).toContain("PASS");
     expect(first.out).toContain("verify");
 
@@ -637,18 +637,18 @@ describe("bench end to end (fake kumo)", () => {
     expect(runs[0]?.outputTokens).toBe(1234);
     expect(runs[0]?.toolCalls).toBe(3);
     expect(runs[0]?.checkMode).toBe("file-report");
-    expect(runs[0]?.wallSec).toBeGreaterThanOrEqual(0); // the fake kumo is instant
+    expect(runs[0]?.wallSec).toBeGreaterThanOrEqual(0); // the fake bruine is instant
     const head = await readHeader(file);
     expect(head?.props.ok).toBe(false); // no server answered /props here
     expect(head?.variantNote).toBe("run the project's tests before saying done");
     expect(head?.persona.personaSuffix).toContain("run the project's tests");
 
     // A second invocation without --resume runs again; with it, nothing is left.
-    const again = await runBench([...args], { FAKE_KUMO_SOLVE: "solved.txt", FAKE_KUMO_CONTENT: "done" });
+    const again = await runBench([...args], { FAKE_BRUINE_SOLVE: "solved.txt", FAKE_BRUINE_CONTENT: "done" });
     expect(again.out).toContain("PASS");
     expect((await readRuns(file)).length).toBe(2);
 
-    const resumed = await runBench([...args, "--resume"], { FAKE_KUMO_SOLVE: "solved.txt", FAKE_KUMO_CONTENT: "done" });
+    const resumed = await runBench([...args, "--resume"], { FAKE_BRUINE_SOLVE: "solved.txt", FAKE_BRUINE_CONTENT: "done" });
     expect(resumed.out).toContain("nothing to do");
     expect((await readRuns(file)).length).toBe(2);
 
@@ -663,9 +663,9 @@ describe("bench end to end (fake kumo)", () => {
     // past vitest's 5s default on a Windows runner.
   }, 60_000);
 
-  test("a kumo that fails is recorded as a failure, with its own words", async () => {
-    const results = await tempDir("kumo-bench-e2e-results-");
-    const home = await tempDir("kumo-bench-e2e-home-");
+  test("a bruine that fails is recorded as a failure, with its own words", async () => {
+    const results = await tempDir("bruine-bench-e2e-results-");
+    const home = await tempDir("bruine-bench-e2e-home-");
     const settings = join(home, "settings.yaml");
     await writeFile(settings, SETTINGS, "utf8");
     const task = join(results, "task");
@@ -687,11 +687,11 @@ describe("bench end to end (fake kumo)", () => {
         results,
         "--work-dir",
         join(results, "run"),
-        "--kumo",
+        "--bruine",
         process.execPath,
-        fakeKumo,
+        fakeBruine,
       ],
-      { FAKE_KUMO_ERROR: "1" },
+      { FAKE_BRUINE_ERROR: "1" },
     );
     expect(out.out).toContain("fail");
     const file = resultsPath(results, new Date().toISOString().slice(0, 10), "local-ornith-9b-q4.gguf", "dsh");
@@ -705,8 +705,8 @@ describe("bench end to end (fake kumo)", () => {
   // handler, so the interruption cannot be simulated here; a real Ctrl+C in a
   // Windows console still reaches node's SIGINT handler.
   test.skipIf(process.platform === "win32")("an interrupted run is recorded as nothing, so --resume redoes it", async () => {
-    const results = await tempDir("kumo-bench-int-results-");
-    const home = await tempDir("kumo-bench-int-home-");
+    const results = await tempDir("bruine-bench-int-results-");
+    const home = await tempDir("bruine-bench-int-home-");
     const settings = join(home, "settings.yaml");
     await writeFile(settings, SETTINGS, "utf8");
     const task = join(results, "task");
@@ -721,17 +721,17 @@ describe("bench end to end (fake kumo)", () => {
       "--timeout", "5",
       "--results-dir", results,
       "--work-dir", join(results, "run"),
-      "--kumo", process.execPath, fakeKumo,
+      "--bruine", process.execPath, fakeBruine,
     ];
     const child = spawn(
       process.execPath,
       ["--experimental-strip-types", "--import", tsHooks, join(root, "bench", "run.ts"), ...args],
-      { cwd: root, env: { ...process.env, FAKE_KUMO_HANG: "1" } },
+      { cwd: root, env: { ...process.env, FAKE_BRUINE_HANG: "1" } },
     );
     let out = "";
     child.stdout.on("data", (d) => { out += String(d); });
     child.stderr.on("data", (d) => { out += String(d); });
-    // Interrupt while the fake kumo is still working.
+    // Interrupt while the fake bruine is still working.
     await new Promise((r) => setTimeout(r, 1500));
     child.kill("SIGINT");
     const code = await new Promise((r) => child.on("close", (c) => r(c)));
@@ -744,7 +744,7 @@ describe("bench end to end (fake kumo)", () => {
   });
 
   test("an unknown route stops before anything runs", async () => {
-    const home = await tempDir("kumo-bench-e2e-home-");
+    const home = await tempDir("bruine-bench-e2e-home-");
     const settings = join(home, "settings.yaml");
     await writeFile(settings, SETTINGS, "utf8");
     const out = await runBench([

@@ -208,12 +208,12 @@ describe("Repl", () => {
 });
 
 describe("slash palette source of truth (T31.1)", () => {
-  test("kumo commands: 16 items incl. new/compact/config/tasks/reload/mouse/help/exit", async () => {
-    const { KUMO_COMMANDS, mergeCommands } = await import("../src/plugins/repl.js");
+  test("bruine commands: 16 items incl. new/compact/config/tasks/reload/mouse/help/exit", async () => {
+    const { BRUINE_COMMANDS, mergeCommands } = await import("../src/plugins/repl.js");
     // T56 added /mouse: taking the mouse costs the wheel, so the choice has to
     // be reachable without restarting.
-    expect(KUMO_COMMANDS).toHaveLength(16);
-    const names = KUMO_COMMANDS.map((c) => c.name);
+    expect(BRUINE_COMMANDS).toHaveLength(16);
+    const names = BRUINE_COMMANDS.map((c) => c.name);
     for (const n of ["/new", "/compact", "/plan", "/permissions", "/auto", "/ask", "/full", "/skills", "/config", "/tasks", "/reload", "/mouse", "/help", "/exit"]) {
       expect(names).toContain(n);
     }
@@ -248,7 +248,7 @@ describe("a plugin that already said it is not echoed again", () => {
     const notices: string[] = [];
     const holder = { current: { provider: "local", model: "m1", reasoningEffort: "low" as string | undefined } };
     const effort = new Effort();
-    const home = await mkdtemp(join(tmpdir(), "kumo-effort-doubled-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-effort-doubled-"));
     const saved = process.env.DSH_HOME;
     process.env.DSH_HOME = home;
     try {

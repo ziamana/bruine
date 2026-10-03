@@ -20,7 +20,7 @@ import {
   type CopyOutcome,
 } from "../src/ui/clipboard-write.js";
 import { ToastHost } from "../src/ui/toast.js";
-import { KumoUi } from "../src/ui/kumo-ui.js";
+import { BruineUi } from "../src/ui/bruine-ui.js";
 import { MOUSE_OFF_NOTICE, MOUSE_ON_NOTICE, MouseFeature, mouseTrace, mouseSelectionAllowed } from "../src/ui/mouse.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
 import type { Terminal } from "@earendil-works/pi-tui";
@@ -65,7 +65,7 @@ class FakeTerminal implements Terminal {
 function makeUi(handlers: Record<string, unknown> = {}) {
   const terminal = new FakeTerminal();
   const copied: string[] = [];
-  const ui = new KumoUi(
+  const ui = new BruineUi(
     "test",
     {
       onSubmit: () => {},
@@ -90,7 +90,7 @@ function makeUi(handlers: Record<string, unknown> = {}) {
  * frame never contains it. The public seam is showOverlay: spy on it, keep the
  * real call, and read what was handed over.
  */
-function notices(ui: KumoUi): () => string[] {
+function notices(ui: BruineUi): () => string[] {
   const seen: string[] = [];
   const spy = vi.spyOn(ui.tui, "showOverlay");
   spy.mockImplementation((component, options) => {
@@ -100,10 +100,10 @@ function notices(ui: KumoUi): () => string[] {
   return () => seen;
 }
 
-const painted = (ui: KumoUi): string => ui.tui.render(60).map(strip).join("\n");
+const painted = (ui: BruineUi): string => ui.tui.render(60).map(strip).join("\n");
 
 /** Where a word sits on screen: the row a mouse report has to name. */
-function cellOf(ui: KumoUi, needle: string): { row: number; col: number } {
+function cellOf(ui: BruineUi, needle: string): { row: number; col: number } {
   const lines = ui.tui.render(ui.terminal.columns);
   const top = viewportTop(lines.length, ui.terminal.rows);
   const index = lines.findIndex((line) => strip(line).includes(needle));
@@ -186,7 +186,7 @@ describe("mouse reports (T56)", () => {
   });
 
   test("the trace records what the terminal sent, and only when asked", () => {
-    const file = join(mkdtempSync(join(tmpdir(), "kumo-mouse-")), "mouse.log");
+    const file = join(mkdtempSync(join(tmpdir(), "bruine-mouse-")), "mouse.log");
     mouseTrace(undefined, press(1, 1));
     expect(existsSync(file)).toBe(false);
     mouseTrace(file, press(1, 1));
@@ -204,7 +204,7 @@ describe("mouse reports (T56)", () => {
 
 describe("the gesture (T56)", () => {
   test("a click without movement selects nothing", () => {
-    // The case that matters: without this, every click in kumo copies a cell and
+    // The case that matters: without this, every click in bruine copies a cell and
     // fires a notice.
     const sel = new TextSelection();
     sel.press(3, 3);
@@ -275,7 +275,7 @@ describe("the visible frame (T56)", () => {
   });
 
   test("a colour reset inside the selection cannot switch the paint off", () => {
-    // \x1b[39m ends the colour, and it also ends reverse video. kumo paints tool
+    // \x1b[39m ends the colour, and it also ends reverse video. bruine paints tool
     // lines with palette codes, so a selection faded out halfway through one.
     const line = `\x1b[36mab\x1b[39mcd`;
     const [painted] = highlightSelection([line], 0, { startRow: 0, endRow: 0, startCol: 0, endCol: 4 });
@@ -503,9 +503,9 @@ describe("selecting in the shell (T56)", () => {
     await ui.shutdown();
   });
 
-  test("KUMO_MOUSE_SELECT=0 never takes the mouse", async () => {
-    const saved = process.env["KUMO_MOUSE_SELECT"];
-    process.env["KUMO_MOUSE_SELECT"] = "0";
+  test("BRUINE_MOUSE_SELECT=0 never takes the mouse", async () => {
+    const saved = process.env["BRUINE_MOUSE_SELECT"];
+    process.env["BRUINE_MOUSE_SELECT"] = "0";
     try {
       const { ui, terminal, copied } = makeUi();
       ui.addChat({ render: () => ["alpha bravo"], invalidate: () => {} });
@@ -519,8 +519,8 @@ describe("selecting in the shell (T56)", () => {
       expect(copied).toEqual([]);
       await ui.shutdown();
     } finally {
-      if (saved === undefined) delete process.env["KUMO_MOUSE_SELECT"];
-      else process.env["KUMO_MOUSE_SELECT"] = saved;
+      if (saved === undefined) delete process.env["BRUINE_MOUSE_SELECT"];
+      else process.env["BRUINE_MOUSE_SELECT"] = saved;
     }
   });
 
@@ -588,7 +588,7 @@ describe("selecting in the shell (T56)", () => {
     await ui.shutdown();
   });
 
-  test("the wheel scrolls kumo's own window, and only the shell's absence is explained", async () => {
+  test("the wheel scrolls bruine's own window, and only the shell's absence is explained", async () => {
     // The notice used to be all there was: a wheel that did nothing, once. The
     // shell owns a transcript window now, so the wheel scrolls it and the input
     // bar stays on the last row. A feature wired without a window still has to say
@@ -598,7 +598,7 @@ describe("selecting in the shell (T56)", () => {
       ui.addChat({ render: () => [line], invalidate: () => {} });
     }
     ui.start();
-    // One frame first: the window is fed by the frames kumo has painted, and a
+    // One frame first: the window is fed by the frames bruine has painted, and a
     // session that has painted nothing has no history to scroll.
     painted(ui);
     terminal.onInput?.("\x1b[<64;10;5M");

@@ -1,5 +1,5 @@
 /**
- * T36 — what one kumo run cost, read from dsh's own session log.
+ * T36 — what one bruine run cost, read from dsh's own session log.
  *
  * The log is the only honest source: it carries the provider's usage numbers
  * and every `tool/call`, in the order they happened. dsh writes it zstd
@@ -140,7 +140,7 @@ export async function readSessionRows(path: string): Promise<{ rows: Row[]; unre
 export async function readRunMetrics(sessionsRoot: string): Promise<RunMetrics> {
   const logs = await findSessionLogs(sessionsRoot);
   if (logs.length === 0) {
-    return { ...EMPTY, unreadable: "no session log (kumo never booted, or the log is elsewhere)" };
+    return { ...EMPTY, unreadable: "no session log (bruine never booted, or the log is elsewhere)" };
   }
   const rows: Row[] = [];
   const unreadable: string[] = [];
@@ -156,7 +156,7 @@ export async function readRunMetrics(sessionsRoot: string): Promise<RunMetrics> 
   return metrics;
 }
 
-/** True when the sessions root exists at all (kumo booted far enough). */
+/** True when the sessions root exists at all (bruine booted far enough). */
 export async function hasSessions(sessionsRoot: string): Promise<boolean> {
   try {
     return (await stat(sessionsRoot)).isDirectory();

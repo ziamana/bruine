@@ -1,6 +1,6 @@
 /**
- * T35 E2E — `kumo setup` in a real pty (isolated KUMO_HOME temp dir, never
- * the real ~/.kumo):
+ * T35 E2E — `bruine setup` in a real pty (isolated BRUINE_HOME temp dir, never
+ * the real ~/.bruine):
  * - existing install → change-one-thing menu → Theme → light → Save changes and exit
  *   → only `theme` changed.
  * - first install → `s` on Web search, Skills, Theme, Telemetry → saved with
@@ -33,7 +33,7 @@ function aronSettings(baseUrl: string): string {
     "      displayName: Ornith 1.5 9B (home server)",
     "      api: openai-completions",
     `      baseURL: ${baseUrl}`,
-    "      apiKeyEnv: KUMO_LOCAL_API_KEY",
+    "      apiKeyEnv: BRUINE_LOCAL_API_KEY",
     "      models:",
     "        - id: /etc/ajean/models/Ornith-1.5-9B-Q4_K_M.gguf",
     "          name: Ornith 1.5 9B",
@@ -53,7 +53,7 @@ function aronSettings(baseUrl: string): string {
   ].join("\n");
 }
 
-/** A minimal `kumo setup` pty over an isolated home. */
+/** A minimal `bruine setup` pty over an isolated home. */
 class SetupPty {
   readonly term = new Terminal({ cols: 100, rows: 30, allowProposedApi: true, scrollback: 1000 });
   private pending = Promise.resolve();
@@ -64,13 +64,13 @@ class SetupPty {
     const h = new SetupPty(home);
     const env: Record<string, string> = {};
     for (const [k, v] of Object.entries(process.env)) {
-      if (v !== undefined && !/(API_KEY|TOKEN|SECRET|^DSH_|^KUMO_)/i.test(k)) env[k] = v;
+      if (v !== undefined && !/(API_KEY|TOKEN|SECRET|^DSH_|^BRUINE_)/i.test(k)) env[k] = v;
     }
     Object.assign(env, {
-      KUMO_HOME: home,
+      BRUINE_HOME: home,
       DSH_HOME: home,
       DSH_TELEMETRY_DISABLED: "1",
-      KUMO_NO_UPDATE_CHECK: "1",
+      BRUINE_NO_UPDATE_CHECK: "1",
       TERM: "xterm-256color",
       LANG: "en_US.UTF-8",
       LC_ALL: "en_US.UTF-8",
@@ -190,18 +190,18 @@ class SetupPty {
 
 test("T35: existing install → menu → Theme → light → Save and exit (only theme changed)", async () => {
   const server = await startServer([]);
-  const home = await mkdtemp(join(tmpdir(), "kumo-t35-home-"));
+  const home = await mkdtemp(join(tmpdir(), "bruine-t35-home-"));
   await writeFile(join(home, "settings.yaml"), aronSettings(`${server.url}/v1`));
   const before = parseYaml(await readFile(join(home, "settings.yaml"), "utf8")) as Record<string, any>;
   const h = await SetupPty.start(home);
   try {
     // Returning users see the branded welcome before their settings menu.
     await h.waitMenu("the change-one-thing menu");
-    expect(h.text()).toContain("Kumo setup");
+    expect(h.text()).toContain("Bruine setup");
     expect(h.text()).toContain("Choose a setting to edit.");
     expect(h.text()).toContain("↑/↓ move");
     expect(h.text()).toContain("Ornith 1.5 9B · 127.0.0.1");
-    expect(h.text()).not.toContain("Welcome to Kumo");
+    expect(h.text()).not.toContain("Welcome to Bruine");
     await h.dump("t35-menu");
 
     // Theme is the 5th line: Models, Default mode, Web search, Skills, Theme.
@@ -226,7 +226,7 @@ test("T35: existing install → menu → Theme → light → Save and exit (only
     await h.pressN("down", 6);
     expect(await h.selectedLine()).toContain("Save changes and exit");
     h.press("enter");
-    await h.waitFor("kumo: configuration saved.");
+    await h.waitFor("bruine: configuration saved.");
 
     const after = parseYaml(await readFile(join(home, "settings.yaml"), "utf8")) as Record<string, any>;
     // settings.yaml: the route is byte-for-byte the same meaning.
@@ -236,17 +236,17 @@ test("T35: existing install → menu → Theme → light → Save and exit (only
     expect(after["ui-theme"]).toEqual({ preference: "light" });
     expect(before["ui-theme"]).toBeUndefined();
 
-    const kumo = JSON.parse(await readFile(join(home, "bruine.json"), "utf8")) as Record<string, any>;
-    expect(kumo.theme).toBe("light");
-    expect((kumo.models as any).main).toMatchObject({
+    const bruine = JSON.parse(await readFile(join(home, "bruine.json"), "utf8")) as Record<string, any>;
+    expect(bruine.theme).toBe("light");
+    expect((bruine.models as any).main).toMatchObject({
       provider: "local",
       model: "/etc/ajean/models/Ornith-1.5-9B-Q4_K_M.gguf",
       contextWindow: 100096,
     });
     // Untouched answers keep their defaults, not invented values.
-    expect(kumo.search).toEqual({ provider: "none" });
-    expect(kumo.skills).toEqual([]);
-    expect(kumo.telemetry).toBe(false);
+    expect(bruine.search).toEqual({ provider: "none" });
+    expect(bruine.skills).toEqual([]);
+    expect(bruine.telemetry).toBe(false);
   } finally {
     await h.dump("t35-menu-failure");
     await h.close();
@@ -255,7 +255,7 @@ test("T35: existing install → menu → Theme → light → Save and exit (only
 });
 
 test("existing setup menu explains navigation and keeps exit without saving visible", async () => {
-  const home = await mkdtemp(join(tmpdir(), "kumo-setup-menu-"));
+  const home = await mkdtemp(join(tmpdir(), "bruine-setup-menu-"));
   const settings = [
     "agent-default-model:",
     "  provider: deepseek-official",
@@ -311,7 +311,7 @@ test("existing setup menu explains navigation and keeps exit without saving visi
 
 test("T35: first install → s on Web search, Skills, Theme, Telemetry → defaults saved", async () => {
   const server = await startServer([]);
-  const home = await mkdtemp(join(tmpdir(), "kumo-t35-home-"));
+  const home = await mkdtemp(join(tmpdir(), "bruine-t35-home-"));
   const h = await SetupPty.start(home);
   try {
     await h.waitFor("Choose your setup");
@@ -381,14 +381,14 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
     expect(h.text()).toMatch(/Theme\s+dark/);
     expect(h.text()).toMatch(/Telemetry\s+no/);
     h.press("enter");
-    await h.waitFor("kumo: configuration saved.");
+    await h.waitFor("bruine: configuration saved.");
 
-    const kumo = JSON.parse(await readFile(join(home, "bruine.json"), "utf8")) as Record<string, any>;
-    expect(kumo.search).toEqual({ provider: "none" });
-    expect(kumo.skills).toEqual([]);
-    expect(kumo.theme).toBe("dark");
-    expect(kumo.telemetry).toBe(false);
-    expect(kumo.permissionMode).toBe("auto");
+    const bruine = JSON.parse(await readFile(join(home, "bruine.json"), "utf8")) as Record<string, any>;
+    expect(bruine.search).toEqual({ provider: "none" });
+    expect(bruine.skills).toEqual([]);
+    expect(bruine.theme).toBe("dark");
+    expect(bruine.telemetry).toBe(false);
+    expect(bruine.permissionMode).toBe("auto");
     const settings = parseYaml(await readFile(join(home, "settings.yaml"), "utf8")) as Record<string, any>;
     expect(settings["agent-default-model"]).toEqual({ provider: "local", model: "e2e-model" });
     expect(settings["llm-pi-ai"].providers.local.models[0]).toMatchObject({
@@ -404,7 +404,7 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
 
 test("first install → Yes to Space Bunny Free → its own route and key, nothing asked about a key", async () => {
   const server = await startServer([]);
-  const home = await mkdtemp(join(tmpdir(), "kumo-t35-zen-"));
+  const home = await mkdtemp(join(tmpdir(), "bruine-t35-zen-"));
   const h = await SetupPty.start(home);
   try {
     await h.waitFor("Choose your setup");
@@ -449,17 +449,17 @@ test("first install → Yes to Space Bunny Free → its own route and key, nothi
     h.type("s");
     await h.until(() => h.text().includes("Summary"), 20_000, "summary step");
     h.press("enter");
-    await h.waitFor("kumo: configuration saved.");
+    await h.waitFor("bruine: configuration saved.");
     const settings = parseYaml(await readFile(join(home, "settings.yaml"), "utf8")) as Record<string, any>;
     expect(settings["agent-default-model"]).toEqual({ provider: "opencode-zen", model: "space-bunny-free" });
     expect(settings["llm-pi-ai"].providers["opencode-zen"]).toMatchObject({
       baseURL: "https://opencode.ai/zen/v1",
-      apiKeyEnv: "KUMO_ZEN_API_KEY",
+      apiKeyEnv: "BRUINE_ZEN_API_KEY",
     });
     const env = await readFile(join(home, ".env"), "utf8");
-    expect(env).toContain("KUMO_ZEN_API_KEY=public");
-    const kumo = JSON.parse(await readFile(join(home, "bruine.json"), "utf8")) as Record<string, any>;
-    expect(kumo.models.main).toMatchObject({ provider: "opencode-zen", model: "space-bunny-free", contextWindow: 1_000_000 });
+    expect(env).toContain("BRUINE_ZEN_API_KEY=public");
+    const bruine = JSON.parse(await readFile(join(home, "bruine.json"), "utf8")) as Record<string, any>;
+    expect(bruine.models.main).toMatchObject({ provider: "opencode-zen", model: "space-bunny-free", contextWindow: 1_000_000 });
   } finally {
     await h.dump("t35-zen-failure");
     await h.close();
@@ -468,7 +468,7 @@ test("first install → Yes to Space Bunny Free → its own route and key, nothi
 });
 
 test("first install with a cloud model: no Skip trap on the main model, and the keys step goes straight to the key", async () => {
-  const home = await mkdtemp(join(tmpdir(), "kumo-t35-cloud-"));
+  const home = await mkdtemp(join(tmpdir(), "bruine-t35-cloud-"));
   const h = await SetupPty.start(home);
   try {
     await h.waitFor("Choose your setup");
@@ -515,7 +515,7 @@ test("first install with a cloud model: no Skip trap on the main model, and the 
 });
 
 test("first install → Groq from the catalog → model, key, saved as a catalog route", async () => {
-  const home = await mkdtemp(join(tmpdir(), "kumo-t35-groq-"));
+  const home = await mkdtemp(join(tmpdir(), "bruine-t35-groq-"));
   const h = await SetupPty.start(home);
   try {
     await h.waitFor("Choose your setup");
@@ -558,7 +558,7 @@ test("first install → Groq from the catalog → model, key, saved as a catalog
     await h.until(() => h.text().includes("Summary"), 20_000, "summary step");
     expect(h.text()).toMatch(/Main\s+groq/);
     h.press("enter");
-    await h.waitFor("kumo: configuration saved.");
+    await h.waitFor("bruine: configuration saved.");
     const settings = parseYaml(await readFile(join(home, "settings.yaml"), "utf8")) as Record<string, any>;
     expect(settings["agent-default-model"].provider).toBe("groq");
     expect(settings["llm-pi-ai"].providers.groq).toEqual({ apiKeyEnv: "GROQ_API_KEY" });
@@ -570,7 +570,7 @@ test("first install → Groq from the catalog → model, key, saved as a catalog
 });
 
 test("fresh setup offers Set up later and exits without writing configuration", async () => {
-  const home = await mkdtemp(join(tmpdir(), "kumo-setup-later-"));
+  const home = await mkdtemp(join(tmpdir(), "bruine-setup-later-"));
   const h = await SetupPty.start(home);
   try {
     await h.waitFor("Choose your setup");
@@ -589,7 +589,7 @@ test("fresh setup offers Set up later and exits without writing configuration", 
 
 
 test("setup cards keep Mode, Search and the three Telemetry choices independently editable", async () => {
-  const home = await mkdtemp(join(tmpdir(), "kumo-setup-cards-"));
+  const home = await mkdtemp(join(tmpdir(), "bruine-setup-cards-"));
   await writeFile(join(home, "settings.yaml"), "agent-default-model:\n  provider: deepseek-official\n  model: deepseek-chat\n");
   const h = await SetupPty.start(home);
   try {
@@ -615,7 +615,7 @@ test("setup cards keep Mode, Search and the three Telemetry choices independentl
     await h.pressN("down", 1); h.press("enter"); // No suggestions
     await h.waitMenu();
     await h.pressN("down", 6); h.press("enter");
-    await h.waitFor("kumo: configuration saved.");
+    await h.waitFor("bruine: configuration saved.");
     const doc = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
     expect(doc.permissionMode).toBe("ask");
     expect(doc.search).toEqual({ provider: "none" });

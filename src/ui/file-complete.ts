@@ -1,7 +1,7 @@
 /**
  * "@" file completion. pi-tui's CombinedAutocompleteProvider finds files with the `fd`
  * binary and returns nothing without it, which is most Windows and macOS machines.
- * kumo passes fd when it is installed (fast, respects .gitignore) and otherwise swaps in
+ * bruine passes fd when it is installed (fast, respects .gitignore) and otherwise swaps in
  * a small Node walker with the same suggestion shape.
  */
 import { CombinedAutocompleteProvider, type SlashCommand } from "@earendil-works/pi-tui";
@@ -84,7 +84,7 @@ export function createAutocomplete(commands: SlashCommand[], basePath: string, f
   };
   const originalSuggestions = provider.getSuggestions.bind(provider);
   const originalFileTrigger = provider.shouldTriggerFileCompletion.bind(provider);
-  // pi-tui matches argument commands without their leading slash, while kumo
+  // pi-tui matches argument commands without their leading slash, while bruine
   // stores slash-prefixed names. Handle those arguments before file fallback.
   provider.getSuggestions = async (lines, cursorLine, cursorCol, options) => {
     const argument = argumentCommand(lines, cursorLine, cursorCol);

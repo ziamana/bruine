@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * T36 — kumo-bench: measure agent quality before touching the system prompt.
+ * T36 — bruine-bench: measure agent quality before touching the system prompt.
  *
- * Each run: a task repo is copied to a scratch dir, kumo is launched headless
- * against a disposable KUMO_HOME holding the route under test, the wall clock
+ * Each run: a task repo is copied to a scratch dir, bruine is launched headless
+ * against a disposable BRUINE_HOME holding the route under test, the wall clock
  * is capped, and the task's `check.sh` decides pass/fail. Every run appends one
  * JSONL row; the summary prints pass rate, median time and tokens per variant.
  *
@@ -23,7 +23,7 @@ import { pickRoute, readSettingsRoutes, routeKeyEnv, routeModelName, serverProps
 import { readVariant, variantPersona } from "./lib/variant.js";
 import { benchEnv, sessionsRoot, stageTask, writeBenchHome } from "./lib/home.js";
 import { readRunMetrics } from "./lib/session.js";
-import { logErrors, runCheck, runKumo } from "./lib/exec.js";
+import { logErrors, runCheck, runBruine } from "./lib/exec.js";
 import { appendRun, doneKeys, ensureHeader, readRuns, resultsPath, type HeaderRow, type RunRow } from "./lib/results.js";
 import { collectStats, summaryTable, variantStats } from "./lib/summary.js";
 
@@ -32,13 +32,13 @@ const pkg = require("../package.json") as { name: string; version: string };
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** `~/.kumo/settings.yaml`, the file a real kumo install writes. */
+/** `~/.bruine/settings.yaml`, the file a real bruine install writes. */
 function defaultSettingsPath(): string {
   const home = appHome();
   return join(home, "settings.yaml");
 }
 
-/** API key values for the route, from the user's own kumo home `.env`. */
+/** API key values for the route, from the user's own bruine home `.env`. */
 async function routeSecrets(settingsPath: string, envName: string | undefined): Promise<Record<string, string>> {
   if (envName === undefined) return {};
   const envPath = join(dirname(settingsPath), ".env");
@@ -60,21 +60,21 @@ function say(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
-/** The tool catalog every run uses (lean = the default kumo catalog). */
+/** The tool catalog every run uses (lean = the default bruine catalog). */
 const BENCH_TOOLS = "lean" as const;
 
-/** One row per run, from what the kumo run and the check produced. */
+/** One row per run, from what the bruine run and the check produced. */
 function rowFor(
   plan: PlannedRun,
   wallSec: number,
   timedOut: boolean,
   metrics: Awaited<ReturnType<typeof readRunMetrics>>,
   check: ReturnType<typeof runCheck>,
-  kumoErrors: string[],
+  bruineErrors: string[],
 ): RunRow {
   const errors = [
     ...new Set([
-      ...kumoErrors,
+      ...bruineErrors,
       ...metrics.errors,
       ...(check.passed === false && check.detail !== "" ? [`check: ${check.detail}`] : []),
     ]),
@@ -83,11 +83,11 @@ function rowFor(
     ...(metrics.unreadable === undefined ? [] : [metrics.unreadable]),
     ...(check.passed === null ? [`check could not run on this machine (exit ${String(check.exitCode)})`] : []),
   ];
-  // A run where kumo itself failed before the model did anything (bad model id,
+  // A run where bruine itself failed before the model did anything (bad model id,
   // server down, auth) is broken infrastructure, not a model failure: counting it
   // as "fail" would corrupt the pass rate of a whole overnight run.
   const infraBroken =
-    check.passed !== true && kumoErrors.length > 0 && (metrics.outputTokens ?? 0) === 0 && (metrics.toolCalls ?? 0) === 0;
+    check.passed !== true && bruineErrors.length > 0 && (metrics.outputTokens ?? 0) === 0 && (metrics.toolCalls ?? 0) === 0;
   const status = timedOut
     ? "timeout"
     : infraBroken
@@ -119,7 +119,7 @@ function rowFor(
 async function main(): Promise<number> {
   const opts = parseOptions(process.argv.slice(2), {
     root: repoRoot,
-    kumo: [process.execPath, join(repoRoot, "dist", "bin.js")],
+    bruine: [process.execPath, join(repoRoot, "dist", "bin.js")],
     settings: defaultSettingsPath(),
   });
   if (opts.help || process.argv.length <= 2) {
@@ -127,7 +127,7 @@ async function main(): Promise<number> {
     return opts.help ? 0 : 2;
   }
   if (opts.route.trim() === "") {
-    say("kumo-bench: --route <provider/model> is required (try --help).");
+    say("bruine-bench: --route <provider/model> is required (try --help).");
     return 2;
   }
 
@@ -158,7 +158,7 @@ async function main(): Promise<number> {
     repeat: opts.repeat,
     timeoutMinutes: opts.timeoutMinutes,
     tools: BENCH_TOOLS,
-    kumo: `${pkg.name} ${pkg.version}`,
+    bruine: `${pkg.name} ${pkg.version}`,
     node: process.version,
     persona,
     props,
@@ -171,7 +171,7 @@ async function main(): Promise<number> {
   };
   await ensureHeader(file, header);
 
-  say(`kumo-bench: route ${opts.route} · variant ${variant.name} · ${String(plan.length)} run(s) · ${opts.repeat} repeat(s) · ${String(opts.timeoutMinutes)} min limit`);
+  say(`bruine-bench: route ${opts.route} · variant ${variant.name} · ${String(plan.length)} run(s) · ${opts.repeat} repeat(s) · ${String(opts.timeoutMinutes)} min limit`);
   say(`  model: ${modelName}`);
   say(`  server: ${props.ok ? `n_ctx ${String(props.nCtx ?? "?")}${props.templateHash === undefined ? "" : ` · template ${props.templateHash}`}` : "no /props (preset unrecorded)"}`);
   say(`  results: ${file}`);
@@ -183,7 +183,7 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  const workRoot = opts.workDir === "" ? await mkdtemp(join(tmpdir(), "kumo-bench-")) : opts.workDir;
+  const workRoot = opts.workDir === "" ? await mkdtemp(join(tmpdir(), "bruine-bench-")) : opts.workDir;
   await mkdir(workRoot, { recursive: true });
   const keepWork = opts.workDir !== "";
   say(`  work: ${workRoot}`);
@@ -207,15 +207,15 @@ async function main(): Promise<number> {
     const benchEnvironment = benchEnv({ home, route, tools: BENCH_TOOLS, repoRoot, fakeHome, env: secrets });
     const logPath = join(workRoot, "logs", `${slot}.log`);
     await mkdir(dirname(logPath), { recursive: true });
-    const kumoRun = await runKumo({
-      command: opts.kumo,
+    const bruineRun = await runBruine({
+      command: opts.bruine,
       prompt: await readTaskPrompt(run.task),
       cwd: taskDir,
       env: benchEnvironment,
       timeoutMs: opts.timeoutMinutes * 60_000,
       logPath,
     });
-    if (kumoRun.interrupted) {
+    if (bruineRun.interrupted) {
       // No row: an interrupted run has no verdict, and `--resume` must redo it.
       say(`  ${slot.padEnd(28)} interrupted — not recorded; rerun with --resume`);
       stopped = true;
@@ -223,8 +223,8 @@ async function main(): Promise<number> {
     }
     const metrics = await readRunMetrics(sessionsRoot(home));
     const check = runCheck(taskDir, { env: benchEnvironment });
-    const kumoErrors = kumoRun.errors.length > 0 ? kumoRun.errors : await logErrors(`${logPath}.err`, 3);
-    const row = rowFor(run, kumoRun.wallSec, kumoRun.timedOut, metrics, check, kumoErrors);
+    const bruineErrors = bruineRun.errors.length > 0 ? bruineRun.errors : await logErrors(`${logPath}.err`, 3);
+    const row = rowFor(run, bruineRun.wallSec, bruineRun.timedOut, metrics, check, bruineErrors);
     await appendRun(file, row);
     const mark = row.pass ? "PASS" : row.status === "fail" ? "fail" : row.status.toUpperCase();
     say(
@@ -258,7 +258,7 @@ async function main(): Promise<number> {
 main().then(
   (code) => process.exit(code),
   (error: unknown) => {
-    process.stderr.write(`kumo-bench: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`bruine-bench: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exit(1);
   },
 );

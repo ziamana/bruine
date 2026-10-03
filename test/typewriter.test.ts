@@ -31,7 +31,7 @@ function manual(opts: TypewriterOptions = {}) {
 
 describe("the reveal (T57)", () => {
   test("without a repaint hook every delta lands whole", () => {
-    // The disabled path, and the one CI and KUMO_NO_ANIMATION take. It has to
+    // The disabled path, and the one CI and BRUINE_NO_ANIMATION take. It has to
     // be indistinguishable from the renderer this replaced.
     const tw = new Typewriter();
     tw.push("hello ");
@@ -203,9 +203,9 @@ describe("the reveal (T57)", () => {
 });
 
 describe("the switch (T57)", () => {
-  test("KUMO_NO_ANIMATION=1 turns the reveal off", () => {
-    expect(revealAllowed(UNICODE_ICONS, { KUMO_NO_ANIMATION: "1", CI: undefined })).toBe(
-      revealAllowed(UNICODE_ICONS, { KUMO_NO_ANIMATION: "1" }),
+  test("BRUINE_NO_ANIMATION=1 turns the reveal off", () => {
+    expect(revealAllowed(UNICODE_ICONS, { BRUINE_NO_ANIMATION: "1", CI: undefined })).toBe(
+      revealAllowed(UNICODE_ICONS, { BRUINE_NO_ANIMATION: "1" }),
     );
   });
 
@@ -216,7 +216,7 @@ describe("the switch (T57)", () => {
   });
 
   test("ASCII never animates", () => {
-    expect(revealAllowed(ASCII_ICONS, { ...process.env, KUMO_ASCII: undefined })).toBe(false);
+    expect(revealAllowed(ASCII_ICONS, { ...process.env, BRUINE_ASCII: undefined })).toBe(false);
   });
 });
 

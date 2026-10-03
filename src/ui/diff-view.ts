@@ -165,7 +165,7 @@ export function diffCounter(d: FileDiff): string {
  * goes first (it is context a reader can reconstruct), the new one next, and the
  * text is clipped last, because it is the diff.
  *
- * The block paints no band where the terminal cannot hold one (`KUMO_BG=0`, 16
+ * The block paints no band where the terminal cannot hold one (`BRUINE_BG=0`, 16
  * colors): there the sign carries the meaning and the text is coloured, which is a
  * diff that still says which side is which without a background.
  */

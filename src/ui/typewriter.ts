@@ -25,7 +25,7 @@
  */
 
 import { terminalMotionAllowed } from "./logo-motion.js";
-import type { KumoIcons } from "../render/chars.js";
+import type { BruineIcons } from "../render/chars.js";
 
 /** 25 frames a second: smooth to the eye, well above pi-tui's 16 ms repaint floor. */
 const REVEAL_INTERVAL_MS = 40;
@@ -261,9 +261,9 @@ export class Typewriter {
  * T57: whether this session may animate at all.
  *
  * The same gate as the wordmark and the Working dots, so one switch turns off
- * every moving thing in kumo: `KUMO_NO_ANIMATION=1`, plus CI, a dumb terminal,
- * a non-tty stdout and KUMO_ASCII, which all mean the same thing.
+ * every moving thing in bruine: `BRUINE_NO_ANIMATION=1`, plus CI, a dumb terminal,
+ * a non-tty stdout and BRUINE_ASCII, which all mean the same thing.
  */
-export function revealAllowed(icons: KumoIcons, env: NodeJS.ProcessEnv = process.env): boolean {
+export function revealAllowed(icons: BruineIcons, env: NodeJS.ProcessEnv = process.env): boolean {
   return terminalMotionAllowed({ ascii: icons.think === "*", env });
 }

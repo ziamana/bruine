@@ -246,7 +246,7 @@ export class SetupSummary implements Component {
     const labelWidth = Math.min(12, Math.max(1, Math.floor(width * 0.42)));
     const valueWidth = Math.max(1, width - labelWidth - 1);
     const lines = this.rows.map(row => `${ansi.gray(truncateToWidth(row.label, labelWidth).padEnd(labelWidth))} ${ansi.text(truncateToWidth(row.value, valueWidth))}`);
-    return [...lines, "", ansi.gray(truncateToWidth(`Save to ${this.destination}`, width)), ...wrapTextWithAnsi(ansi.gray("settings.yaml · kumo.json · .env · skills/"), Math.max(1, width))];
+    return [...lines, "", ansi.gray(truncateToWidth(`Save to ${this.destination}`, width)), ...wrapTextWithAnsi(ansi.gray("settings.yaml · bruine.json · .env · skills/"), Math.max(1, width))];
   }
   invalidate(): void {}
 }

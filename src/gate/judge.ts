@@ -6,7 +6,7 @@
  * `reasoningEffort: "off"` is sent ONLY when the route's model info lists an
  * `off` effort: dsh-llm throws UNSUPPORTED_REASONING_EFFORT for a requested
  * effort a model does not declare (which is every model without
- * `reasoningEfforts` — e.g. older kumo-written local routes), and a silently
+ * `reasoningEfforts` — e.g. older bruine-written local routes), and a silently
  * caught throw would make Auto behave like Ask (T19.A).
  */
 

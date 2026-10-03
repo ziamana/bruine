@@ -48,7 +48,7 @@ describe("approval plugin apply", () => {
     };
     const fake = fakeCtx();
     apply(fake.ctx as any);
-    for (const { cb } of fake.injected) cb({ kumoRepl: repl, kumoRender: { screen: ui } });
+    for (const { cb } of fake.injected) cb({ bruineRepl: repl, bruineRender: { screen: ui } });
     const request = (req: Record<string, unknown>, next = async () => "unavailable" as const) =>
       fake.emit("approval/request", { agent, toolName: "bash", ...req }, next) as Promise<string>;
     return { screen, ui, agent, questions, request, nextSpy: async () => "unavailable" as const };
@@ -117,7 +117,7 @@ describe("approval plugin apply", () => {
     };
     const fake = fakeCtx();
     apply(fake.ctx as any);
-    for (const { cb } of fake.injected) cb({ kumoRepl: repl, kumoRender: { describe }, kumoModes: modes });
+    for (const { cb } of fake.injected) cb({ bruineRepl: repl, bruineRender: { describe }, bruineModes: modes });
     return {
       asked,
       child,

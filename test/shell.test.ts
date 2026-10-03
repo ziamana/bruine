@@ -4,7 +4,7 @@ import { JumpToLatest } from "../src/ui/jump-latest.js";
 import { displayPlace } from "../src/ui/place.js";
 import { clipStart } from "../src/render/reasoning.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
-import { KumoUi } from "../src/ui/kumo-ui.js";
+import { BruineUi } from "../src/ui/bruine-ui.js";
 import { strip } from "./fakes.js";
 import type { Component, Terminal } from "@earendil-works/pi-tui";
 
@@ -348,7 +348,7 @@ describe("PageUp keeps the composer where the user left it", () => {
   test("the band is on the last rows while the transcript is read from above", async () => {
     const terminal = new FakeTerminal();
     const sent: string[] = [];
-    const ui = new KumoUi(
+    const ui = new BruineUi(
       "test",
       { onSubmit: (t) => sent.push(t), onEscape: () => {}, onQuit: () => {} },
       terminal,
@@ -395,17 +395,17 @@ describe("the place, said the way a person says it", () => {  const home = "/hom
   test("home is a tilde, and a project under it is a name", () => {
     expect(displayPlace(home, home)).toBe("~");
     expect(displayPlace("/home/tu44/Bureau", home)).toBe("~/Bureau");
-    expect(displayPlace("/home/tu44/projets/kumo", home)).toBe("~/projets/kumo");
+    expect(displayPlace("/home/tu44/projets/bruine", home)).toBe("~/projets/bruine");
   });
 
   test("a directory outside the home keeps its whole path", () => {
-    // "~/../opt/kumo" would name a different directory than the one we are in.
-    expect(displayPlace("/opt/kumo", home)).toBe("/opt/kumo");
-    expect(displayPlace("/home/autre/projets/kumo", home)).toBe("/home/autre/projets/kumo");
+    // "~/../opt/bruine" would name a different directory than the one we are in.
+    expect(displayPlace("/opt/bruine", home)).toBe("/opt/bruine");
+    expect(displayPlace("/home/autre/projets/bruine", home)).toBe("/home/autre/projets/bruine");
   });
 
   test("separators are the readable one, on every platform", () => {
-    expect(displayPlace("C:\\Users\\tu\\projets\\kumo", "C:\\Users\\tu")).toBe("~/projets/kumo");
+    expect(displayPlace("C:\\Users\\tu\\projets\\bruine", "C:\\Users\\tu")).toBe("~/projets/bruine");
   });
 });
 

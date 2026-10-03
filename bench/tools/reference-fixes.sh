@@ -274,7 +274,7 @@ EOF
     read-import-cycle)
       printf 'report.ts imports dates.ts, which imports util.ts. No, there is no import cycle.\n' > "$dir/answer.txt" ;;
     shell-find-todo)
-      ( cd "$dir" && grep -rl 'TODO(kumo)' src docs | sort > found.txt && wc -l < found.txt | tr -d ' ' > count.txt ) ;;
+      ( cd "$dir" && grep -rl 'TODO(bruine)' src docs | sort > found.txt && wc -l < found.txt | tr -d ' ' > count.txt ) ;;
     shell-rename-draft)
       ( cd "$dir" && for f in docs/guides/draft-*.md; do
           mv "$f" "docs/guides/$(basename "$f" | sed 's/^draft-//')"

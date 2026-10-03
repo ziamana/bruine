@@ -27,7 +27,7 @@ stage() {
 # 0 = pass, 70 = cannot check here, anything else = fail.
 run_check() {
   local dir="$1"
-  KUMO_BENCH_TOOLS="$TOOLS" sh "$dir/check.sh" >"$dir/out.txt" 2>&1
+  BRUINE_BENCH_TOOLS="$TOOLS" sh "$dir/check.sh" >"$dir/out.txt" 2>&1
   printf '%s' "$?"
 }
 

@@ -3,16 +3,16 @@ import { SKILLS_MANIFEST_NAME, manifestReadPath } from "../compat.js";
  * Skill installation (T21.6, T26): every skill the user enables lives in
  * `$DSH_HOME/skills/<name>/` (where dsh's user-dsh skill source reads them).
  *
- * - shipped skills: copied from the kumo package;
+ * - shipped skills: copied from the bruine package;
  * - skills found under another agent's folder (T26): a LINK, not a copy, so
- *   editing the skill there updates it in kumo (junction on Windows, dir
+ *   editing the skill there updates it in bruine (junction on Windows, dir
  *   elsewhere); if linking fails, a copy is installed and reported.
  *
- * kumo becomes the only source of truth for USER skills: the bundle patch
- * points skill-filesystem's agentsHome at `$DSH_HOME/agents` (a dir kumo
+ * bruine becomes the only source of truth for USER skills: the bundle patch
+ * points skill-filesystem's agentsHome at `$DSH_HOME/agents` (a dir bruine
  * never fills), so the user home `.agents/skills` is no longer read implicitly.
  *
- * Everything kumo installs is tracked in `.kumo-installed.json`; nothing kumo
+ * Everything bruine installs is tracked in `.bruine-installed.json`; nothing bruine
  * did not create is ever touched. Privacy: only `name` and `description` of a
  * foreign SKILL.md's frontmatter are read for display — never print, log or
  * send a skill body during setup.
@@ -36,7 +36,7 @@ export interface FoundSkill extends SkillMeta {
   alsoIn: string[];
 }
 
-/** One manifest row: what kumo created in `$DSH_HOME/skills/<name>`. */
+/** One manifest row: what bruine created in `$DSH_HOME/skills/<name>`. */
 export interface InstalledSkillEntry {
   name: string;
   kind: "shipped" | "linked";
@@ -113,7 +113,7 @@ async function readSkillDir(dir: string, fallbackName: string): Promise<SkillMet
   return { name, description: fm.description ?? "", dir };
 }
 
-/** The skills shipped inside the kumo package (dirs with a SKILL.md). */
+/** The skills shipped inside the bruine package (dirs with a SKILL.md). */
 export async function readBundledSkills(bundledRoot: string): Promise<SkillMeta[]> {
   const out: SkillMeta[] = [];
   if (!existsSync(bundledRoot)) return out;
@@ -178,7 +178,7 @@ export async function scanFoundSkills(
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Project skill roots (always available, never managed by kumo, T26 group 3). */
+/** Project skill roots (always available, never managed by bruine, T26 group 3). */
 export async function scanProjectSkills(
   cwd: string,
   pathMod: typeof path = path,
@@ -241,13 +241,13 @@ async function readManifest(manifestPath: string): Promise<InstalledSkills> {
   return out;
 }
 
-/** What `kumo skills` prints; sorted by name. Missing manifest → empty. */
+/** What `bruine skills` prints; sorted by name. Missing manifest → empty. */
 export async function readInstalledSkills(homeSkillsDir: string): Promise<InstalledSkillEntry[]> {
   const manifest = await readManifest(manifestReadPath(homeSkillsDir));
   return Object.values(manifest).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Remove one kumo-created entry. A link is unlinked, never followed. */
+/** Remove one bruine-created entry. A link is unlinked, never followed. */
 async function removeEntry(homeSkillsDir: string, entry: InstalledSkillEntry): Promise<void> {
   const dest = join(homeSkillsDir, entry.name);
   if (entry.kind === "linked" && entry.copied !== true) {
@@ -271,7 +271,7 @@ function defaultLink(target: string, linkPath: string): Promise<void> {
 
 /**
  * Install `chosen` and remove previously-installed skills that are no longer
- * chosen — never touching skill directories kumo did not install. Chosen
+ * chosen — never touching skill directories bruine did not install. Chosen
  * names resolve to a shipped copy first, then to a skill found under another
  * agent's home (`home`, default `os.homedir()`) as a link.
  */
@@ -306,7 +306,7 @@ export async function syncSkills(opts: {
   for (const name of opts.chosen) {
     const prev = manifest[name];
     const foundByName = found.find((s) => s.name === name);
-    // A skill the user linked from another agent's folder stays that link, even when kumo now
+    // A skill the user linked from another agent's folder stays that link, even when bruine now
     // ships the same name: re-running the setup must not swap their live, editable copy for
     // a frozen one.
     const keepsLink = prev?.kind === "linked" && foundByName !== undefined && existsSync(prev.source);
@@ -351,7 +351,7 @@ export async function syncSkills(opts: {
 
 /**
  * T26b: the launch-time migration for users who upgrade without re-running
- * the wizard. When no manifest exists yet (kumo never picked skills) and the
+ * the wizard. When no manifest exists yet (bruine never picked skills) and the
  * user home has valid skills under its `.agents/skills`, link them all, so
  * the pre-T26 implicit load keeps working. The manifest is the marker: this
  * runs at most once, and an existing manifest — even an empty one, meaning

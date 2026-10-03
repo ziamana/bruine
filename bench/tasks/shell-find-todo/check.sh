@@ -3,7 +3,7 @@
 # the sources must be untouched (the prompt said "do not change any file").
 set -eu
 cd "$(dirname "$0")"
-echo "kumo-bench-check-mode: file-report"
+echo "bruine-bench-check-mode: file-report"
 for f in found.txt count.txt; do
   if [ ! -f "$f" ]; then
     echo "$f was not written" >&2
@@ -19,7 +19,7 @@ if [ "$(tr -d '[:space:]' < count.txt)" != "$(tr -d '[:space:]' < expected-count
   echo "count.txt says $(cat count.txt), expected $(cat expected-count.txt)" >&2
   exit 1
 fi
-if [ "$(grep -rl 'TODO(kumo)' src docs | wc -l | tr -d '[:space:]')" != "$(tr -d '[:space:]' < expected-count.txt)" ]; then
+if [ "$(grep -rl 'TODO(bruine)' src docs | wc -l | tr -d '[:space:]')" != "$(tr -d '[:space:]' < expected-count.txt)" ]; then
   echo "the markers are gone: a source file was changed" >&2
   exit 1
 fi

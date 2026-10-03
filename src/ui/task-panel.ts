@@ -1,6 +1,6 @@
 import type { Component } from "@earendil-works/pi-tui";
 import { clipCells, spinnerFrame } from "../render/reasoning.js";
-import { withoutEmoji, type KumoIcons } from "../render/chars.js";
+import { withoutEmoji, type BruineIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 
 export const TASKS_HELP = "ctrl+t  show all tasks";
@@ -33,7 +33,7 @@ export class TaskPanel implements Component {
   tasks: TaskItem[] = [];
   expanded = false;
 
-  constructor(private readonly icons: KumoIcons, private readonly now: () => number = Date.now) {}
+  constructor(private readonly icons: BruineIcons, private readonly now: () => number = Date.now) {}
 
   get active(): boolean {
     return this.visible && this.tasks.some((item) => item.status === "in_progress");

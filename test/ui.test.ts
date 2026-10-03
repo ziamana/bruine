@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { KumoUi } from "../src/ui/kumo-ui.js";
+import { BruineUi } from "../src/ui/bruine-ui.js";
 import { ReasoningComponent } from "../src/ui/reasoning-component.js";
 import { TurnActivity } from "../src/ui/turn-activity.js";
 import { ToolCallComponent } from "../src/ui/tool-call-component.js";
@@ -14,11 +14,11 @@ import { attachTui } from "../src/plugins/render.js";
 import { LineEmitter, Repl } from "../src/plugins/repl.js";
 import { ASCII_ICONS, UNICODE_ICONS } from "../src/render/chars.js";
 
-// Never read the developer's real ~/.kumo (this test used to pass only because the
+// Never read the developer's real ~/.bruine (this test used to pass only because the
 // old hand-written YAML reader failed on the real settings.yaml).
 const savedDshHome = process.env.DSH_HOME;
 beforeAll(() => {
-  process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "kumo-ui-test-"));
+  process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "bruine-ui-test-"));
 });
 afterAll(() => {
   if (savedDshHome === undefined) delete process.env.DSH_HOME;
@@ -50,8 +50,8 @@ class FakeTerminal implements Terminal {
   setProgress(): void {}
 }
 
-test("KumoUi.clearTasks clears the panel for future /new wiring", () => {
-  const ui = new KumoUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), UNICODE_ICONS);
+test("BruineUi.clearTasks clears the panel for future /new wiring", () => {
+  const ui = new BruineUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), UNICODE_ICONS);
   ui.setTasks([{ content: "Pending work", status: "in_progress" }]);
   expect(ui.taskPanel.visible).toBe(true);
   ui.clearTasks();
@@ -61,7 +61,7 @@ test("KumoUi.clearTasks clears the panel for future /new wiring", () => {
 
 test("ctrl+t expands and collapses the task list", async () => {
   const terminal = new FakeTerminal();
-  const ui = new KumoUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, terminal, UNICODE_ICONS);
+  const ui = new BruineUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, terminal, UNICODE_ICONS);
   ui.setTasks(Array.from({ length: 9 }, (_, i) => ({ content: `Task ${i}`, status: i === 4 ? "in_progress" : "pending" })));
   ui.start();
   expect(ui.taskPanel.render(60)).toHaveLength(7);
@@ -144,8 +144,8 @@ describe("ToolCallComponent (T27.2 aligned + rail)", () => {
 
   test("a settled tool links its path, and the link never costs a cell (T55 P2)", async () => {
     const { fileLink, linkToolSummary } = await import("../src/ui/links.js");
-    const savedColor = process.env.KUMO_COLOR;
-    process.env.KUMO_COLOR = "truecolor";
+    const savedColor = process.env.BRUINE_COLOR;
+    process.env.BRUINE_COLOR = "truecolor";
     const { resetColorDepth } = await import("../src/ui/palette.js");
     resetColorDepth();
     try {
@@ -161,8 +161,8 @@ describe("ToolCallComponent (T27.2 aligned + rail)", () => {
       // The link is closed, so it cannot bleed into the next line.
       expect(raw.lastIndexOf("\x1b]8;;\x1b\\")).toBeGreaterThan(raw.indexOf("\x1b]8;;file://"));
     } finally {
-      if (savedColor === undefined) delete process.env.KUMO_COLOR;
-      else process.env.KUMO_COLOR = savedColor;
+      if (savedColor === undefined) delete process.env.BRUINE_COLOR;
+      else process.env.BRUINE_COLOR = savedColor;
       resetColorDepth();
     }
     // A relative path has no target, so it is never linked.
@@ -293,11 +293,11 @@ describe("ToolCallComponent (T27.2 aligned + rail)", () => {
 describe("AssistantTextComponent (T13c)", () => {
   test("renders markdown", () => {
     const a = new AssistantTextComponent();
-    a.push("Hello **kumo**");
+    a.push("Hello **bruine**");
     a.finish();
     const text = a.render(40).map(strip).join("\n");
     expect(text).toContain("Hello");
-    expect(text).toContain("kumo");
+    expect(text).toContain("bruine");
     expect(text).not.toContain("**");
   });
 
@@ -424,11 +424,11 @@ describe("LineEmitter + Repl over TUI events", () => {
   });
 });
 
-describe("KumoUi shell (T13a, fake terminal)", () => {
+describe("BruineUi shell (T13a, fake terminal)", () => {
   function makeUi() {
     const terminal = new FakeTerminal();
     const submitted: string[] = [];
-    const ui = new KumoUi(
+    const ui = new BruineUi(
       "0.2.0",
       { onSubmit: (t) => submitted.push(t), onEscape: () => {}, onQuit: () => {} },
       terminal,
@@ -441,7 +441,6 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     const { ui } = makeUi();
     const lines = ui.tui.render(60).map(strip);
     const text = lines.join("\n");
-    expect(text).toContain("kumo");
     expect(text).toContain("v0.2.0");
     expect(text).toContain("escape interrupt");
     // D3: the footer's three rows are the place, the turn and the route — a session
@@ -563,8 +562,8 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
 
   test("the help line is readable, not decorative: 4.5:1 on a color terminal (T55 P0)", async () => {
     const { NUAGE, contrastRatio, fgCode, resetColorDepth } = await import("../src/ui/palette.js");
-    const savedColor = process.env.KUMO_COLOR;
-    process.env.KUMO_COLOR = "truecolor";
+    const savedColor = process.env.BRUINE_COLOR;
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     try {
       const { ui } = makeUi();
@@ -584,15 +583,15 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       // one a first session cannot do without.
       expect(row).toContain(`${fgCode("text", "truecolor")}escape`);
     } finally {
-      if (savedColor === undefined) delete process.env.KUMO_COLOR;
-      else process.env.KUMO_COLOR = savedColor;
+      if (savedColor === undefined) delete process.env.BRUINE_COLOR;
+      else process.env.BRUINE_COLOR = savedColor;
       resetColorDepth();
     }
   });
 
   test("a prompt band is padding and prompt, with no number on it (T55 P1b)", async () => {
-    const savedColor = process.env.KUMO_COLOR;
-    process.env.KUMO_COLOR = "truecolor";
+    const savedColor = process.env.BRUINE_COLOR;
+    process.env.BRUINE_COLOR = "truecolor";
     const { resetColorDepth } = await import("../src/ui/palette.js");
     resetColorDepth();
     try {
@@ -618,8 +617,8 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       // The band still spans the full width: the padding is inside the tint.
       expect(visibleWidth(text[first - 1]!)).toBe(60);
     } finally {
-      if (savedColor === undefined) delete process.env.KUMO_COLOR;
-      else process.env.KUMO_COLOR = savedColor;
+      if (savedColor === undefined) delete process.env.BRUINE_COLOR;
+      else process.env.BRUINE_COLOR = savedColor;
       resetColorDepth();
     }
   });
@@ -627,8 +626,8 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
   test("a prompt band with no number is still a plain band, never a fake turn 0 (T55 P1b)", async () => {
     const { ChatTranscript } = await import("../src/ui/chat-layout.js");
     const { userMessageComponent } = await import("../src/ui/assistant-text.js");
-    const savedColor = process.env.KUMO_COLOR;
-    process.env.KUMO_COLOR = "truecolor";
+    const savedColor = process.env.BRUINE_COLOR;
+    process.env.BRUINE_COLOR = "truecolor";
     const { resetColorDepth } = await import("../src/ui/palette.js");
     resetColorDepth();
     try {
@@ -637,16 +636,16 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       const text = t.render(60).map(strip);
       expect(text.join("\n")).not.toContain("turn");
     } finally {
-      if (savedColor === undefined) delete process.env.KUMO_COLOR;
-      else process.env.KUMO_COLOR = savedColor;
+      if (savedColor === undefined) delete process.env.BRUINE_COLOR;
+      else process.env.BRUINE_COLOR = savedColor;
       resetColorDepth();
     }
   });
 
   test("/reload re-reads settings.yaml and never adopts a route it did not switch to (T40)", async () => {
-    const { readSettingsRoute, routeLabel } = await import("../src/ui/kumo-ui.js");
+    const { readSettingsRoute, routeLabel } = await import("../src/ui/bruine-ui.js");
     const { writeFileSync, mkdirSync } = await import("node:fs");
-    const home = mkdtempSync(join(tmpdir(), "kumo-reload-"));
+    const home = mkdtempSync(join(tmpdir(), "bruine-reload-"));
     const settings = [
       "llm-pi-ai:",
       "  providers:",
@@ -663,9 +662,9 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     ].join("\n");
     writeFileSync(join(home, "settings.yaml"), settings);
     const savedHome = process.env.DSH_HOME;
-    const savedColor = process.env.KUMO_COLOR;
+    const savedColor = process.env.BRUINE_COLOR;
     process.env.DSH_HOME = home;
-    process.env.KUMO_COLOR = "basic";
+    process.env.BRUINE_COLOR = "basic";
     const { resetColorDepth } = await import("../src/ui/palette.js");
     resetColorDepth();
     try {
@@ -704,18 +703,18 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
       resetColorDepth();
       if (savedHome === undefined) delete process.env.DSH_HOME;
       else process.env.DSH_HOME = savedHome;
-      if (savedColor === undefined) delete process.env.KUMO_COLOR;
-      else process.env.KUMO_COLOR = savedColor;
+      if (savedColor === undefined) delete process.env.BRUINE_COLOR;
+      else process.env.BRUINE_COLOR = savedColor;
       resetColorDepth();
     }
   });
 
   test("/reload re-probes the terminal background on a color terminal (T40)", async () => {
     const { bgCode, resetColorDepth, setTerminalBackdrop } = await import("../src/ui/palette.js");
-    const savedColor = process.env.KUMO_COLOR;
-    const savedBg = process.env.KUMO_BG;
-    process.env.KUMO_COLOR = "truecolor";
-    delete process.env.KUMO_BG;
+    const savedColor = process.env.BRUINE_COLOR;
+    const savedBg = process.env.BRUINE_BG;
+    process.env.BRUINE_COLOR = "truecolor";
+    delete process.env.BRUINE_BG;
     resetColorDepth();
     try {
       // A terminal that never answers: the query goes out, the surfaces stay.
@@ -748,16 +747,16 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     } finally {
       setTerminalBackdrop();
       resetColorDepth();
-      if (savedColor === undefined) delete process.env.KUMO_COLOR;
-      else process.env.KUMO_COLOR = savedColor;
-      if (savedBg === undefined) delete process.env.KUMO_BG;
-      else process.env.KUMO_BG = savedBg;
+      if (savedColor === undefined) delete process.env.BRUINE_COLOR;
+      else process.env.BRUINE_COLOR = savedColor;
+      if (savedBg === undefined) delete process.env.BRUINE_BG;
+      else process.env.BRUINE_BG = savedBg;
       resetColorDepth();
     }
   });
 
   test("the header says which server answers, and forgets it when the route changes (T27b.3, T37)", async () => {
-    const { headerHost } = await import("../src/ui/kumo-ui.js");
+    const { headerHost } = await import("../src/ui/bruine-ui.js");
     expect(headerHost({ models: { main: { baseUrl: "http://192.168.1.64:8081/v1" } } }, "local")).toBe("192.168.1.64");
     expect(headerHost({ models: { main: { provider: "openrouter" } } }, undefined)).toBe("openrouter");
     expect(headerHost(undefined, "local")).toBe("local");
@@ -771,7 +770,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
   });
 
   test("routeLabel names a route the way the header does", async () => {
-    const { routeLabel } = await import("../src/ui/kumo-ui.js");
+    const { routeLabel } = await import("../src/ui/bruine-ui.js");
     expect(routeLabel({ provider: "local", model: "a.gguf", name: "Ornith" })).toBe("local / Ornith");
     expect(routeLabel({ model: "a.gguf" })).toBe("a");
     expect(routeLabel({ provider: "local", model: "a.gguf" })).toBe("local / a");
@@ -779,10 +778,10 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
 
   test("the console band follows the terminal's real background (T40)", async () => {
     const { bgCode, resetColorDepth, setTerminalBackdrop } = await import("../src/ui/palette.js");
-    const savedDepth = process.env.KUMO_COLOR;
-    const savedBg = process.env.KUMO_BG;
-    process.env.KUMO_COLOR = "truecolor";
-    delete process.env.KUMO_BG;
+    const savedDepth = process.env.BRUINE_COLOR;
+    const savedBg = process.env.BRUINE_BG;
+    process.env.BRUINE_COLOR = "truecolor";
+    delete process.env.BRUINE_BG;
     resetColorDepth();
     try {
       const { ui, terminal } = makeUi();
@@ -808,10 +807,10 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     } finally {
       setTerminalBackdrop();
       resetColorDepth();
-      if (savedDepth === undefined) delete process.env.KUMO_COLOR;
-      else process.env.KUMO_COLOR = savedDepth;
-      if (savedBg === undefined) delete process.env.KUMO_BG;
-      else process.env.KUMO_BG = savedBg;
+      if (savedDepth === undefined) delete process.env.BRUINE_COLOR;
+      else process.env.BRUINE_COLOR = savedDepth;
+      if (savedBg === undefined) delete process.env.BRUINE_BG;
+      else process.env.BRUINE_BG = savedBg;
       resetColorDepth();
     }
   });
@@ -829,12 +828,12 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     expect(LOGO[0]).not.toBe("");
     expect(terminalMotionAllowed({ stdoutTTY: false })).toBe(false);
     expect(terminalMotionAllowed({ stdoutTTY: true, env: { CI: "1" } })).toBe(false);
-    expect(terminalMotionAllowed({ stdoutTTY: true, env: { KUMO_NO_ANIMATION: "1" } })).toBe(false);
+    expect(terminalMotionAllowed({ stdoutTTY: true, env: { BRUINE_NO_ANIMATION: "1" } })).toBe(false);
     expect(terminalMotionAllowed({ stdoutTTY: true, env: {}, ascii: false })).toBe(true);
   });
 
   test("ASCII terminals get ASCII, and the lists come from the real sources (C7)", async () => {
-    const a = new KumoUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), ASCII_ICONS);
+    const a = new BruineUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), ASCII_ICONS);
     a.setResources({ plugins: ["repl"] });
     const rows = a.headerText(100).split("\n").map(strip);
     expect(rows[0]).toBe("| v0.2.0");
@@ -847,10 +846,10 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     }
     await a.shutdown();
 
-    // The plugin list is kumo's own exports map — the plugins dsh mounts — read
+    // The plugin list is bruine's own exports map — the plugins dsh mounts — read
     // from the package that is running, so it cannot drift from the code.
-    const { readKumoPlugins } = await import("../src/ui/kumo-ui.js");
-    const plugins = readKumoPlugins();
+    const { readBruinePlugins } = await import("../src/ui/bruine-ui.js");
+    const plugins = readBruinePlugins();
     expect(plugins.length).toBeGreaterThan(0);
     expect(plugins).toContain("repl");
     expect(plugins).toContain("render");
@@ -861,11 +860,11 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     expect([...plugins]).toEqual([...plugins].sort((a, b) => a.localeCompare(b)));
   });
 
-  test("the skills list is the manifest kumo wrote, read once at startup (C7)", async () => {
+  test("the skills list is the manifest bruine wrote, read once at startup (C7)", async () => {
     const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
-    const home = mkdtempSync(join(tmpdir(), "kumo-banner-"));
+    const home = mkdtempSync(join(tmpdir(), "bruine-banner-"));
     const saved = process.env.DSH_HOME;
     process.env.DSH_HOME = home;
     try {
@@ -917,10 +916,10 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
   });
 
   test("the interactive screen opens on the finished header without replaying boot motion", async () => {
-    const saved = { tty: process.stdout.isTTY, anim: process.env.KUMO_NO_ANIMATION };
+    const saved = { tty: process.stdout.isTTY, anim: process.env.BRUINE_NO_ANIMATION };
     process.stdout.isTTY = true;
-    delete process.env.KUMO_NO_ANIMATION;
-    const ui = new KumoUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} });
+    delete process.env.BRUINE_NO_ANIMATION;
+    const ui = new BruineUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} });
     const phases: string[] = [];
     const realSetText = ui.header.setText.bind(ui.header);
     ui.header.setText = (t: string) => {
@@ -947,8 +946,8 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     } finally {
       await ui.shutdown();
       process.stdout.isTTY = saved.tty;
-      if (saved.anim === undefined) delete process.env.KUMO_NO_ANIMATION;
-      else process.env.KUMO_NO_ANIMATION = saved.anim;
+      if (saved.anim === undefined) delete process.env.BRUINE_NO_ANIMATION;
+      else process.env.BRUINE_NO_ANIMATION = saved.anim;
     }
   });
 
@@ -956,7 +955,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     const saved = { tty: process.stdout.isTTY, ci: process.env.CI };
     process.stdout.isTTY = true;
     process.env.CI = "1";
-    const ui = new KumoUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} });
+    const ui = new BruineUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} });
     const phases: string[] = [];
     const realSetText = ui.header.setText.bind(ui.header);
     ui.header.setText = (t: string) => {
@@ -982,8 +981,8 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
     const { mkdtemp, writeFile } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
-    const { readSettingsRoute } = await import("../src/ui/kumo-ui.js");
-    const home = await mkdtemp(join(tmpdir(), "kumo-set-"));
+    const { readSettingsRoute } = await import("../src/ui/bruine-ui.js");
+    const home = await mkdtemp(join(tmpdir(), "bruine-set-"));
     await writeFile(
       join(home, "settings.yaml"),
       `llm-pi-ai:\n  providers:\n    local:\n      baseURL: 'http://192.168.1.64:8081/v1'\n      models:\n      - id: 'Ornith-1.5-9B-Q4_K_M.gguf'\n        name: 'Ornith 1.5 9B'\n        contextWindow: 100000\nagent-default-model:\n  provider: 'local'\n  model: 'Ornith-1.5-9B-Q4_K_M.gguf'\n`,
@@ -1006,7 +1005,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
 
   test("ctrl+o toggles tools collapsed flag (T27.2)", async () => {
     const terminal = new FakeTerminal();
-    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
+    const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
     ui.start();
     expect(ui.toolsCollapsed).toBe(true);
     terminal.onInput?.("\x0f");
@@ -1041,7 +1040,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
 
   test("ctrl+o expands collapsed groups and collapses back (T27.2)", async () => {
     const terminal = new FakeTerminal();
-    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
+    const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
     ui.start();
     const comps = ["a", "b", "c", "d"].map((f) => {
       const t = new ToolCallComponent("read", () => 0, UNICODE_ICONS);
@@ -1069,7 +1068,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
 
   test("askQuestions Down+Enter resolves second option without touching chat (T28A)", async () => {
     const terminal = new FakeTerminal();
-    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
+    const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
     ui.start();
     const p = ui.askQuestions([
       { id: "db", header: "Choose mode", question: "Which database?", options: [{ label: "SQLite" }, { label: "Redis" }] },
@@ -1086,7 +1085,7 @@ describe("KumoUi shell (T13a, fake terminal)", () => {
   test("askQuestions Space toggles multi and Esc skips without onEscape (T28A)", async () => {
     const terminal = new FakeTerminal();
     let escaped = 0;
-    const ui = new KumoUi(
+    const ui = new BruineUi(
       "test",
       { onSubmit() {}, onEscape() { escaped += 1; }, onQuit() {} },
       terminal,
@@ -1283,8 +1282,8 @@ describe("attachTui wiring", () => {
 
   test("text deltas render markdown", () => {
     const { chats, stream } = setup();
-    stream({ type: "text-delta", text: "Hi **kumo**" });
-    expect(rendered(chats[0])).toContain("kumo");
+    stream({ type: "text-delta", text: "Hi **bruine**" });
+    expect(rendered(chats[0])).toContain("bruine");
     expect(rendered(chats[0])).not.toContain("**");
   });
 
@@ -1314,7 +1313,7 @@ describe("attachTui wiring", () => {
 
   test("turn/end with usage fills footer context + T33b maps the error", async () => {
     const prev = process.env.DSH_HOME;
-    process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "kumo-uitest-err-"));
+    process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "bruine-uitest-err-"));
     try {
       const { chats, ui, stream, event } = setup();
       stream({ type: "usage", usage: { inputTokens: 1000, outputTokens: 50 } });
@@ -1324,7 +1323,7 @@ describe("attachTui wiring", () => {
       await new Promise((r) => setTimeout(r, 20)); // showLlmError is async
       const texts = chats.map((c) => rendered(c)).join("\n");
       expect(texts).toContain("boom");
-      expect(texts).toContain("Details in logs/kumo.log");
+      expect(texts).toContain("Details in logs/bruine.log");
       expect(texts).not.toContain("stack");
     } finally {
       if (prev === undefined) delete process.env.DSH_HOME;
@@ -1385,7 +1384,7 @@ describe("attachTui wiring", () => {
 describe("a question form survives the turn it interrupts", () => {
   test("a notice while the form is up does not wipe it, and is shown after", async () => {
     const terminal = new FakeTerminal();
-    const ui = new KumoUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, terminal, UNICODE_ICONS);
+    const ui = new BruineUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, terminal, UNICODE_ICONS);
     await ui.start();
     const painted = () => ui.tui.render(80).map(strip).join("\n");
     const pending = ui.askQuestions([
@@ -1404,7 +1403,7 @@ describe("a question form survives the turn it interrupts", () => {
 
   test("Other opens the custom answer in the question popup", async () => {
     const terminal = new FakeTerminal();
-    const ui = new KumoUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, terminal, UNICODE_ICONS);
+    const ui = new BruineUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, terminal, UNICODE_ICONS);
     await ui.start();
     const answers = ui.askQuestions([
       { id: "q1", question: "Quelle base ?", options: [{ label: "SQLite" }, { label: "Redis" }] },
@@ -1423,7 +1422,7 @@ describe("a question form survives the turn it interrupts", () => {
 describe("the suggestion is drawn in the editor, not above it", () => {
   async function started() {
     const terminal = new FakeTerminal();
-    const ui = new KumoUi(
+    const ui = new BruineUi(
       "test",
       { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} },
       terminal,
@@ -1504,7 +1503,7 @@ describe("the suggestion is drawn in the editor, not above it", () => {
   test("Enter never sends a suggestion by accident", async () => {
     const sent: string[] = [];
     const terminal = new FakeTerminal();
-    const ui = new KumoUi(
+    const ui = new BruineUi(
       "test",
       { onSubmit: (t) => sent.push(t), onEscape: () => {}, onQuit: () => {} },
       terminal,
@@ -1523,7 +1522,7 @@ describe("suggest ghost (T28B)", () => {
     const { mkdtemp, writeFile } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
-    const home = await mkdtemp(join(tmpdir(), "kumo-suggest-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-suggest-"));
     await writeFile(
       join(home, "bruine.json"),
       JSON.stringify({ models: { fast: { provider: "p", model: "m" } }, suggestions: true }),
@@ -1691,7 +1690,7 @@ describe("T23 regressions", () => {
   test("consumed key handlers request redraw and bypass editor input", async () => {
     const terminal = new FakeTerminal();
     const shiftTab = vi.fn();
-    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {}, onShiftTab: shiftTab }, terminal, UNICODE_ICONS);
+    const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {}, onShiftTab: shiftTab }, terminal, UNICODE_ICONS);
     const render = vi.spyOn(ui, "requestRender");
     ui.start();
     terminal.onInput?.("abc");
@@ -1709,8 +1708,8 @@ describe("T23 regressions", () => {
 describe("slash autocomplete provider (T31.1)", () => {
   test("empty prefix → null; / → 7+ items; /co → /compact first", async () => {
     const { CombinedAutocompleteProvider } = await import("@earendil-works/pi-tui");
-    const { KUMO_COMMANDS } = await import("../src/plugins/repl.js");
-    const provider = new CombinedAutocompleteProvider(KUMO_COMMANDS, process.cwd());
+    const { BRUINE_COMMANDS } = await import("../src/plugins/repl.js");
+    const provider = new CombinedAutocompleteProvider(BRUINE_COMMANDS, process.cwd());
     const signal = new AbortController().signal;
     expect(await provider.getSuggestions([""], 0, 0, { signal })).toBeNull();
     const all = await provider.getSuggestions(["/"], 0, 1, { signal });
@@ -1722,11 +1721,11 @@ describe("slash autocomplete provider (T31.1)", () => {
   });
 });
 
-describe("settings.yaml reader (real YAML, kumo's own list style)", () => {
+describe("settings.yaml reader (real YAML, bruine's own list style)", () => {
   test("finds name and window when `- id:` sits at the same indent as `models:`", async () => {
     const { writeFileSync } = await import("node:fs");
-    const { readSettingsRoute } = await import("../src/ui/kumo-ui.js");
-    const home = mkdtempSync(join(tmpdir(), "kumo-settings-"));
+    const { readSettingsRoute } = await import("../src/ui/bruine-ui.js");
+    const home = mkdtempSync(join(tmpdir(), "bruine-settings-"));
     writeFileSync(join(home, "settings.yaml"), [
       "llm-pi-ai:",
       "  providers:",
@@ -1750,15 +1749,15 @@ describe("settings.yaml reader (real YAML, kumo's own list style)", () => {
 describe("every provider in settings.yaml (T37)", () => {
   test("all routes come back, not only the default one", async () => {
     const { writeFileSync } = await import("node:fs");
-    const { readSettingsProviders } = await import("../src/ui/kumo-ui.js");
-    const home = mkdtempSync(join(tmpdir(), "kumo-providers-"));
+    const { readSettingsProviders } = await import("../src/ui/bruine-ui.js");
+    const home = mkdtempSync(join(tmpdir(), "bruine-providers-"));
     writeFileSync(join(home, "settings.yaml"), [
       "llm-pi-ai:",
       "  providers:",
       "    local:",
       "      displayName: Local Server",
       "      baseURL: 'http://192.168.1.64:8081/v1'",
-      "      apiKeyEnv: KUMO_LOCAL_API_KEY",
+      "      apiKeyEnv: BRUINE_LOCAL_API_KEY",
       "      models:",
       "        - id: '/m/Ornith.gguf'",
       "          name: 'Ornith 1.5 9B'",
@@ -1779,7 +1778,7 @@ describe("every provider in settings.yaml (T37)", () => {
         id: "local",
         displayName: "Local Server",
         baseUrl: "http://192.168.1.64:8081/v1",
-        apiKeyEnv: "KUMO_LOCAL_API_KEY",
+        apiKeyEnv: "BRUINE_LOCAL_API_KEY",
         models: [{ id: "/m/Ornith.gguf", name: "Ornith 1.5 9B", contextWindow: 100096 }],
       },
       { id: "openrouter", apiKeyEnv: "OPENROUTER_API_KEY", models: [{ id: "qwen/qwen3-32b" }] },
@@ -1789,8 +1788,8 @@ describe("every provider in settings.yaml (T37)", () => {
 
   test("a missing, empty or broken settings.yaml is an empty list, never a throw", async () => {
     const { writeFileSync } = await import("node:fs");
-    const { readSettingsProviders } = await import("../src/ui/kumo-ui.js");
-    const home = mkdtempSync(join(tmpdir(), "kumo-providers-"));
+    const { readSettingsProviders } = await import("../src/ui/bruine-ui.js");
+    const home = mkdtempSync(join(tmpdir(), "bruine-providers-"));
     expect(readSettingsProviders(join(home, "nope"))).toEqual([]);
     writeFileSync(join(home, "settings.yaml"), "");
     expect(readSettingsProviders(home)).toEqual([]);
@@ -1804,7 +1803,7 @@ describe("every provider in settings.yaml (T37)", () => {
 describe("the picker overlay (T37)", () => {
   test("askChoice starts the cursor on the row the caller names", async () => {
     const terminal = new FakeTerminal();
-    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
+    const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
     ui.start();
     const p = ui.askChoice(
       "Model",
@@ -1820,7 +1819,7 @@ describe("the picker overlay (T37)", () => {
 
   test("an out-of-range initial is ignored rather than throwing", async () => {
     const terminal = new FakeTerminal();
-    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
+    const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, terminal, UNICODE_ICONS);
     ui.start();
     const p = ui.askChoice("Model", [{ value: "a", label: "alpha" }], { initial: 9 });
     await new Promise((r) => setTimeout(r, 50));
@@ -1845,7 +1844,7 @@ describe("tool output display (Nuage polish)", () => {
 
 describe("server label (UI polish 2026-09-26)", () => {
   test("LAN and localhost keep the address, cloud APIs show the provider name", async () => {
-    const { serverLabel } = await import("../src/ui/kumo-ui.js");
+    const { serverLabel } = await import("../src/ui/bruine-ui.js");
     expect(serverLabel("192.168.1.64", "Ornith (home)")).toBe("192.168.1.64");
     expect(serverLabel("localhost")).toBe("localhost");
     expect(serverLabel("100.101.5.2")).toBe("100.101.5.2");

@@ -17,23 +17,23 @@ import {
 } from "../src/ui/palette.js";
 import { ChatTranscript, Margin, pasteChip, railPaint } from "../src/ui/chat-layout.js";
 import { userMessageComponent } from "../src/ui/assistant-text.js";
-import { kumoIcons } from "../src/render/chars.js";
+import { bruineIcons } from "../src/render/chars.js";
 import { NUAGE } from "../src/ui/palette.js";
 import { Container, type Component } from "@earendil-works/pi-tui";
 
 describe("Nuage palette", () => {
   afterEach(() => {
-    process.env.KUMO_COLOR = "basic";
+    process.env.BRUINE_COLOR = "basic";
     resetColorDepth();
   });
   test("depth detection: forced, NO_COLOR, COLORTERM, 256, basic", () => {
-    expect(detectColorDepth({ KUMO_COLOR: "256" })).toBe("256");
+    expect(detectColorDepth({ BRUINE_COLOR: "256" })).toBe("256");
     expect(detectColorDepth({ NO_COLOR: "1" })).toBe("none");
     expect(detectColorDepth({ COLORTERM: "truecolor" })).toBe("truecolor");
     expect(detectColorDepth({ WT_SESSION: "x" })).toBe("truecolor");
     expect(detectColorDepth({ TERM: "xterm-256color" })).toBe("256");
     expect(detectColorDepth({ TERM: "xterm" })).toBe("basic");
-    expect(detectColorDepth({ COLORTERM: "truecolor", KUMO_ASCII: "1" })).toBe("basic");
+    expect(detectColorDepth({ COLORTERM: "truecolor", BRUINE_ASCII: "1" })).toBe("basic");
   });
   test("codes per depth", () => {
     expect(fgCode("sky", "truecolor")).toBe("\x1b[38;2;125;207;255m");
@@ -44,10 +44,10 @@ describe("Nuage palette", () => {
     expect(to256("#000000")).toBeGreaterThanOrEqual(16);
   });
   test("gradient only in truecolor", () => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     expect(gradientStops("ab", ["#000000", "#ffffff"])).toContain("38;2;");
-    process.env.KUMO_COLOR = "basic";
+    process.env.BRUINE_COLOR = "basic";
     resetColorDepth();
     expect(gradientStops("ab", ["#000000", "#ffffff"])).toBe("\x1b[36mab\x1b[39m");
   });
@@ -55,8 +55,8 @@ describe("Nuage palette", () => {
 
 describe("painted surfaces (T40)", () => {
   afterEach(() => {
-    process.env.KUMO_COLOR = "basic";
-    delete process.env.KUMO_BG;
+    process.env.BRUINE_COLOR = "basic";
+    delete process.env.BRUINE_BG;
     resetColorDepth();
   });
 
@@ -68,13 +68,13 @@ describe("painted surfaces (T40)", () => {
     expect(bgEnabled("none")).toBe(false);
   });
 
-  test("KUMO_BG=0 opts out of every painted surface", () => {
-    process.env.KUMO_BG = "0";
+  test("BRUINE_BG=0 opts out of every painted surface", () => {
+    process.env.BRUINE_BG = "0";
     expect(bgOptOut()).toBe(true);
     expect(bgEnabled("truecolor")).toBe(false);
-    process.env.KUMO_BG = "none";
+    process.env.BRUINE_BG = "none";
     expect(bgOptOut()).toBe(true);
-    process.env.KUMO_BG = "1";
+    process.env.BRUINE_BG = "1";
     expect(bgOptOut()).toBe(false);
   });
 
@@ -124,7 +124,7 @@ describe("painted surfaces (T40)", () => {
   });
 
   test("fillLine paints out to the edge with EL and never writes the last column", () => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     const line = fillLine("surface", "hi");
     expect(line).toBe("\x1b[48;2;28;32;48mhi\x1b[48;2;28;32;48m\x1b[K\x1b[49m");
@@ -133,7 +133,7 @@ describe("painted surfaces (T40)", () => {
   });
 
   test("fillLine re-arms the surface after anything that resets it", () => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     // A nested background, a pill, and pi-tui's reverse-video editor cursor all
     // hand the background back to the terminal default on their way out. Each one
@@ -151,7 +151,7 @@ describe("painted surfaces (T40)", () => {
 
   test("nothing is painted at 16 colors or with NO_COLOR", () => {
     expect(fillLine("surface", "hi")).toBe("hi");
-    process.env.KUMO_COLOR = "none";
+    process.env.BRUINE_COLOR = "none";
     resetColorDepth();
     expect(fillLine("surface", "hi")).toBe("hi");
   });
@@ -164,11 +164,11 @@ describe("painted surfaces (T40)", () => {
   });
 
   test("the rail fades down its block, and stays flat where a hex would collapse", () => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     expect(railPaint("blue", "▍", 0)).toBe("\x1b[38;2;125;207;255m▍\x1b[39m");
     expect(railPaint("blue", "▍", 1)).toBe("\x1b[38;2;74;168;224m▍\x1b[39m");
-    process.env.KUMO_COLOR = "basic";
+    process.env.BRUINE_COLOR = "basic";
     resetColorDepth();
     // A blended hex at 16 colors would collapse both ends to the same code.
     expect(railPaint("blue", "▍", 0)).toBe("\x1b[34m▍\x1b[39m");
@@ -176,10 +176,10 @@ describe("painted surfaces (T40)", () => {
   });
 
   test("a running tool owns the rail, so the eye can find it without reading (T55 P1c)", () => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     // The defect: a tool in flight and a tool that finished ten seconds ago were
-    // the same blue, so "where is kumo right now" meant reading the whole block.
+    // the same blue, so "where is bruine right now" meant reading the whole block.
     const running = railPaint("active", "▍", 0);
     const done = railPaint("blue", "▍", 0);
     const failed = railPaint("red", "▍", 0);
@@ -191,7 +191,7 @@ describe("painted surfaces (T40)", () => {
       return m === null ? 0 : Number(m[1])! + Number(m[2])! + Number(m[3])!;
     };
     expect(bright(running)).toBeGreaterThan(bright(done));
-    process.env.KUMO_COLOR = "basic";
+    process.env.BRUINE_COLOR = "basic";
     resetColorDepth();
     // At 16 colors a running tool still has to be findable: bright cyan.
     expect(railPaint("active", "▍", 0)).toBe("\x1b[36m▍\x1b[39m");
@@ -215,13 +215,13 @@ describe("the bottom zone keeps its margin and the terminal's background (T40)",
     return new Margin(inner).render(40);
   };
   afterEach(() => {
-    process.env.KUMO_COLOR = "basic";
-    delete process.env.KUMO_BG;
+    process.env.BRUINE_COLOR = "basic";
+    delete process.env.BRUINE_BG;
     resetColorDepth();
   });
 
   test("2 columns of margin on both sides, and never a painted background", () => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     // Margin hands its inner component width - 4 and prefixes 2 columns, so the
     // zones keep the body exactly where it was.
@@ -242,13 +242,13 @@ describe("painted transcript (T40)", () => {
     return t.render(40).join("\n");
   };
   afterEach(() => {
-    process.env.KUMO_COLOR = "basic";
-    delete process.env.KUMO_BG;
+    process.env.BRUINE_COLOR = "basic";
+    delete process.env.BRUINE_BG;
     resetColorDepth();
   });
 
   test("the prompt band is painted at 24 bits, edge to edge, with the accent", () => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     const text = render("ship it");
     expect(text).toContain(bgCode("userBlock", "truecolor"));
@@ -271,13 +271,13 @@ describe("painted transcript (T40)", () => {
 
 describe("prompt band keeps its columns (T40)", () => {
   afterEach(() => {
-    process.env.KUMO_COLOR = "basic";
+    process.env.BRUINE_COLOR = "basic";
     resetColorDepth();
   });
   test("the prompt still starts in column 2, accent or not", () => {
     // The glyph is the platform's own (ASCII where the terminal is not UTF-8);
     // what this test is about is the two leading columns around it.
-    const prompt = `^[ ▍|] ${kumoIcons().prompt} Read note\\.txt`;
+    const prompt = `^[ ▍|] ${bruineIcons().prompt} Read note\\.txt`;
     const start = (): string => {
       const t = new ChatTranscript();
       t.addChild(userMessageComponent("Read note.txt"));
@@ -285,7 +285,7 @@ describe("prompt band keeps its columns (T40)", () => {
       return painted.replace(/\x1b\[[0-9;]*m/g, "");
     };
     expect(start()).toMatch(new RegExp(prompt));
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     // Painting the band must not push the prompt one column to the right.
     expect(start()).toMatch(new RegExp(prompt));

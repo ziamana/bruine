@@ -3,7 +3,7 @@
 # comes back to report.ts — so the answer must say there is no cycle.
 set -eu
 cd "$(dirname "$0")"
-echo "kumo-bench-check-mode: expected-answer"
+echo "bruine-bench-check-mode: expected-answer"
 if [ ! -f answer.txt ]; then
   echo "answer.txt was not written" >&2
   exit 1

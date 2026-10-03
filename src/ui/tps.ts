@@ -1,5 +1,5 @@
 /**
- * Honest throughput (ARCHITECTURE §0): kumo computes tokens/s from its own
+ * Honest throughput (ARCHITECTURE §0): bruine computes tokens/s from its own
  * sample timestamps — never copies dsh's figure. Per LLM call (T25.1):
  * t0 = first delta, t1 = last delta, n = usage.outputTokens (or delta count
  * estimate when no usage). Decode TPS = n / (t1 - t0), shown for the LAST

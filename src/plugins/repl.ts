@@ -1,4 +1,4 @@
-import { runtimeHome } from "../compat.js";
+import { appEnv, runtimeHome } from "../compat.js";
 import { createRequire } from "node:module";
 import { TASKS_HELP } from "../ui/task-panel.js";
 import { formatShell, isShellLine, runShell } from "./shell.js";
@@ -8,13 +8,13 @@ import { Text, type SlashCommand } from "@earendil-works/pi-tui";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
-import { kumoIcons } from "../render/chars.js";
-import { KumoUi, readSettingsRoute } from "../ui/kumo-ui.js";
+import { bruineIcons } from "../render/chars.js";
+import { BruineUi, readSettingsRoute } from "../ui/bruine-ui.js";
 import { fetchProps, isPrivateIPv4 } from "../setup/discover.js";
-import { KUMO_MODES_SERVICE, NOTICE_ASK, NOTICE_AUTO, NOTICE_FULL } from "./modes.js";
-import kumoEffort, { KUMO_EFFORT_SERVICE } from "./effort.js";
-import kumoModel, { KUMO_MODEL_SERVICE } from "./model.js";
-import { KUMO_RENDER_SERVICE } from "./render.js";
+import { BRUINE_MODES_SERVICE, NOTICE_ASK, NOTICE_AUTO, NOTICE_FULL } from "./modes.js";
+import bruineEffort, { BRUINE_EFFORT_SERVICE } from "./effort.js";
+import bruineModel, { BRUINE_MODEL_SERVICE } from "./model.js";
+import { BRUINE_RENDER_SERVICE } from "./render.js";
 import { readAvailableSkills, type AvailableSkill } from "../setup/skills.js";
 import { recentSessions, replaySession, sessionChoice } from "./session-history.js";
 import { configFiles, openInEditor, resolveEditor } from "./config-edit.js";
@@ -34,24 +34,24 @@ import {
 import { stripImageChips } from "../image/pending.js";
 import { NO_VISION_NOTICE } from "../image/vision.js";
 import type { ClipboardImage } from "../image/clipboard.js";
-import type { DshContext, KumoRepl, KumoStartup } from "./ctx.js";
+import type { DshContext, BruineRepl, BruineStartup } from "./ctx.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../../package.json") as { version: string };
 
 /** Stable Cordis plugin name. */
-export const name = "kumo-repl";
+export const name = "bruine-repl";
 
 /** Core services required before the interactive loop can start. */
 export const inject = ["agentDefaultModel", "agents", "sessions"];
 
 /** The service provided by this plugin and injected by render/approval. */
-export const KUMO_REPL_SERVICE = "kumoRepl";
+export const BRUINE_REPL_SERVICE = "bruineRepl";
 
 const EXIT_COMMANDS = new Set(["/exit", "/quit"]);
 
-/** kumo's own slash commands (T31.1): source of truth for the palette. */
-export const KUMO_COMMANDS: Array<{ name: string; description?: string }> = [
+/** bruine's own slash commands (T31.1): source of truth for the palette. */
+export const BRUINE_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/new", description: "Start a new conversation" },
   { name: "/resume", description: "Resume a saved conversation in this project" },
   { name: "/verify", description: "Run this project's typecheck and tests" },
@@ -62,20 +62,20 @@ export const KUMO_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/ask", description: "Switch permissions directly" },
   { name: "/full", description: "Switch permissions directly" },
   { name: "/skills", description: "List available skills" },
-  { name: "/config", description: "Open settings.yaml and kumo.json in your editor" },
+  { name: "/config", description: "Open settings.yaml and bruine.json in your editor" },
   { name: "/tasks", description: "List background tasks (commands and sub-agents); /tasks kill <id> stops one" },
   { name: "/reload", description: "Re-read settings.yaml and the terminal background" },
   { name: "/mouse", description: "Turn mouse selection on or off (the wheel scrolls while off)" },
   { name: "/help", description: "Show commands and keys" },
-  { name: "/exit", description: "Quit kumo (also ctrl+d)" },
+  { name: "/exit", description: "Quit bruine (also ctrl+d)" },
 ];
 
-/** Palette merge helper: kumo's commands plus dsh's, no duplicates (kumo wins). */
+/** Palette merge helper: bruine's commands plus dsh's, no duplicates (bruine wins). */
 export function mergeCommands(
   dsh: Array<{ name?: unknown; description?: unknown }>,
 ): Array<{ name: string; description?: string }> {
-  const seen = new Set(KUMO_COMMANDS.map((c) => c.name));
-  const out = [...KUMO_COMMANDS];
+  const seen = new Set(BRUINE_COMMANDS.map((c) => c.name));
+  const out = [...BRUINE_COMMANDS];
   for (const d of dsh) {
     if (typeof d?.name !== "string") continue;
     const name = d.name.startsWith("/") ? d.name : `/${d.name}`;
@@ -95,7 +95,7 @@ function skillDescription(skill: AvailableSkill): string {
 
 /** The same available-skill list backs the command output and its preview. */
 export function formatAvailableSkills(skills: AvailableSkill[]): string {
-  if (skills.length === 0) return "No skills available. Run `kumo setup` to add skills.";
+  if (skills.length === 0) return "No skills available. Run `bruine setup` to add skills.";
   return [
     `Available skills (${skills.length}):`,
     ...skills.map((skill) => {
@@ -283,7 +283,7 @@ export class LineEmitter {
 
 /** Wrap a node:readline interface as a {@link LineSource} (non-TTY mode). */
 export function readlineSource(rl: ReadlineInterface): LineSource {
-  rl.setPrompt(`${kumoIcons().prompt} `);
+  rl.setPrompt(`${bruineIcons().prompt} `);
   return {
     onLine: (cb) => rl.on("line", cb),
     onClose: (cb) => rl.on("close", cb),
@@ -317,7 +317,7 @@ async function createAgent(ctx: DshContext, resumeSessionId?: string): Promise<{
   const defaultModel = ctx.get("agentDefaultModel");
   if (agents === undefined || defaultModel === undefined) return undefined;
   const selection = defaultModel.currentSelection();
-  // T34: the holder dsh reads per request; kumo-effort replaces .current to
+  // T34: the holder dsh reads per request; bruine-effort replaces .current to
   // change the reasoning effort of the NEXT request only.
   const selectionRef: {
     current: { provider: string; model: string; reasoningEffort?: string } | undefined;
@@ -343,7 +343,7 @@ async function createAgent(ctx: DshContext, resumeSessionId?: string): Promise<{
 }
 
 /**
- * dsh's own graceful shutdown can stall (observed with 0.1.5-rc.3); kumo
+ * dsh's own graceful shutdown can stall (observed with 0.1.5-rc.3); bruine
  * requests it, then force-exits after a short grace period so the process
  * never lingers.
  */
@@ -381,11 +381,11 @@ export function saidAlready(text: string | undefined, noticeShown: string | unde
 async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<void> {
   await ctx.get("loader")?.await();
   const sessions = ctx.get("sessions");
-  const startup: KumoStartup | undefined = ctx.get("kumoStartup");
+  const startup: BruineStartup | undefined = ctx.get("bruineStartup");
   if (sessions === undefined) return;
   const query = ctx.get("sessionQuery");
   const availableSessions = (excludeId?: string) => recentSessions(query, process.cwd(), excludeId);
-  const continuing = process.env.KUMO_CONTINUE === "1";
+  const continuing = appEnv("CONTINUE") === "1";
   let latest: Awaited<ReturnType<typeof availableSessions>>[number] | undefined;
   try { if (continuing) latest = (await availableSessions())[0]; }
   catch { /* a broken listing must not prevent a fresh conversation */ }
@@ -457,7 +457,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   };
   const flush = (session: unknown): Promise<unknown> => sessions.flush(session);
 
-  /** Palette items: kumo's commands plus dsh's, no duplicates (kumo wins). */
+  /** Palette items: bruine's commands plus dsh's, no duplicates (bruine wins). */
   const skillsDir = join(runtimeHome(), "skills");
   const completeCommandList = (): SlashCommand[] => {
     let commands: SlashCommand[];
@@ -467,17 +467,17 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         | undefined;
       commands = mergeCommands(svc?.list?.(agent) ?? []);
     } catch {
-      // palette works with kumo's own commands alone
-      commands = [...KUMO_COMMANDS];
+      // palette works with bruine's own commands alone
+      commands = [...BRUINE_COMMANDS];
     }
     return commands.map((command) => command.name === "/skills" ? skillCommand(skillsDir, process.cwd()) : command);
   };
 
   // Slash-command router: /exit is handled by Repl itself; the rest is
   // answered here and never sent to the model (except unknown → notice).
-  const modes = (): any => ctx.get(KUMO_MODES_SERVICE);
+  const modes = (): any => ctx.get(BRUINE_MODES_SERVICE);
   let repl: Repl | undefined;
-  let ui: KumoUi | undefined;
+  let ui: BruineUi | undefined;
   let startNewConversation: () => Promise<void> = async () => {};
   let resumeConversation: () => Promise<void> = async () => {};
   const setPermission = (next: "ask" | "auto" | "full"): void => {
@@ -489,8 +489,8 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     else if (next === "auto") m.showNotice?.(NOTICE_AUTO);
     else m.showNotice?.(NOTICE_FULL, { red: true });
   };
-  const effort = (): any => ctx.get(KUMO_EFFORT_SERVICE);
-  const modelPicker = (): any => ctx.get(KUMO_MODEL_SERVICE);
+  const effort = (): any => ctx.get(BRUINE_EFFORT_SERVICE);
+  const modelPicker = (): any => ctx.get(BRUINE_MODEL_SERVICE);
   const router = async (
     text: string,
     emitLine: (t: string) => void,
@@ -540,7 +540,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       const current: string = m?.permission ?? "ask";
       const choice = await ui.askChoice("Permissions", [
         { value: "ask", label: `Ask: confirm every command and write${current === "ask" ? " (current)" : ""}` },
-        { value: "auto", label: `Auto: kumo decides, risky actions still ask${current === "auto" ? " (current)" : ""}` },
+        { value: "auto", label: `Auto: bruine decides, risky actions still ask${current === "auto" ? " (current)" : ""}` },
         { value: "full", label: `Full access: never asks${current === "full" ? " (current)" : ""}` },
       ]);
       if (choice === 0) setPermission("ask");
@@ -604,13 +604,13 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/model  Switch provider and model (also f2)",
           "/provider  List the providers (also /provider all)",
           "/skills  List available skills (or /skills <name>)",
-          "/config  Open settings.yaml and kumo.json in your editor (/config path lists them)",
+          "/config  Open settings.yaml and bruine.json in your editor (/config path lists them)",
           "/tasks  List background tasks; /tasks kill <id> stops one",
           "/reload  Re-read settings.yaml and the terminal background",
           "/help  Show commands and keys",
           "!cmd  Run a shell command yourself (output not sent to the model)",
           "@file  Attach a file (a list opens as you type)",
-          "/exit  Quit kumo (also ctrl+d)",
+          "/exit  Quit bruine (also ctrl+d)",
           `Esc interrupt, ctrl+c clear (quits when empty), ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, f2 next model, PageUp/PageDown read back (the input bar stays), ${TASKS_HELP}`,
         ].join("\n"),
       );
@@ -648,7 +648,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       const home = resolveDshHome();
       const files = configFiles(home);
       if (files.length === 0) {
-        reply(`No settings yet in ${home}. Run \`kumo setup\` first.`);
+        reply(`No settings yet in ${home}. Run \`bruine setup\` first.`);
         return;
       }
       const list = files.map((f) => `  ${f}`).join("\n");
@@ -659,16 +659,16 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       }
       const choice = resolveEditor(home);
       if (choice === undefined) {
-        reply(`No graphical editor found. Set KUMO_EDITOR (for example KUMO_EDITOR=kate), or open:\n${list}`);
+        reply(`No graphical editor found. Set BRUINE_EDITOR (for example BRUINE_EDITOR=kate), or open:\n${list}`);
         return;
       }
       const result = await openInEditor(choice, files);
       if (!result.ok) {
-        reply(`Could not open ${result.editor}: ${result.error ?? "it did not start"}.\nSet KUMO_EDITOR to another editor, or open:\n${list}`);
+        reply(`Could not open ${result.editor}: ${result.error ?? "it did not start"}.\nSet BRUINE_EDITOR to another editor, or open:\n${list}`);
         return;
       }
       const names = files.map((f) => f.split(/[\\/]/).pop()).join(" and ");
-      reply(`Opened ${names} in ${result.editor}. Save, then /reload re-reads settings.yaml; kumo.json is read when kumo starts.`);
+      reply(`Opened ${names} in ${result.editor}. Save, then /reload re-reads settings.yaml; bruine.json is read when bruine starts.`);
       return;
     }
     if (cmd === "/reload") {
@@ -734,11 +734,11 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   if (isTTY) {
     // pi-tui shell (T13a): header / chat / editor / footer.
     const emitter = new LineEmitter();
-    ui = new KumoUi(
+    ui = new BruineUi(
       pkg.version,
       {
         onSubmit: (text) => {
-          ctx.get(KUMO_RENDER_SERVICE)?.cancelSuggest?.();
+          ctx.get(BRUINE_RENDER_SERVICE)?.cancelSuggest?.();
           ui?.clearGhost();
           if (text.trim() !== "" && ui !== undefined) ui.rememberHistory(text);
           void router(text, (t) => emitter.emitLine(t), (s) => {
@@ -747,7 +747,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           });
         },
         onUserActivity: () => {
-          ctx.get(KUMO_RENDER_SERVICE)?.cancelSuggest?.();
+          ctx.get(BRUINE_RENDER_SERVICE)?.cancelSuggest?.();
           ui?.clearGhost();
         },
         onEscape: () => emitter.emitSigint(),
@@ -759,7 +759,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         },
       },
       undefined,
-      kumoIcons(),
+      bruineIcons(),
     );
     ui.footer.set({ model: selection.model, provider: selection.provider });
     ui.setAutocompleteCommands(completeCommandList());
@@ -772,8 +772,8 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       },
       lines: emitter.source(),
     });
-    const service: KumoRepl = { agent, ui, selection: selectionRef };
-    ctx.provide(KUMO_REPL_SERVICE, service);
+    const service: BruineRepl = { agent, ui, selection: selectionRef };
+    ctx.provide(BRUINE_REPL_SERVICE, service);
 
     const showSavedDialogue = (saved: typeof agent): void => {
       if (ui !== undefined) replaySession(saved.session, ui as never);
@@ -882,7 +882,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         if (props?.template?.enableThinking === true) {
           (ui as unknown as {
             showPersistentNotice?: (t: string) => void;
-          }).showPersistentNotice?.("Effort control is available for this model: run kumo setup to enable it.");
+          }).showPersistentNotice?.("Effort control is available for this model: run bruine setup to enable it.");
         }
       } catch {
         // the probe is best effort
@@ -901,12 +901,12 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     output: process.stdout,
     terminal: false,
   });
-  const service: KumoRepl = {
+  const service: BruineRepl = {
     agent,
     ask: (question) => askViaReadline(rl, question),
     selection: selectionRef,
   };
-  ctx.provide(KUMO_REPL_SERVICE, service);
+  ctx.provide(BRUINE_REPL_SERVICE, service);
   const base = readlineSource(rl);
   const wrapped: LineSource = {
     onLine: (cb) => base.onLine((line) => void router(line, cb, (s) => console.log(s))),
@@ -926,20 +926,20 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
 }
 
 export function apply(ctx: DshContext): void {
-  // T34: kumo-effort registers /effort in dsh's commands service and owns the
+  // T34: bruine-effort registers /effort in dsh's commands service and owns the
   // reasoning effort of the live selection. Mounted here so the profile's
   // bundle patch stays untouched.
-  ctx.plugin?.(kumoEffort);
-  // T37: kumo-model owns /model and /provider — the provider/model picker and
+  ctx.plugin?.(bruineEffort);
+  // T37: bruine-model owns /model and /provider — the provider/model picker and
   // the switch of the live route. Mounted here so the profile's bundle patch
   // stays untouched.
-  ctx.plugin?.(kumoModel);
+  ctx.plugin?.(bruineModel);
   const exit = ctx.get("appExit") as ((code: number) => void) | undefined;
   if (exit === undefined) {
-    throw new Error("kumo-repl: the launcher must provide ctx.appExit before the tree mounts");
+    throw new Error("bruine-repl: the launcher must provide ctx.appExit before the tree mounts");
   }
   runRepl(ctx, exit).catch((error) => {
-    console.error(`kumo: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`bruine: ${error instanceof Error ? error.message : String(error)}`);
     exit(1);
   });
 }

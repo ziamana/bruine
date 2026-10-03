@@ -1,5 +1,5 @@
 import type { Component } from "@earendil-works/pi-tui";
-import { kumoIcons, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, type BruineIcons } from "../render/chars.js";
 import { clipCells, sanitize, spinnerFrame } from "../render/reasoning.js";
 import type { RailState } from "./chat-layout.js";
 import { parsePartialJson } from "./partial-json.js";
@@ -11,7 +11,7 @@ import type { ChatToolCall } from "./tool-call-component.js";
 export interface QuestionCallOptions {
   /** Repaint hook. Left out, the call is never held back. */
   onTick?: () => void;
-  /** Overrides the motion gate (no tty, CI, KUMO_ASCII, KUMO_NO_ANIMATION). */
+  /** Overrides the motion gate (no tty, CI, BRUINE_ASCII, BRUINE_NO_ANIMATION). */
   animate?: boolean;
   typewriter?: TypewriterOptions;
 }
@@ -50,7 +50,7 @@ export class QuestionCallComponent implements ChatToolCall, Component {
 
   constructor(
     private now: () => number = Date.now,
-    private icons: KumoIcons = kumoIcons(),
+    private icons: BruineIcons = bruineIcons(),
     opts: QuestionCallOptions = {},
   ) {
     this.#start = now();

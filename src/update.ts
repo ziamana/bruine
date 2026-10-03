@@ -1,18 +1,18 @@
-import { runtimeHome, configReadPath, configWritePath } from "./compat.js";
+import { appEnv, runtimeHome, configReadPath, configWritePath } from "./compat.js";
 /**
- * T30 — update check + `kumo update`.
+ * T30 — update check + `bruine update`.
  *
- * At launch kumo fires a background check (never delays the UI): at most
- * once per 24 h a plain `GET https://registry.npmjs.org/kumo-code/latest`
+ * At launch bruine fires a background check (never delays the UI): at most
+ * once per 24 h a plain `GET https://registry.npmjs.org/bruine/latest`
  * (2 s timeout), the result cached in `$DSH_HOME/update-check.json` as
  * `{ checkedAt, latest }`. When the cached `latest` is newer than the
  * running version, the session shows one notice line above the editor
  * (T24 notice style, stays until the first prompt).
  *
  * Privacy: the GET is the only traffic — no id, no version in headers
- * beyond npm's default. The check is off when kumo.json says
- * `updateCheck: false`, when `KUMO_NO_UPDATE_CHECK=1`, whenever `CI` is
- * set, and whenever stdout is not a TTY. `kumo update` never installs
+ * beyond npm's default. The check is off when bruine.json says
+ * `updateCheck: false`, when `BRUINE_NO_UPDATE_CHECK=1`, whenever `CI` is
+ * set, and whenever stdout is not a TTY. `bruine update` never installs
  * anything without an explicit yes, and a developer (git/link) install is
  * never touched at all.
  */
@@ -20,7 +20,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path, { join } from "node:path";
 
-export const REGISTRY_LATEST = "https://registry.npmjs.org/kumo-code/latest";
+export const REGISTRY_LATEST = "https://registry.npmjs.org/bruine/latest";
 export const UPDATE_CACHE_FILE = "update-check.json";
 export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -41,7 +41,7 @@ export type FetchLike = (
   init?: { signal?: AbortSignal },
 ) => Promise<{ ok: boolean; json(): Promise<any> }>;
 
-/** The kumo home the session and the launcher both use (T26 convention). */
+/** The bruine home the session and the launcher both use (T26 convention). */
 export function resolveDshHome(
   env: NodeJS.ProcessEnv = process.env,
   pathMod: typeof path = path,
@@ -60,7 +60,7 @@ export function updateCheckEnabled(opts: {
   isTTY: boolean;
 }): boolean {
   const env = opts.env ?? process.env;
-  if (env.KUMO_NO_UPDATE_CHECK === "1") return false;
+  if (appEnv("NO_UPDATE_CHECK", env) === "1") return false;
   if (env.CI !== undefined && env.CI !== "") return false;
   if (opts.doc?.updateCheck === false) return false;
   return opts.isTTY;
@@ -87,7 +87,7 @@ export function compareSemver(a: string, b: string): number | null {
 
 /** The exact notice text (T24 notice style, one line). */
 export function formatUpdateNotice(latest: string, current: string): string {
-  return `kumo ${latest} is available (you have ${current}). Run: kumo update`;
+  return `bruine ${latest} is available (you have ${current}). Run: bruine update`;
 }
 
 /** The notice to show at startup, or undefined when nothing newer is known. */
@@ -128,8 +128,8 @@ async function writeUpdateCache(
   await rename(tmp, file);
 }
 
-/** kumo.json, best effort (absent or broken → {}). */
-export async function readKumoJsonDoc(dshHome: string): Promise<Record<string, unknown>> {
+/** bruine.json, best effort (absent or broken → {}). */
+export async function readBruineJsonDoc(dshHome: string): Promise<Record<string, unknown>> {
   try {
     return JSON.parse(
       await readFile(configReadPath(dshHome), "utf8"),
@@ -153,12 +153,12 @@ export async function checkForUpdate(opts: {
   env?: NodeJS.ProcessEnv;
   isTTY?: boolean;
   pathMod?: typeof path;
-  /** Skip reading kumo.json (caller resolved `updateCheck` already). */
+  /** Skip reading bruine.json (caller resolved `updateCheck` already). */
   doc?: Record<string, unknown>;
 }): Promise<CheckOutcome> {
   const pathMod = opts.pathMod ?? path;
   const now = opts.now?.() ?? Date.now();
-  const doc = opts.doc ?? (await readKumoJsonDoc(opts.dshHome));
+  const doc = opts.doc ?? (await readBruineJsonDoc(opts.dshHome));
   if (
     !updateCheckEnabled({
       doc,
@@ -189,7 +189,7 @@ export async function checkForUpdate(opts: {
   }
 }
 
-/** How kumo was installed, from the real path of the running entry script. */
+/** How bruine was installed, from the real path of the running entry script. */
 export type InstallKind = "npm" | "pnpm" | "bun" | "developer";
 
 export function detectInstallKind(realPath: string): InstallKind {
@@ -204,20 +204,20 @@ export function detectInstallKind(realPath: string): InstallKind {
   if (has("/.pnpm/") || has("/.pnpm-global/") || has("/pnpm/global/") || has("/pnpm/node_modules/")) {
     return "pnpm";
   }
-  if (has("/node_modules/kumo-code/")) return "npm";
+  if (has("/node_modules/bruine/") || has("/node_modules/kumo-code/")) return "npm";
   return "developer";
 }
 
-/** kumo.json `updateCheck` (undefined = never chosen = default on). */
+/** bruine.json `updateCheck` (undefined = never chosen = default on). */
 export function readUpdateCheckChoice(
   doc: Record<string, unknown>,
 ): boolean | undefined {
   return typeof doc.updateCheck === "boolean" ? doc.updateCheck : undefined;
 }
 
-/** Merge `updateCheck` into kumo.json (0600, atomic); keeps every other key. */
+/** Merge `updateCheck` into bruine.json (0600, atomic); keeps every other key. */
 export async function setUpdateCheck(dshHome: string, value: boolean): Promise<void> {
-  const doc = await readKumoJsonDoc(dshHome);
+  const doc = await readBruineJsonDoc(dshHome);
   doc.updateCheck = value;
   const file = configWritePath(dshHome);
   await mkdir(dshHome, { recursive: true });
@@ -230,11 +230,11 @@ export async function setUpdateCheck(dshHome: string, value: boolean): Promise<v
 export function updateCommand(kind: InstallKind): string[] | undefined {
   switch (kind) {
     case "npm":
-      return ["npm", "install", "-g", "kumo-code@latest"];
+      return ["npm", "install", "-g", "bruine@latest"];
     case "pnpm":
-      return ["pnpm", "add", "-g", "kumo-code@latest"];
+      return ["pnpm", "add", "-g", "bruine@latest"];
     case "bun":
-      return ["bun", "add", "-g", "kumo-code@latest"];
+      return ["bun", "add", "-g", "bruine@latest"];
     case "developer":
       return undefined;
   }

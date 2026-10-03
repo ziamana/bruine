@@ -20,20 +20,20 @@ const editor = { focused: true, borderColor: (t: string) => t, frameBottomRow: 2
 let saved: Record<string, string | undefined> = {};
 let tty: boolean | undefined;
 beforeEach(() => {
-  saved = { a: process.env.KUMO_ASCII, n: process.env.KUMO_NO_ANIMATION, c: process.env.CI, t: process.env.TERM, color: process.env.KUMO_COLOR, r: process.env.KUMO_NO_RIPPLE };
-  process.env.KUMO_ASCII = "0";
-  delete process.env.KUMO_NO_ANIMATION;
+  saved = { a: process.env.BRUINE_ASCII, n: process.env.BRUINE_NO_ANIMATION, c: process.env.CI, t: process.env.TERM, color: process.env.BRUINE_COLOR, r: process.env.BRUINE_NO_RIPPLE };
+  process.env.BRUINE_ASCII = "0";
+  delete process.env.BRUINE_NO_ANIMATION;
   delete process.env.CI;
   process.env.TERM = "xterm-256color";
-  process.env.KUMO_COLOR = "none";
-  process.env.KUMO_NO_RIPPLE = "0";
+  process.env.BRUINE_COLOR = "none";
+  process.env.BRUINE_NO_RIPPLE = "0";
   tty = process.stdout.isTTY;
   Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
   resetColorDepth();
 });
 afterEach(() => {
   const back = (k: string, v: string | undefined): void => { if (v === undefined) delete process.env[k]; else process.env[k] = v; };
-  back("KUMO_ASCII", saved.a); back("KUMO_NO_ANIMATION", saved.n); back("CI", saved.c); back("TERM", saved.t); back("KUMO_COLOR", saved.color); back("KUMO_NO_RIPPLE", saved.r);
+  back("BRUINE_ASCII", saved.a); back("BRUINE_NO_ANIMATION", saved.n); back("CI", saved.c); back("TERM", saved.t); back("BRUINE_COLOR", saved.color); back("BRUINE_NO_RIPPLE", saved.r);
   Object.defineProperty(process.stdout, "isTTY", { value: tty, configurable: true });
   resetColorDepth();
 });
@@ -97,8 +97,8 @@ describe("the ripple on the prompt rule", () => {
     expect(plain(f.render(60)[0]!)).toContain("Working");
   });
 
-  test("KUMO_NO_RIPPLE=1 turns the ring off and leaves the rest of the motion", () => {
-    process.env.KUMO_NO_RIPPLE = "1";
+  test("BRUINE_NO_RIPPLE=1 turns the ring off and leaves the rest of the motion", () => {
+    process.env.BRUINE_NO_RIPPLE = "1";
     const { frame: f, activity } = frame();
     activity.start("Working");
     expect(plain(f.render(60)[0]!)).toContain("Working");
@@ -108,7 +108,7 @@ describe("the ripple on the prompt rule", () => {
   });
 
   test("with motion off there is no ring and the repaint loop is not kept alive", () => {
-    process.env.KUMO_NO_ANIMATION = "1";
+    process.env.BRUINE_NO_ANIMATION = "1";
     const { frame: f, activity } = frame();
     activity.start("Working");
     activity.stop();

@@ -15,11 +15,11 @@ function harness(services: Record<string, unknown> = {}, opts: { terminal?: bool
   const repl: Record<string, unknown> = terminal
     ? { agent, ui: { footer: { set: () => {} }, requestRender: () => {}, addChat: () => {} } }
     : { agent };
-  fake.provided.set("kumoRepl", repl);
+  fake.provided.set("bruineRepl", repl);
   for (const { services: deps, cb } of fake.injected) {
-    if (deps.includes("kumoRepl")) cb({ kumoRepl: repl });
+    if (deps.includes("bruineRepl")) cb({ bruineRepl: repl });
   }
-  const modes: any = fake.provided.get("kumoModes");
+  const modes: any = fake.provided.get("bruineModes");
   if (!terminal) modes.govern(agent);
   const preExecute = (name: string, args: unknown, callId = "c1", execAgent: unknown = agent) =>
     fake.emit(
@@ -36,7 +36,7 @@ const llmReturning = (text: string): any => ({
   },
 });
 
-describe("kumo gate (T16.C)", () => {
+describe("bruine gate (T16.C)", () => {
   test("ask mode: bash asks, read-only allows", async () => {
     const { modes, preExecute } = harness();
     modes.permission = "ask";
@@ -146,7 +146,7 @@ describe("the gate without a terminal (T42)", () => {
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const prev = process.env.DSH_HOME;
-    const fresh = await mkdtemp(join(tmpdir(), "kumo-fresh-"));
+    const fresh = await mkdtemp(join(tmpdir(), "bruine-fresh-"));
     process.env.DSH_HOME = fresh;
     try {
       const { Modes } = await import("../src/plugins/modes.js");
@@ -155,7 +155,7 @@ describe("the gate without a terminal (T42)", () => {
       const mkModes = async (): Promise<string> => {
         const fake = fakeCtx();
         apply(fake.ctx as never);
-        const modes = fake.provided.get("kumoModes") as { permission: string };
+        const modes = fake.provided.get("bruineModes") as { permission: string };
         return modes.permission;
       };
       expect(await mkModes()).toBe("auto");
@@ -365,13 +365,13 @@ describe("judge (T16.C.3, T18.7)", () => {
     apply(fake.ctx as any);
     const chats: any[] = [];
     const agent = { session: {}, inject: () => {} };
-    fake.provided.set("kumoRepl", { agent });
+    fake.provided.set("bruineRepl", { agent });
     for (const { services, cb } of fake.injected) {
-      if (services.includes("kumoRepl")) {
-        cb({ kumoRepl: { agent, ui: { addChat: (c: any) => chats.push(c), footer: { set: () => {} }, requestRender: () => {}, icons: {} } } });
+      if (services.includes("bruineRepl")) {
+        cb({ bruineRepl: { agent, ui: { addChat: (c: any) => chats.push(c), footer: { set: () => {} }, requestRender: () => {}, icons: {} } } });
       }
     }
-    const modes: any = fake.provided.get("kumoModes");
+    const modes: any = fake.provided.get("bruineModes");
     modes.permission = "auto";
     const exec = (callId: string) =>
       fake.emit(

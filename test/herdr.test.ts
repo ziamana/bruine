@@ -11,7 +11,7 @@ import {
 } from "../src/plugins/herdr.js";
 import { fakeCtx, flushInjects } from "./fakes.js";
 
-const ENV_KEYS = ["HERDR_ENV", "HERDR_SOCKET_PATH", "HERDR_PANE_ID", "KUMO_HEADLESS"] as const;
+const ENV_KEYS = ["HERDR_ENV", "HERDR_SOCKET_PATH", "HERDR_PANE_ID", "BRUINE_HEADLESS"] as const;
 
 let savedEnv: Record<string, string | undefined> = {};
 beforeEach(() => {
@@ -32,10 +32,10 @@ let pipeCounter = 0;
 /** Temp socket (Unix) or named pipe (Windows) for one fake server. */
 function socketPaths(): { envValue: string; listenPath: string; cleanup: () => void } {
   if (process.platform === "win32") {
-    const name = `kumo-herdr-test-${String(process.pid)}-${String(pipeCounter++)}`;
+    const name = `bruine-herdr-test-${String(process.pid)}-${String(pipeCounter++)}`;
     return { envValue: name, listenPath: `\\\\.\\pipe\\${name}`, cleanup: () => {} };
   }
-  const dir = mkdtempSync(join(tmpdir(), "kumo-herdr-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "bruine-herdr-test-"));
   return {
     envValue: join(dir, "herdr.sock"),
     listenPath: join(dir, "herdr.sock"),
@@ -153,7 +153,7 @@ describe("herdr plugin", () => {
           const dispose = apply(fake.ctx as any, { installExitHooks: false });
           expect(fake.injected, JSON.stringify(vars)).toEqual([]);
           const service = makeService("sess-1");
-          for (const { cb } of fake.injected) cb({ kumoRepl: service });
+          for (const { cb } of fake.injected) cb({ bruineRepl: service });
           fake.emit("session/event", service.agent.session, { type: "turn/start", data: {} });
           const p = fake.emit("approval/request", { agent: service.agent, toolName: "bash" }, async () => "allowed-once");
           await p;
@@ -180,7 +180,7 @@ describe("herdr plugin", () => {
     await server.listen(paths.listenPath);
     try {
       setEnv(paths.envValue);
-      process.env.KUMO_HEADLESS = "1";
+      process.env.BRUINE_HEADLESS = "1";
       const fake = fakeCtx();
       const dispose = apply(fake.ctx as any, { installExitHooks: false });
       expect(fake.injected).toEqual([]);
@@ -202,7 +202,7 @@ describe("herdr plugin", () => {
       const fake = fakeCtx();
       const dispose = apply(fake.ctx as any, { installExitHooks: false });
       const service = makeService("sess-1");
-      flushInjects(fake, { kumoRepl: service });
+      flushInjects(fake, { bruineRepl: service });
       await server.waitFor(1);
       fake.emit("session/event", service.agent.session, { type: "turn/start", data: {} });
       await server.waitFor(2);
@@ -233,11 +233,11 @@ describe("herdr plugin", () => {
       ]);
       expect(turn.map((l) => l.msg.params.state)).toEqual(["idle", "working", "blocked", "working", "idle"]);
       for (const l of turn) {
-        expect(l.msg.params.agent).toBe("kumo");
-        expect(l.msg.params.source).toBe("kumo");
+        expect(l.msg.params.agent).toBe("bruine");
+        expect(l.msg.params.source).toBe("bruine");
         expect(l.msg.params.pane_id).toBe("wG:p2");
         expect(l.msg.params.agent_session_id).toBe("sess-1");
-        expect(l.msg.id).toMatch(/^kumo:\d+:[a-z0-9]+$/);
+        expect(l.msg.id).toMatch(/^bruine:\d+:[a-z0-9]+$/);
       }
       const seqs = turn.map((l) => l.msg.params.seq as number);
       for (let i = 1; i < seqs.length; i++) expect(seqs[i]).toBeGreaterThan(seqs[i - 1]!);
@@ -258,7 +258,7 @@ describe("herdr plugin", () => {
       const fake = fakeCtx();
       const dispose = apply(fake.ctx as any, { installExitHooks: false });
       const service = makeService("sess-1");
-      flushInjects(fake, { kumoRepl: service });
+      flushInjects(fake, { bruineRepl: service });
       await server.waitFor(1);
       const answered = fake.emit(
         "user-questions/request",
@@ -285,7 +285,7 @@ describe("herdr plugin", () => {
       const fake = fakeCtx();
       const dispose = apply(fake.ctx as any, { installExitHooks: false });
       const service = makeService("sess-1");
-      flushInjects(fake, { kumoRepl: service });
+      flushInjects(fake, { bruineRepl: service });
       await server.waitFor(1);
       fake.emit("session/event", (service as any).agent.session, { type: "turn/start", data: {} });
       fake.emit("session/event", (service as any).agent.session, {
@@ -322,7 +322,7 @@ describe("herdr plugin", () => {
       const fake = fakeCtx();
       const dispose = apply(fake.ctx as any, { installExitHooks: false });
       const service: any = makeService("sess-1");
-      flushInjects(fake, { kumoRepl: service });
+      flushInjects(fake, { bruineRepl: service });
       await server.waitFor(1);
       service.agent = { session: { id: "sess-2" } };
       await server.waitFor(3);
@@ -334,7 +334,7 @@ describe("herdr plugin", () => {
       expect(first[1].method).toBe("pane.report_agent_session");
       expect(first[1].params.session_start_source).toBe("new");
       expect(first[1].params.agent_session_id).toBe("sess-2");
-      expect(first[1].params.agent).toBe("kumo");
+      expect(first[1].params.agent).toBe("bruine");
       expect(first[2].method).toBe("pane.report_agent");
       expect(first[2].params.state).toBe("idle");
       expect(first[2].params.agent_session_id).toBe("sess-2");
@@ -356,7 +356,7 @@ describe("herdr plugin", () => {
       const fake = fakeCtx();
       const dispose = apply(fake.ctx as any, { installExitHooks: false });
       const service = makeService("sess-1");
-      flushInjects(fake, { kumoRepl: service });
+      flushInjects(fake, { bruineRepl: service });
       await server.waitFor(1);
       let delegated = false;
       const outcome = (await fake.emit(
@@ -388,7 +388,7 @@ describe("herdr plugin", () => {
     const dispose = apply(fake.ctx as any, { installExitHooks: false });
     const service = makeService("sess-1");
     const start = Date.now();
-    flushInjects(fake, { kumoRepl: service });
+    flushInjects(fake, { bruineRepl: service });
     fake.emit("session/event", service.agent.session, { type: "turn/start", data: {} });
     const p = fake.emit("approval/request", { agent: service.agent, toolName: "bash" }, async () => "allowed-once");
     await p;
@@ -420,7 +420,7 @@ describe("herdr plugin", () => {
       const dispose = apply(fake.ctx as any, { installExitHooks: false });
       const service = makeService("sess-1");
       const start = Date.now();
-      flushInjects(fake, { kumoRepl: service });
+      flushInjects(fake, { bruineRepl: service });
       fake.emit("session/event", service.agent.session, { type: "turn/start", data: {} });
       // The handlers are fire and forget: the turn is never held up.
       expect(Date.now() - start).toBeLessThan(500);
@@ -448,7 +448,7 @@ describe("herdr plugin", () => {
       const fake = fakeCtx();
       const dispose = apply(fake.ctx as any, { installExitHooks: false });
       const service = makeService("sess-1");
-      flushInjects(fake, { kumoRepl: service });
+      flushInjects(fake, { bruineRepl: service });
       await server.waitFor(1);
       fake.emit("session/event", (service as any).agent.session, { type: "turn/start", data: {} });
       fake.emit("session/event", (service as any).agent.session, {
@@ -461,8 +461,8 @@ describe("herdr plugin", () => {
       const last = server.lines[server.lines.length - 1]!.msg;
       expect(last.method).toBe("pane.release_agent");
       expect(last.params.pane_id).toBe("wG:p2");
-      expect(last.params.agent).toBe("kumo");
-      expect(last.params.source).toBe("kumo");
+      expect(last.params.agent).toBe("bruine");
+      expect(last.params.source).toBe("bruine");
       const seqs = server.lines.map((l) => l.msg.params.seq as number);
       for (let i = 1; i < seqs.length; i++) expect(seqs[i]).toBeGreaterThan(seqs[i - 1]!);
     } finally {

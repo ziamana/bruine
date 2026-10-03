@@ -3,7 +3,7 @@
 # and the file that was never a draft has not moved.
 set -eu
 cd "$(dirname "$0")"
-echo "kumo-bench-check-mode: file-report"
+echo "bruine-bench-check-mode: file-report"
 if ls docs/guides/draft-*.md >/dev/null 2>&1; then
   echo "a draft-*.md file is still there" >&2
   exit 1

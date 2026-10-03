@@ -55,7 +55,7 @@ describe("style (T24.1)", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("no em-dash anywhere in kumo's own skills/**", () => {
+  test("no em-dash anywhere in bruine's own skills/**", () => {
     const root = join(__dirname, "..", "skills");
     // The skills written by other people are shipped as their authors wrote them (see
     // THIRD_PARTY_NOTICES.md): their wording is not ours to change.
@@ -78,7 +78,7 @@ describe("style (T24.1)", () => {
   });
 
   /**
-   * T41: `npm view kumo-code` printed `repository: TODO_GITHUB_URL` and the
+   * T41: `npm view bruine` printed `repository: TODO_GITHUB_URL` and the
    * package could not be published. Every publishable field is asserted here so
    * a placeholder cannot come back.
    */
@@ -95,8 +95,8 @@ describe("style (T24.1)", () => {
       bin: Record<string, string>;
       keywords?: string[];
     };
-    expect(pkg.name).toBe("kumo-code");
-    expect(pkg.bin.kumo).toBe("dist/bin.js");
+    expect(pkg.name).toBe("bruine");
+    expect(pkg.bin.bruine).toBe("dist/bin.js");
     expect(pkg.license).toBe("MIT");
     expect(pkg.repository.type).toBe("git");
     // npm only turns a repository into a working link with the git+https form.

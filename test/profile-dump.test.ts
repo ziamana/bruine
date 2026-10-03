@@ -10,10 +10,10 @@ import { resolveDshEntry } from "../src/launch.js";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("profile composition (T15)", () => {
-    test("dsh --dump-config carries kumo's identity, plugins and tools", async () => {
+    test("dsh --dump-config carries bruine's identity, plugins and tools", async () => {
       const entry = resolveDshEntry();
       expect(entry).toBeDefined();
-      const home = await mkdtemp(join(tmpdir(), "kumo-dump-"));
+      const home = await mkdtemp(join(tmpdir(), "bruine-dump-"));
       const { dir } = await ensureProfile(home);
       const env: Record<string, string> = {
         ...(process.env as Record<string, string>),
@@ -42,12 +42,12 @@ describe("profile composition (T15)", () => {
       expect(out).toContain("Your working directory is");
     // Plugins
     for (const needle of [
-      "kumo-code/startup",
-      "kumo-code/repl",
-      "kumo-code/render",
-      "kumo-code/approval",
-      "kumo-code/modes",
-      "kumo-code/web-search",
+      "bruine/startup",
+      "bruine/repl",
+      "bruine/render",
+      "bruine/approval",
+      "bruine/modes",
+      "bruine/web-search",
     ]) {
       expect(out).toContain(needle);
     }
@@ -60,16 +60,16 @@ describe("profile composition (T15)", () => {
       "tool-str-replace-editor", "tool-present",
     ]) {
       const row = out.split(`- id: ${id}\n`)[1]?.split(/\n(?:# == |\- id: )/)[0];
-      expect(row, id).toContain("disabled: !!js process.env.KUMO_TOOLS !== 'full'");
+      expect(row, id).toContain("disabled: !!js process.env.BRUINE_TOOLS !== 'full'");
     }
-    // Modes groundwork (T16): sandbox left fully open, approvals always reach kumo
+    // Modes groundwork (T16): sandbox left fully open, approvals always reach bruine
     expect(out).toContain("danger-full-access");
     expect(out).toMatch(/policy: *ask/);
       expect(out).toContain("dsh-subagent");
       // Search wiring (T15.3)
       expect(out).toContain("searchProvider");
-      // T26: kumo owns USER skills — skill-filesystem's agentsHome is repointed
-      // into $DSH_HOME (a dir kumo never fills), so ~/.agents/skills is no
+      // T26: bruine owns USER skills — skill-filesystem's agentsHome is repointed
+      // into $DSH_HOME (a dir bruine never fills), so ~/.agents/skills is no
       // longer read implicitly.
       expect(out).toMatch(
         /id: skill-filesystem[\s\S]{0,120}agentsHome: !!js dshHomePath\('agents'\)/,

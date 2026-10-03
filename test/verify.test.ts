@@ -6,7 +6,7 @@ import { formatVerification, runVerification, verificationPlan } from "../src/pl
 
 describe("/verify", () => {
   test("chooses configured Node checks and reports their actual results", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "kumo-verify-"));
+    const dir = mkdtempSync(join(tmpdir(), "bruine-verify-"));
     try {
       writeFileSync(join(dir, "package.json"), JSON.stringify({ packageManager: "pnpm@12.0.0", scripts: { typecheck: "tsc --noEmit", test: "vitest run" } }));
       expect(verificationPlan(dir).map((check) => check.command)).toEqual(["pnpm run typecheck", "pnpm test"]);

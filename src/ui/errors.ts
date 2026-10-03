@@ -3,7 +3,7 @@ import { runtimeHome } from "../compat.js";
  * T33b — errors must say what to do. One mapping from a dsh/pi-ai turn
  * failure to the ticket's two UI lines: one red actionable line, one dim
  * hint line — never a stack trace. The raw detail (code, status, message
- * chain) goes to $DSH_HOME/logs/kumo.log.
+ * chain) goes to $DSH_HOME/logs/bruine.log.
  */
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -34,7 +34,7 @@ export interface ErrorLines {
 }
 
 /**
- * Bold is an attribute, not a colour, so `KUMO_COLOR=none` has to take it as well:
+ * Bold is an attribute, not a colour, so `BRUINE_COLOR=none` has to take it as well:
  * "no colour" means no SGR at all, and a lone `\x1b[1m` is still something to read
  * past on a screen where nothing else is decorated.
  */
@@ -75,12 +75,12 @@ export function describeLlmError(failure: LlmFailure, route: ErrorRoute): ErrorL
   const at = server === undefined ? "the model server" : `your model server at ${server}`;
 
   if (code === "AUTH" || status === 401 || status === 403 || /\b40[13]\b/.test(message)) {
-    return { message: `The API key was refused by ${route.provider}`, hint: "Set a new key: kumo setup" };
+    return { message: `The API key was refused by ${route.provider}`, hint: "Set a new key: bruine setup" };
   }
   if (status === 404 || /\b404\b|model.{0,30}(not found|does not exist)/i.test(message)) {
     return {
       message: `Model "${route.model}" not found on ${server ?? "the model server"}`,
-      hint: "Change it: kumo setup",
+      hint: "Change it: bruine setup",
       wantAvailableModels: true,
     };
   }
@@ -88,7 +88,7 @@ export function describeLlmError(failure: LlmFailure, route: ErrorRoute): ErrorL
     return { message: `Rate limited by ${route.provider}`, hint: "Wait a moment and try again" };
   }
   if (code === "QUOTA_EXCEEDED") {
-    return { message: `Quota exceeded at ${route.provider}`, hint: "Check the account balance: kumo setup" };
+    return { message: `Quota exceeded at ${route.provider}`, hint: "Check the account balance: bruine setup" };
   }
   if (code === "CONTEXT_WINDOW_EXCEEDED") {
     const n = route.contextWindow !== undefined && route.contextWindow > 0 ? ` (${formatK(route.contextWindow)})` : "";
@@ -104,7 +104,7 @@ export function describeLlmError(failure: LlmFailure, route: ErrorRoute): ErrorL
   if (code === "TRANSPORT" || /\bECONN|\b(?:network|connection|socket|fetch|dns)\b/i.test(message)) {
     return {
       message: `Can't reach ${at}`,
-      hint: "Is llama.cpp / Ollama / LM Studio running?  Change it: kumo setup",
+      hint: "Is llama.cpp / Ollama / LM Studio running?  Change it: bruine setup",
     };
   }
   if (code === "SERVER" || (status !== undefined && status >= 500)) {
@@ -114,7 +114,7 @@ export function describeLlmError(failure: LlmFailure, route: ErrorRoute): ErrorL
     };
   }
   // A retry loop that gave up because the user pressed Esc arrives here, and the
-  // generic hint below ("if it repeats: kumo setup") is the wrong thing to say to
+  // generic hint below ("if it repeats: bruine setup") is the wrong thing to say to
   // somebody who just stopped the turn on purpose. The provider's own wording is
   // kept — it knows how many attempts it made — and the hint says what to do next.
   if (code === "ABORTED" || code === "CANCELLED" || /\b(cancell?ed|aborted|interrupted)\b/i.test(message)) {
@@ -127,7 +127,7 @@ export function describeLlmError(failure: LlmFailure, route: ErrorRoute): ErrorL
   // Anything else: say the first line, never a stack, and point at the log.
   return {
     message: firstLine(message) === "" ? `${route.provider}: unknown model error` : firstLine(message),
-    hint: "Details in logs/kumo.log; if it repeats: kumo setup",
+    hint: "Details in logs/bruine.log; if it repeats: bruine setup",
   };
 }
 
@@ -216,14 +216,14 @@ export async function fetchAvailableModels(baseUrl: string): Promise<string[]> {
   }
 }
 
-export function kumoLogPath(env: NodeJS.ProcessEnv = process.env): string {
+export function bruineLogPath(env: NodeJS.ProcessEnv = process.env): string {
   const home = runtimeHome(env);
-  return join(home, "logs", "kumo.log");
+  return join(home, "logs", "bruine.log");
 }
 
-/** Full failure detail to $DSH_HOME/logs/kumo.log; never throws. */
+/** Full failure detail to $DSH_HOME/logs/bruine.log; never throws. */
 export async function appendErrorLog(failure: LlmFailure, extra = ""): Promise<void> {
-  const path = kumoLogPath();
+  const path = bruineLogPath();
   const line =
     `${new Date().toISOString()} [llm-error] code=${String(failure.code ?? "UNKNOWN")}` +
     `${failure.status === undefined ? "" : ` status=${String(failure.status)}`} ` +

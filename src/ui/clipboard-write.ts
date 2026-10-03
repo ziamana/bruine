@@ -10,7 +10,7 @@
  * - The text goes on **stdin**, never in argv. A selection can be a megabyte of
  *   scrollback, and argv has limits the shell enforces before we do.
  * - The tools daemonize. `xclip` and `wl-copy` fork so they can go on owning
- *   the selection after kumo hands it over, which means the parent exits at
+ *   the selection after bruine hands it over, which means the parent exits at
  *   once and, on some builds, not at all within our timeout. A writer that is
  *   still alive after `DAEMON_GRACE_MS` did its job.
  */

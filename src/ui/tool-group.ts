@@ -1,7 +1,7 @@
 import type { Component } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
 import { clipCells } from "../render/reasoning.js";
-import { kumoIcons, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, type BruineIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 
 function padCells(text: string, width: number): string {
@@ -23,7 +23,7 @@ export class CollapsedToolsComponent implements Component {
     readonly tool: string,
     readonly extra: number,
     readonly seconds: number,
-    private icons: KumoIcons = kumoIcons(),
+    private icons: BruineIcons = bruineIcons(),
   ) {}
   render(width: number): string[] {
     const mark = ansi.green(this.icons.ok);

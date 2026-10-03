@@ -5,7 +5,7 @@ import { clipCells, sanitize, spinnerFrame } from "../render/reasoning.js";
 import { formatDuration } from "./tool-group.js";
 import type { RailState } from "./chat-layout.js";
 import { fileLink } from "./links.js";
-import { kumoIcons, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, type BruineIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 import { diffCounter, diffForCall, renderDiff, type FileDiff } from "./diff-view.js";
 import { parsePartialJson } from "./partial-json.js";
@@ -69,7 +69,7 @@ export class ToolCallComponent implements ChatToolCall {
   /** What a successful edit/write changed, shown instead of "file updated". */
   #diff: FileDiff | undefined;
   #readableSummaries: boolean;
-  constructor(readonly tool: string, private now: () => number = Date.now, private icons: KumoIcons = kumoIcons(), opts: { readableSummaries?: boolean } = {}) {
+  constructor(readonly tool: string, private now: () => number = Date.now, private icons: BruineIcons = bruineIcons(), opts: { readableSummaries?: boolean } = {}) {
     this.#startTime = now();
     this.#readableSummaries = opts.readableSummaries ?? toolSummariesEnabled();
   }

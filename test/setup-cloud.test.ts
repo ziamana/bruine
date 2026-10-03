@@ -114,11 +114,11 @@ describe("a cloud role in the flow", () => {
   });
 });
 
-describe("kumo setup reads a cloud route back", () => {
+describe("bruine setup reads a cloud route back", () => {
   test("a catalog provider in settings.yaml is the main role, with its key", async () => {
     const { mkdtemp, writeFile } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
-    const home = await mkdtemp(join(tmpdir(), "kumo-cloud-prefill-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-cloud-prefill-"));
     await writeFile(
       join(home, "settings.yaml"),
       "llm-pi-ai:\n  providers:\n    groq:\n      apiKeyEnv: GROQ_API_KEY\nagent-default-model:\n  provider: groq\n  model: llama-3.1-8b-instant\n",

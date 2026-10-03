@@ -1,3 +1,4 @@
+import { appEnv } from "../compat.js";
 import { hash01 } from "./rain.js";
 
 /**
@@ -61,6 +62,6 @@ export function terminalMotionAllowed(opts: {
 } = {}): boolean {
   const env = opts.env ?? process.env;
   const tty = opts.stdoutTTY ?? process.stdout.isTTY === true;
-  return tty && opts.ascii !== true && env.KUMO_ASCII !== "1" && env.CI !== "1" &&
-    env.KUMO_NO_ANIMATION !== "1" && env.TERM !== "dumb";
+  return tty && opts.ascii !== true && appEnv("ASCII", env) !== "1" && env.CI !== "1" &&
+    appEnv("NO_ANIMATION", env) !== "1" && env.TERM !== "dumb";
 }

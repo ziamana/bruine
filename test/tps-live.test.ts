@@ -12,7 +12,7 @@ const text = (footer: FooterComponent, width = 100) => footer.render(width).map(
 
 function motion() {
   vi.useFakeTimers(); vi.setSystemTime(0); process.stdout.isTTY = true;
-  delete process.env.CI; delete process.env.KUMO_ASCII; delete process.env.KUMO_NO_ANIMATION;
+  delete process.env.CI; delete process.env.BRUINE_ASCII; delete process.env.BRUINE_NO_ANIMATION;
   process.env.TERM = "xterm-256color";
 }
 
@@ -49,7 +49,7 @@ test("prefill is held during the answer and animates on completion without chang
 });
 
 test("prefill finishes immediately with reduced motion", () => {
-  motion(); process.env.KUMO_NO_ANIMATION = "1";
+  motion(); process.env.BRUINE_NO_ANIMATION = "1";
   const footer = new FooterComponent(UNICODE_ICONS, { cwd: "/tmp" });
   footer.beginTurn(); footer.set({ pp: 1200 }); footer.endTurn();
   expect(text(footer)).toContain("prefill 1.2k tok/s"); expect(footer.active).toBe(false);

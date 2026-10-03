@@ -1,7 +1,7 @@
 /**
  * Running an external tool, in one place.
  *
- * kumo shells out for the clipboard on both sides (read an image in T29, write
+ * bruine shells out for the clipboard on both sides (read an image in T29, write
  * a selection in T56) and for the model probe in T35. Each of those grew its own
  * `execFile` wrapper and its own PATH walk, and two of them were byte-identical
  * copies of the same eighteen lines. This is the canonical version, so the next

@@ -259,15 +259,15 @@ describe("parseArgs", () => {
 
 describe("read-only gate regressions", () => {
   test("commands that execute helpers cannot pass as read-only", () => {
-    for (const command of ["rg --pre ./runner token .", "rg --pre=./runner token .", "git diff --ext-diff", "git log --textconv", "printenv KUMO_TEST_SECRET"]) {
+    for (const command of ["rg --pre ./runner token .", "rg --pre=./runner token .", "git diff --ext-diff", "git log --textconv", "printenv BRUINE_TEST_SECRET"]) {
       expect(bash(command, ctx()), command).toBe("ask");
       expect(bash(command, ctx({ plan: true })), command).toBe("deny");
     }
   });
 
   test("a project symlink cannot make an outside write look local", () => {
-    const project = mkdtempSync(join(tmpdir(), "kumo-gate-project-"));
-    const outside = mkdtempSync(join(tmpdir(), "kumo-gate-outside-"));
+    const project = mkdtempSync(join(tmpdir(), "bruine-gate-project-"));
+    const outside = mkdtempSync(join(tmpdir(), "bruine-gate-outside-"));
     try {
       symlinkSync(outside, join(project, "link"), process.platform === "win32" ? "junction" : "dir");
       expect(realpathSync(join(project, "link"))).toBe(realpathSync(outside));
@@ -286,8 +286,8 @@ describe("read-only gate regressions", () => {
   });
 
   test("reading a harmless-looking symlink to a credential also asks", () => {
-    const project = mkdtempSync(join(tmpdir(), "kumo-gate-project-"));
-    const outside = mkdtempSync(join(tmpdir(), "kumo-gate-outside-"));
+    const project = mkdtempSync(join(tmpdir(), "bruine-gate-project-"));
+    const outside = mkdtempSync(join(tmpdir(), "bruine-gate-outside-"));
     try {
       writeFileSync(join(outside, ".env"), "KEY=example\n");
       symlinkSync(join(outside, ".env"), join(project, "notes.txt"));

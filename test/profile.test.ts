@@ -26,7 +26,7 @@ describe("profilePaths (T14.4)", () => {
 
 describe("ensureProfile", () => {
   test("creates the profile with 3 files on an empty home", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-profile-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-profile-"));
     const result = await ensureProfile(home);
 
     expect(result.created).toBe(true);
@@ -38,13 +38,13 @@ describe("ensureProfile", () => {
     expect(packageJson.name).toBe("dsh-profile-bruine");
     expect(packageJson.dsh.profile.bundles).toEqual([
       "@deepseek-ai/dsh-base",
-      "kumo-code",
+      "bruine",
     ]);
     expect(packageJson.dsh.profile.patchReload).toBe("startup");
 
     const patch = await readFile(join(result.dir, "cordis.patch.yml"), "utf8");
-    expect(patch).toContain("# kumo user overrides. Edit this file, not cordis.yml.");
-    // T36: the persona row is kumo's, not the bare `[]` placeholder.
+    expect(patch).toContain("# bruine user overrides. Edit this file, not cordis.yml.");
+    // T36: the persona row is bruine's, not the bare `[]` placeholder.
     expect(patch).toContain("- id: system-prompt");
     expect(patch).toContain("includeHarnessIdentity: false");
     expect(patch).toContain("Your working directory is {{cwd}}.");
@@ -55,7 +55,7 @@ describe("ensureProfile", () => {
   });
 
   test("second call is idempotent and preserves user edits", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-profile-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-profile-"));
     await ensureProfile(home);
 
     const patchPath = join(home, "profiles", "bruine", "cordis.patch.yml");
@@ -69,7 +69,7 @@ describe("ensureProfile", () => {
   });
 
   test("T26: the empty $DSH_HOME/agents dir exists, also on upgrade", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-profile-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-profile-"));
     await ensureProfile(home);
     expect((await stat(join(home, "agents"))).isDirectory()).toBe(true);
 
@@ -86,10 +86,10 @@ describe("ensureProfile migration (T20.3)", () => {
   const SETTINGS = "agent-default-model:\n  provider: legacy\n  model: m\n";
   // Assembled at runtime so the source stays free of the retired literal
   // (T20 acceptance greps for it).
-  const legacyName = `${"kumo"}-${"cli"}`;
+  const legacyName = `${"bruine"}-${"cli"}`;
 
   test("a profile from the pre-rename package is regenerated; surrounding home is untouched", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-profile-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-profile-"));
     // Simulate the old layout: legacy dependency name + stale node_modules symlink.
     const legacy = {
       name: "dsh-profile-bruine",
@@ -114,7 +114,7 @@ describe("ensureProfile migration (T20.3)", () => {
 
     const manifest = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
     expect(manifest.dependencies[legacyName]).toBeUndefined();
-    expect(Object.keys(manifest.dependencies)).toEqual(["kumo-code"]);
+    expect(Object.keys(manifest.dependencies)).toEqual(["bruine"]);
     await expect(stat(join(dir, "node_modules"))).rejects.toThrow(); // old install gone
     expect(await readFile(join(home, "settings.yaml"), "utf8")).toBe(SETTINGS);
     expect(await readFile(join(home, ".env"), "utf8")).toBe("X=1\n");
@@ -127,16 +127,16 @@ describe("ensureProfile migration (T20.3)", () => {
   });
 
   test("a profile carrying extra plugin deps under the current name is kept", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-profile-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-profile-"));
     await ensureProfile(home);
     const pkgPath = join(home, "profiles", "bruine", "package.json");
     const manifest = JSON.parse(await readFile(pkgPath, "utf8"));
-    manifest.dependencies["kumo-some-plugin"] = "^1.0.0";
-    manifest.dsh.profile.bundles.push("kumo-some-plugin");
+    manifest.dependencies["bruine-some-plugin"] = "^1.0.0";
+    manifest.dsh.profile.bundles.push("bruine-some-plugin");
     await writeFile(pkgPath, JSON.stringify(manifest, null, 2) + "\n");
     const result = await ensureProfile(home);
     expect(result.created).toBe(false);
     const kept = JSON.parse(await readFile(pkgPath, "utf8"));
-    expect(kept.dsh.profile.bundles).toContain("kumo-some-plugin");
+    expect(kept.dsh.profile.bundles).toContain("bruine-some-plugin");
   });
 });

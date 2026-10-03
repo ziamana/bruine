@@ -1,13 +1,13 @@
 /**
- * T36 — kumo-bench command line. Pure parsing: no fs, no process, so the
- * runner logic is unit-testable without a kumo or a model server.
+ * T36 — bruine-bench command line. Pure parsing: no fs, no process, so the
+ * runner logic is unit-testable without a bruine or a model server.
  */
 import { isAbsolute, resolve } from "node:path";
 
 export interface BenchOptions {
   /** `--route provider/model`, read out of `--settings`. */
   route: string;
-  /** settings.yaml the route comes from (kumo's own home by default). */
+  /** settings.yaml the route comes from (bruine's own home by default). */
   settings: string;
   /** System-prompt variant file (bench/variants/<name>.yml). */
   variant: string;
@@ -19,8 +19,8 @@ export interface BenchOptions {
   resume: boolean;
   /** Wall-clock limit per task run, in minutes. */
   timeoutMinutes: number;
-  /** kumo command (argv[0] plus fixed leading args). */
-  kumo: string[];
+  /** bruine command (argv[0] plus fixed leading args). */
+  bruine: string[];
   /** bench/tasks root. */
   tasksDir: string;
   /** Results directory. */
@@ -39,12 +39,12 @@ export const DEFAULTS = {
   variant: "dsh",
   repeat: 3,
   timeoutMinutes: 10,
-  settings: "~/.kumo/settings.yaml",
+  settings: "~/.bruine/settings.yaml",
   resultsDir: "bench/results",
   tasksDir: "bench/tasks",
 } as const;
 
-const USAGE = `kumo-bench (T36) — measure kumo's agent quality on tiny task repos.
+const USAGE = `bruine-bench (T36) — measure bruine's agent quality on tiny task repos.
 
 Usage:
   pnpm bench -- --route <provider/model> [options]
@@ -53,7 +53,7 @@ Options:
   --route <provider/model>   Route to measure, read from the settings file
                              (e.g. local/ornith-9b). Required.
   --settings <path>          settings.yaml holding that route
-                             (default: ~/.kumo/settings.yaml)
+                             (default: ~/.bruine/settings.yaml)
   --variant <name>           System-prompt variant from bench/variants
                              (default: ${DEFAULTS.variant})
   --repeat <n>               Repeats per task (default: ${DEFAULTS.repeat})
@@ -63,7 +63,7 @@ Options:
   --tasks-dir <path>         Task root (default: ${DEFAULTS.tasksDir})
   --results-dir <path>       Results root (default: ${DEFAULTS.resultsDir})
   --work-dir <path>          Scratch root for task copies + bench homes
-  --kumo <cmd> [args…]       Replace the kumo command (tests use a fake)
+  --bruine <cmd> [args…]       Replace the bruine command (tests use a fake)
   --bail                     Stop at the first failed run
   --no-summary               Do not print the summary table
   -h, --help                 This help
@@ -117,9 +117,9 @@ export function routeSlug(route: string): string {
 export interface ParseContext {
   /** Repo root; relative paths in the options resolve against it. */
   root: string;
-  /** Default `--kumo` command (argv[0] + leading args). */
-  kumo: string[];
-  /** Default settings.yaml (kumo's own home). */
+  /** Default `--bruine` command (argv[0] + leading args). */
+  bruine: string[];
+  /** Default settings.yaml (bruine's own home). */
   settings: string;
 }
 
@@ -132,7 +132,7 @@ export function parseOptions(argv: string[], ctx: ParseContext): BenchOptions {
     tasks: [],
     resume: false,
     timeoutMinutes: DEFAULTS.timeoutMinutes,
-    kumo: [...ctx.kumo],
+    bruine: [...ctx.bruine],
     tasksDir: DEFAULTS.tasksDir,
     resultsDir: DEFAULTS.resultsDir,
     workDir: "",
@@ -194,7 +194,7 @@ export function parseOptions(argv: string[], ctx: ParseContext): BenchOptions {
       case "--no-summary":
         out.summary = false;
         break;
-      case "--kumo": {
+      case "--bruine": {
         const first = needValue(argv, i, arg);
         i++;
         const rest: string[] = [];
@@ -202,7 +202,7 @@ export function parseOptions(argv: string[], ctx: ParseContext): BenchOptions {
           rest.push(argv[i + 1] as string);
           i++;
         }
-        out.kumo = [first, ...rest];
+        out.bruine = [first, ...rest];
         break;
       }
       default:

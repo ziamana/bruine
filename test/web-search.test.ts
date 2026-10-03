@@ -12,7 +12,7 @@ const jsonFetch = (payload: unknown, capture?: (url: string, init: any) => void)
   };
 
 describe("readSearchConfig", () => {
-  test("no kumo.json → none", () => {
+  test("no bruine.json → none", () => {
     const cfg = readSearchConfig({ DSH_HOME: "/h" }, () => "", () => false);
     expect(cfg).toEqual({ provider: "none" });
   });

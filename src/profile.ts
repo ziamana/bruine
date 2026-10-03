@@ -12,7 +12,7 @@ export interface ProfilePaths {
   packageJson: string;
   patchYml: string;
   cordisYml: string;
-  /** T26: the empty agentsHome kumo points skill-filesystem at (never filled). */
+  /** T26: the empty agentsHome bruine points skill-filesystem at (never filled). */
   agentsDir: string;
 }
 
@@ -71,7 +71,7 @@ async function isLegacyProfile(packageJsonPath: string): Promise<boolean> {
  * now carries the model's display name (settings.yaml `name:`, else the id
  * without its directory and `.gguf` suffix — the same rule the footer uses), and
  * it is written into the profile's own patch layer, which is also where the
- * kumo-bench system-prompt variants land. One owner, one place.
+ * bruine-bench system-prompt variants land. One owner, one place.
  */
 export const PERSONA_SUFFIX = "Your working directory is {{cwd}}.";
 
@@ -134,14 +134,14 @@ export function resolveModelDisplayName(
   }
 }
 
-/** Marker that says the system-prompt row in the user patch is kumo's. */
-const PERSONA_ROW_MARKER = "# system-prompt row written by kumo (T36).";
+/** Marker that says the system-prompt row in the user patch is bruine's. */
+const PERSONA_ROW_MARKER = "# system-prompt row written by bruine (T36).";
 const PERSONA_PATCH_HEADER =
-  "# kumo user overrides. Edit this file, not cordis.yml.\n" +
+  "# bruine user overrides. Edit this file, not cordis.yml.\n" +
   `${PERSONA_ROW_MARKER}\n` +
   "# Your own rows go after it; delete the marker to take the persona over.\n";
 
-/** The system-prompt row kumo owns, as patch-layer YAML (JSON-quoted text). */
+/** The system-prompt row bruine owns, as patch-layer YAML (JSON-quoted text). */
 export function personaPatch(persona: Persona): string {
   return (
     "- id: system-prompt\n" +
@@ -154,8 +154,8 @@ export function personaPatch(persona: Persona): string {
 
 /** Has the user taken the persona row over (marker gone or changed)? */
 export function isManagedPersonaPatch(text: string): boolean {
-  if (text.includes(PERSONA_ROW_MARKER)) return true;
-  // kumo's own placeholder patch (`[]`): ours to write over.
+  if (text.includes(PERSONA_ROW_MARKER) || text.includes("# system-prompt row written by kumo (T36).")) return true;
+  // bruine's own placeholder patch (`[]`): ours to write over.
   return /^\s*\[\s*\]\s*$/m.test(text);
 }
 
@@ -193,7 +193,7 @@ export async function ensureProfile(
   const dir = p.dir;
 
   // T26: the bundle patch points skill-filesystem's agentsHome at this
-  // directory; it must exist and kumo never fills it (enabled skills live in
+  // directory; it must exist and bruine never fills it (enabled skills live in
   // $DSH_HOME/skills). Created on every run so existing homes catch up.
   await mkdir(p.agentsDir, { recursive: true });
 
@@ -206,7 +206,7 @@ export async function ensureProfile(
     }
     // T20.3 migration: a profile generated before the package rename is
     // regenerated — only the profile directory. settings.yaml, .env,
-    // kumo.json and sessions/ live outside it and are never touched.
+    // bruine.json and sessions/ live outside it and are never touched.
     await rm(dir, { recursive: true, force: true });
   }
 
@@ -229,7 +229,7 @@ export async function ensureProfile(
   await writeAtomic(p.packageJson, `${JSON.stringify(packageJson, null, 2)}\n`);
   await writeAtomic(
     p.patchYml,
-    "# kumo user overrides. Edit this file, not cordis.yml.\n[]\n",
+    "# bruine user overrides. Edit this file, not cordis.yml.\n[]\n",
   );
   await writeAtomic(
     p.cordisYml,

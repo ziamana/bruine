@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import type { Terminal } from "@earendil-works/pi-tui";
-import { KumoUi } from "../src/ui/kumo-ui.js";
+import { BruineUi } from "../src/ui/bruine-ui.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
 
 class FakeTerminal implements Terminal {
@@ -25,7 +25,7 @@ class FakeTerminal implements Terminal {
 const boot = () => {
   const terminal = new FakeTerminal();
   const onQuit = vi.fn();
-  const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit }, terminal, UNICODE_ICONS);
+  const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit }, terminal, UNICODE_ICONS);
   ui.start();
   return { terminal, onQuit, ui };
 };

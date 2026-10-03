@@ -15,7 +15,7 @@
 import type { ImageAttachmentRef, ImageMediaType, SaveImageAttachment } from "@deepseek-ai/dsh-attachment";
 import type { ClipboardImage } from "./clipboard.js";
 
-/** The slice of dsh's attachment store kumo uses; `ctx.get("attachments")`. */
+/** The slice of dsh's attachment store bruine uses; `ctx.get("attachments")`. */
 export interface AttachmentStoreLike {
   saveImage(input: SaveImageAttachment): Promise<ImageAttachmentRef>;
 }

@@ -9,7 +9,7 @@ function flavourOf(path: string): typeof posix {
 /**
  * The place, said the way a person says it (UI polish 2026-09-27).
  *
- * The defect: kumo never said where it was, so the only answer was the shell's own
+ * The defect: bruine never said where it was, so the only answer was the shell's own
  * `pwd` in another window. A coding agent's whole world is one directory, and the
  * home directory is the one a person names by its last part: `Bureau` is "le
  * Bureau", `/home/tu44/Bureau` is a path to be decoded. So home collapses to `~`,
@@ -24,7 +24,7 @@ export function displayPlace(cwd: string, home: string = homedir()): string {
   // and answers about a directory neither of them is in.
   if (impl !== flavourOf(home) || !impl.isAbsolute(path) || !impl.isAbsolute(home)) return path;
   const rel = impl.relative(home, path);
-  // A sibling of the home directory is `../projets/kumo`, not `~projets/kumo`:
+  // A sibling of the home directory is `../projets/bruine`, not `~projets/bruine`:
   // `relative` already said so, and the label keeps that answer.
   if (rel === "" || rel.startsWith("..")) return path.split(/[\\/]/).join("/");
   return `~/${rel.split(/[\\/]/).join("/")}`;

@@ -141,7 +141,7 @@ describe("one treatment for every code block", () => {
   });
 
   test("a terminal that cannot read colour gets no colour escape at all", () => {
-    process.env.KUMO_COLOR = "none";
+    process.env.BRUINE_COLOR = "none";
     resetColorDepth();
     try {
       const c = new AssistantTextComponent({ icons: ASCII_ICONS, animate: false });
@@ -151,7 +151,7 @@ describe("one treatment for every code block", () => {
       expect(c.render(100).join("")).not.toMatch(/\x1b\[(?:3[0-7]|9[0-7])m/);
       expect(c.render(100).join("\n")).toContain("| ts");
     } finally {
-      process.env.KUMO_COLOR = "basic";
+      process.env.BRUINE_COLOR = "basic";
       resetColorDepth();
     }
   });

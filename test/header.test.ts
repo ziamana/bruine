@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { visibleWidth, type Terminal } from "@earendil-works/pi-tui";
-import { KumoUi } from "../src/ui/kumo-ui.js";
+import { BruineUi } from "../src/ui/bruine-ui.js";
 import { ASCII_ICONS, UNICODE_ICONS } from "../src/render/chars.js";
 import { LOGO_MIN_WIDTH, paintResourceLine, planResourceLine } from "../src/ui/header.js";
 import { resetColorDepth } from "../src/ui/palette.js";
@@ -78,39 +78,39 @@ describe("the header", () => {
   afterEach(() => resetColorDepth());
 
   test("with room, the wordmark is on the left and the build and the keys are beside it", () => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
-    const ui = new KumoUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
+    const ui = new BruineUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
     const rows = ui.headerText(100).split("\n").map(strip);
     expect(rows[0]).toMatch(/^[█▄▀ ]+ {3}v0\.2\.0/);
     expect(rows[1]).toMatch(/^[█▄▀ ]+ {3}escape interrupt/);
     expect(rows[1]).toContain("ctrl+d exit");
-    delete process.env.KUMO_COLOR;
+    delete process.env.BRUINE_COLOR;
   });
 
   test("when the key labels would not fit beside the mark, the key line takes the width under it", () => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
-    const ui = new KumoUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
+    const ui = new BruineUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
     const rows = ui.headerText(60).split("\n").map(strip);
     expect(rows[0]).toMatch(/^[\u2588\u2584\u2580 ]+ {3}v0\.2\.0$/);
     expect(rows[3]).toBe("escape interrupt \u00b7 ctrl+c clear \u00b7 ctrl+d exit \u00b7 / commands");
-    delete process.env.KUMO_COLOR;
+    delete process.env.BRUINE_COLOR;
   });
 
   test("under the mark's minimum width, or in ASCII, it is two plain lines", async () => {
-    const narrow = new KumoUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
+    const narrow = new BruineUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
     const rows = narrow.headerText(LOGO_MIN_WIDTH - 1).split("\n").map(strip);
     expect(rows[0]).toMatch(/^▌ v0\.2\.0/);
     expect(rows.join("")).not.toMatch(/[█▄▀]/);
-    const ascii = new KumoUi("0.2.0", handlers, new FakeTerminal(), ASCII_ICONS);
+    const ascii = new BruineUi("0.2.0", handlers, new FakeTerminal(), ASCII_ICONS);
     expect(ascii.headerText(100)).not.toMatch(/\x1b\[|[█▄▀▌]/);
     await ascii.shutdown();
     await narrow.shutdown();
   });
 
   test("skills and plugins are a label and a line, after a blank row", () => {
-    const ui = new KumoUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
+    const ui = new BruineUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
     ui.setResources({ skills, plugins: ["repl", "render"] });
     const rows = ui.headerText(100).split("\n").map(strip);
     // The three rows of the mark, then the blank row, then one line for each kind.
@@ -121,7 +121,7 @@ describe("the header", () => {
   });
 
   test("an empty kind is left out, never announced", () => {
-    const ui = new KumoUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
+    const ui = new BruineUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
     ui.setResources({ skills: [], plugins: ["repl"] });
     const rows = ui.headerText(100).split("\n").map(strip);
     expect(rows.some((row) => row.includes("skills"))).toBe(false);
@@ -129,12 +129,12 @@ describe("the header", () => {
   });
 
   test.each([100, 60, 46, 30])("no header line is wider than %i columns", (width) => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
-    const ui = new KumoUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
+    const ui = new BruineUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
     ui.setResources({ skills, plugins: ["approval", "headless", "herdr", "modes", "render", "repl"] });
     for (const row of ui.headerText(width).split("\n")) expect(visibleWidth(row)).toBeLessThanOrEqual(width);
-    delete process.env.KUMO_COLOR;
+    delete process.env.BRUINE_COLOR;
   });
 });
 
@@ -145,15 +145,15 @@ describe("the header inside the screen", () => {
   // terminal's whole width came out two cells too wide, the terminal wrapped it, and
   // the renderer lost count of the rows. What is measured here is what is rendered.
   test.each([140, 100, 80, 62, 46, 40, 30])("no rendered line is wider than a %i-column terminal", (columns) => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     const terminal = new FakeTerminal();
     terminal.columns = columns;
-    const ui = new KumoUi("0.2.0", handlers, terminal, UNICODE_ICONS);
+    const ui = new BruineUi("0.2.0", handlers, terminal, UNICODE_ICONS);
     ui.setResources({ skills, plugins: ["approval", "headless", "herdr", "modes", "render", "repl", "startup", "web-search"] });
     ui.updateHeader();
     for (const line of ui.tui.render(columns)) expect(visibleWidth(line), `${String(columns)}: ${strip(line)}`).toBeLessThanOrEqual(columns);
-    delete process.env.KUMO_COLOR;
+    delete process.env.BRUINE_COLOR;
   });
 });
 
@@ -161,30 +161,30 @@ describe("air above the wordmark", () => {
   afterEach(() => resetColorDepth());
 
   test("the screen opens on a blank row, and the wordmark is the second", () => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
-    const ui = new KumoUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
+    const ui = new BruineUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
     ui.updateHeader();
     const rows = ui.tui.render(100).map(strip);
     expect(rows[0]).toBe("");
     expect(rows[1]).toMatch(/[\u2588\u2584\u2580]/);
-    delete process.env.KUMO_COLOR;
+    delete process.env.BRUINE_COLOR;
   });
 });
 
 describe("a launch takes the whole terminal", () => {
-  const saved = { tty: process.stdout.isTTY, ci: process.env.CI, keep: process.env.KUMO_NO_CLEAR };
+  const saved = { tty: process.stdout.isTTY, ci: process.env.CI, keep: process.env.BRUINE_NO_CLEAR };
   afterEach(() => {
     process.stdout.isTTY = saved.tty;
     if (saved.ci === undefined) delete process.env.CI;
     else process.env.CI = saved.ci;
-    if (saved.keep === undefined) delete process.env.KUMO_NO_CLEAR;
-    else process.env.KUMO_NO_CLEAR = saved.keep;
+    if (saved.keep === undefined) delete process.env.BRUINE_NO_CLEAR;
+    else process.env.BRUINE_NO_CLEAR = saved.keep;
   });
 
   const launch = async (): Promise<number> => {
     const terminal = new FakeTerminal();
-    const ui = new KumoUi("0.2.0", handlers, terminal, UNICODE_ICONS);
+    const ui = new BruineUi("0.2.0", handlers, terminal, UNICODE_ICONS);
     ui.start();
     await ui.shutdown();
     return terminal.cleared;
@@ -193,15 +193,15 @@ describe("a launch takes the whole terminal", () => {
   test("on a terminal, what was on screen is cleared once", async () => {
     process.stdout.isTTY = true;
     delete process.env.CI;
-    delete process.env.KUMO_NO_CLEAR;
+    delete process.env.BRUINE_NO_CLEAR;
     expect(await launch()).toBe(1);
   });
 
-  test("KUMO_NO_CLEAR, CI and a pipe leave the screen alone", async () => {
+  test("BRUINE_NO_CLEAR, CI and a pipe leave the screen alone", async () => {
     process.stdout.isTTY = true;
-    process.env.KUMO_NO_CLEAR = "1";
+    process.env.BRUINE_NO_CLEAR = "1";
     expect(await launch()).toBe(0);
-    delete process.env.KUMO_NO_CLEAR;
+    delete process.env.BRUINE_NO_CLEAR;
     process.env.CI = "1";
     expect(await launch()).toBe(0);
     delete process.env.CI;

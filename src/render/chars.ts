@@ -1,8 +1,9 @@
+import { appEnv } from "../compat.js";
 /**
  * Terminal glyphs with an ASCII fallback (T14). Non-UTF-8 terminals (legacy
  * Windows consoles, LANG without UTF-8) must never receive emoji.
  */
-export interface KumoIcons {
+export interface BruineIcons {
   think: string;
   prompt: string;
   ok: string;
@@ -12,7 +13,7 @@ export interface KumoIcons {
   folder: string;
 }
 
-export const UNICODE_ICONS: KumoIcons = {
+export const UNICODE_ICONS: BruineIcons = {
   think: "∴",
   prompt: "›",
   ok: "✓",
@@ -22,7 +23,7 @@ export const UNICODE_ICONS: KumoIcons = {
   folder: "▸",
 };
 
-export const ASCII_ICONS: KumoIcons = {
+export const ASCII_ICONS: BruineIcons = {
   think: "*",
   prompt: ">",
   ok: "v",
@@ -37,8 +38,8 @@ const UTF8_RE = /utf-?8/i;
 export function iconsFor(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
-): KumoIcons {
-  if (env.KUMO_ASCII === "1") return ASCII_ICONS;
+): BruineIcons {
+  if (appEnv("ASCII", env) === "1") return ASCII_ICONS;
   const utf8 = UTF8_RE.test(`${env.LC_ALL ?? ""}${env.LC_CTYPE ?? ""}${env.LANG ?? ""}`);
   if (utf8) return UNICODE_ICONS;
   if (platform === "win32") {
@@ -49,7 +50,7 @@ export function iconsFor(
 }
 
 /** Canonical ASCII policy, using the caller's icon set or the current environment. */
-export function isAscii(icons: KumoIcons = iconsFor()): boolean {
+export function isAscii(icons: BruineIcons = iconsFor()): boolean {
   return icons.think === "*";
 }
 
@@ -62,10 +63,10 @@ export function asciiText(text: string, ascii = isAscii(), style: "labels" | "ed
   return text.replace(/[─↑↓←→…·★]/g, glyph => replacements[glyph] ?? glyph);
 }
 
-let cached: KumoIcons | undefined;
+let cached: BruineIcons | undefined;
 
 /** Icons for the current process, computed once. */
-export function kumoIcons(): KumoIcons {
+export function bruineIcons(): BruineIcons {
   if (cached === undefined) cached = iconsFor();
   return cached;
 }

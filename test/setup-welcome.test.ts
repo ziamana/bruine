@@ -5,13 +5,13 @@ import { SetupWelcome } from "../src/setup/welcome.js";
 describe("setup welcome screen", () => {
   test("fills the terminal with one background and centers only the BRUINE mark", () => {
     const previous = {
-      ascii: process.env.KUMO_ASCII,
-      color: process.env.KUMO_COLOR,
-      bg: process.env.KUMO_BG,
+      ascii: process.env.BRUINE_ASCII,
+      color: process.env.BRUINE_COLOR,
+      bg: process.env.BRUINE_BG,
     };
-    process.env.KUMO_ASCII = "1";
-    process.env.KUMO_COLOR = "truecolor";
-    delete process.env.KUMO_BG;
+    process.env.BRUINE_ASCII = "1";
+    process.env.BRUINE_COLOR = "truecolor";
+    delete process.env.BRUINE_BG;
     resetColorDepth();
     try {
       const screen = new SetupWelcome(() => 31).render(90);
@@ -22,12 +22,12 @@ describe("setup welcome screen", () => {
       expect(plain[15]).toBe("BRUINE");
       expect(screen.every((line) => line.includes("\x1b[48;2;28;32;48m"))).toBe(true);
     } finally {
-      if (previous.ascii === undefined) delete process.env.KUMO_ASCII;
-      else process.env.KUMO_ASCII = previous.ascii;
-      if (previous.color === undefined) delete process.env.KUMO_COLOR;
-      else process.env.KUMO_COLOR = previous.color;
-      if (previous.bg === undefined) delete process.env.KUMO_BG;
-      else process.env.KUMO_BG = previous.bg;
+      if (previous.ascii === undefined) delete process.env.BRUINE_ASCII;
+      else process.env.BRUINE_ASCII = previous.ascii;
+      if (previous.color === undefined) delete process.env.BRUINE_COLOR;
+      else process.env.BRUINE_COLOR = previous.color;
+      if (previous.bg === undefined) delete process.env.BRUINE_BG;
+      else process.env.BRUINE_BG = previous.bg;
       resetColorDepth();
     }
   });
@@ -35,11 +35,11 @@ describe("setup welcome screen", () => {
 
 describe("the welcome rain", () => {
   const withMotion = async <T>(fn: () => T | Promise<T>): Promise<T> => {
-    const saved = { ascii: process.env.KUMO_ASCII, color: process.env.KUMO_COLOR, ci: process.env.CI, noAnim: process.env.KUMO_NO_ANIMATION, tty: process.stdout.isTTY, term: process.env.TERM };
-    process.env.KUMO_ASCII = "0";
-    process.env.KUMO_COLOR = "truecolor";
+    const saved = { ascii: process.env.BRUINE_ASCII, color: process.env.BRUINE_COLOR, ci: process.env.CI, noAnim: process.env.BRUINE_NO_ANIMATION, tty: process.stdout.isTTY, term: process.env.TERM };
+    process.env.BRUINE_ASCII = "0";
+    process.env.BRUINE_COLOR = "truecolor";
     delete process.env.CI;
-    delete process.env.KUMO_NO_ANIMATION;
+    delete process.env.BRUINE_NO_ANIMATION;
     process.env.TERM = "xterm-256color";
     Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
     resetColorDepth();
@@ -47,8 +47,8 @@ describe("the welcome rain", () => {
       return await fn();
     } finally {
       const restore = (k: string, v: string | undefined): void => { if (v === undefined) delete process.env[k]; else process.env[k] = v; };
-      restore("KUMO_ASCII", saved.ascii); restore("KUMO_COLOR", saved.color); restore("CI", saved.ci);
-      restore("KUMO_NO_ANIMATION", saved.noAnim); restore("TERM", saved.term);
+      restore("BRUINE_ASCII", saved.ascii); restore("BRUINE_COLOR", saved.color); restore("CI", saved.ci);
+      restore("BRUINE_NO_ANIMATION", saved.noAnim); restore("TERM", saved.term);
       Object.defineProperty(process.stdout, "isTTY", { value: saved.tty, configurable: true });
       resetColorDepth();
     }

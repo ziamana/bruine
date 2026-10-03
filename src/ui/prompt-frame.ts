@@ -1,5 +1,6 @@
+import { appEnv } from "../compat.js";
 import { stripTerminalSequences, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
-import { kumoIcons, isAscii, asciiText, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, isAscii, asciiText, type BruineIcons } from "../render/chars.js";
 import { paint } from "./palette.js";
 import { WorkingComponent } from "./working.js";
 import { rippleFrame } from "./rain.js";
@@ -21,7 +22,7 @@ export class PromptFrame implements Component {
     private content: Component,
     private editor: PromptEditor,
     readonly activity: TurnActivity = new TurnActivity(),
-    private icons: KumoIcons = kumoIcons(),
+    private icons: BruineIcons = bruineIcons(),
   ) {
     this.#working = new WorkingComponent(Date.now, icons, activity);
     activity.subscribe(() => this.updateBorder());
@@ -32,11 +33,11 @@ export class PromptFrame implements Component {
   get active(): boolean { return (this.activity.active && this.#working.active) || this.#ripple() !== undefined; }
   /**
    * The ring a finished turn leaves on the rule, for a second: a drop landed. It needs the same
-   * motion the spinner needs (`KUMO_NO_RIPPLE=1` turns this one off alone), and it keeps the
+   * motion the spinner needs (`BRUINE_NO_RIPPLE=1` turns this one off alone), and it keeps the
    * repaint loop alive only while it is showing.
    */
   #ripple(): string | undefined {
-    if (this.activity.active || !this.#working.active || process.env.KUMO_NO_RIPPLE === "1") return undefined;
+    if (this.activity.active || !this.#working.active || appEnv("NO_RIPPLE") === "1") return undefined;
     const since = this.activity.sinceStop;
     return since === undefined ? undefined : rippleFrame(since, isAscii(this.icons));
   }

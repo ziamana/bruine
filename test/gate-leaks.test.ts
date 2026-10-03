@@ -12,7 +12,7 @@ describe("gate: read-only commands that still leak (BOS review 2026-09-26)", () 
   writeFileSync(join(proj, "src", "a.ts"), "x");
   const ctx = (mode: string, plan = false) => ({ mode, plan, sessionAllowed: new Set(), projectDir: proj }) as any;
   const asks: string[] = [
-    "echo $KUMO_ALIBABA_API_KEY", "echo ${OPENAI_API_KEY}", "printf %s $GITHUB_TOKEN",
+    "echo $BRUINE_ALIBABA_API_KEY", "echo ${OPENAI_API_KEY}", "printf %s $GITHUB_TOKEN",
     "cat /proc/self/environ", "cat notes.txt", "grep -r sk- /home", "cat ~/.bashrc", "ls ..",
   ];
   for (const command of asks) {

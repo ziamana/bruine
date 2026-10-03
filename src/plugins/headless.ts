@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
-import type { DshContext, KumoStartup } from "./ctx.js";
-import type { KumoModesService } from "./modes.js";
+import type { DshContext, BruineStartup } from "./ctx.js";
+import type { BruineModesService } from "./modes.js";
 
-export const name = "kumo-headless";
-export const inject = ["agentDefaultModel", "agents", "sessions", "kumoStartup", "kumoModes"];
+export const name = "bruine-headless";
+export const inject = ["agentDefaultModel", "agents", "sessions", "bruineStartup", "bruineModes"];
 
 export interface HeadlessResult {
   ok: boolean;
@@ -33,10 +33,10 @@ function messageText(event: any): string {
 
 async function run(ctx: DshContext): Promise<number> {
   await ctx.get("loader")?.await();
-  const startup = ctx.get("kumoStartup") as KumoStartup | undefined;
+  const startup = ctx.get("bruineStartup") as BruineStartup | undefined;
   const task = startup?.headless;
   if (task === undefined || task.prompts.length === 0) throw new Error("headless task is missing");
-  const modes = ctx.get("kumoModes") as KumoModesService | undefined;
+  const modes = ctx.get("bruineModes") as BruineModesService | undefined;
   if (modes === undefined) throw new Error("permission gate is unavailable");
   const agents = ctx.get("agents");
   const sessions = ctx.get("sessions");
@@ -108,9 +108,9 @@ async function run(ctx: DshContext): Promise<number> {
 
 export function apply(ctx: DshContext): void {
   const exit = ctx.get("appExit") as ((code: number) => void) | undefined;
-  if (exit === undefined) throw new Error("kumo-headless: appExit is unavailable");
+  if (exit === undefined) throw new Error("bruine-headless: appExit is unavailable");
   void run(ctx).then(exit, (error: unknown) => {
-    console.error(`kumo: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`bruine: ${error instanceof Error ? error.message : String(error)}`);
     exit(1);
   });
 }

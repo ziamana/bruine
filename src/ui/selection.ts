@@ -1,14 +1,14 @@
 /**
- * T56 — mouse selection over the frame kumo already painted.
+ * T56 — mouse selection over the frame bruine already painted.
  *
- * kumo runs on the main screen, so the frame is taller than the terminal and the
+ * bruine runs on the main screen, so the frame is taller than the terminal and the
  * terminal scrolls it. That single fact decides everything here: a mouse row is
  * a row of the *visible viewport*, and the line it belongs to is
  * `viewportTop + row`. Getting that wrong copies the wrong text, silently, and
  * only when the transcript is long enough to scroll.
  *
  * Pure on purpose. No terminal, no clipboard, no timers: the wiring lives in
- * kumo-ui.ts and the tests drive this file directly.
+ * bruine-ui.ts and the tests drive this file directly.
  */
 
 import { Container, sliceByColumn, stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
@@ -198,7 +198,7 @@ export interface SelectionSpan {
  *
  * `dragged` is the whole reason a plain click copies nothing. Without it a press
  * and a release on the same cell would select that cell, and every click in
- * kumo would fire a "Copied" notice.
+ * bruine would fire a "Copied" notice.
  */
 export class TextSelection {
   #anchor: Cell | undefined;
@@ -290,7 +290,7 @@ export function selectedText(lines: readonly string[], top: number, span: Select
  * Reverse video that survives the colour codes inside it.
  *
  * Any SGR reset in the middle of the selected run (`\x1b[39m`, `\x1b[0m`, the
- * palette codes kumo paints) turns reverse video off for the rest of the line,
+ * palette codes bruine paints) turns reverse video off for the rest of the line,
  * which showed up as a selection that faded out halfway through a coloured
  * tool line. Re-arm after each one.
  */
@@ -317,7 +317,7 @@ export function highlightSelection(lines: readonly string[], top: number, span: 
 /**
  * The one component that has to wrap every other one.
  *
- * kumo paints the selection after the tree is composed, because a selection can
+ * bruine paints the selection after the tree is composed, because a selection can
  * cross the chat, the task panel and the console band, and no single child owns
  * the rows it covers.
  */

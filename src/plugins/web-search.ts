@@ -5,10 +5,10 @@ import { join } from "node:path";
 import type { DshContext } from "./ctx.js";
 
 /** Stable Cordis plugin name. */
-export const name = "kumo-web-search";
+export const name = "bruine-web-search";
 
-/** Service provided so the `web` row can resolve searchProvider from kumo. */
-export const KUMO_SEARCH_SERVICE = "kumoSearch";
+/** Service provided so the `web` row can resolve searchProvider from bruine. */
+export const BRUINE_SEARCH_SERVICE = "bruineSearch";
 
 export type SearchProviderId = "none" | "searxng" | "brave" | "tavily";
 
@@ -40,7 +40,7 @@ export type FetchLike = (
   init?: { signal?: AbortSignal; headers?: Record<string, string>; method?: string; body?: string },
 ) => Promise<{ ok: boolean; status: number; json(): Promise<any> }>;
 
-/** Reads the search section of <DSH_HOME>/kumo.json. Never throws. */
+/** Reads the search section of <DSH_HOME>/bruine.json. Never throws. */
 export function readSearchConfig(
   env: NodeJS.ProcessEnv = process.env,
   read: (path: string) => string = (p) => readFileSync(p, "utf8"),
@@ -78,7 +78,7 @@ export function makeSearchProvider(
   doFetch: FetchLike,
 ) {
   return {
-    id: "kumo",
+    id: "bruine",
     available(): boolean {
       if (cfg.provider === "none") return false;
       if (cfg.provider === "searxng") return cfg.url !== undefined && cfg.url !== "";
@@ -136,7 +136,7 @@ export function makeSearchProvider(
       }
       return {
         content:
-          "Web search is not configured. Choose a provider in kumo setup (SearXNG, Brave, or Tavily).",
+          "Web search is not configured. Choose a provider in bruine setup (SearXNG, Brave, or Tavily).",
         sources: [],
         truncated: false,
       };
@@ -145,7 +145,7 @@ export function makeSearchProvider(
 }
 
 export function apply(ctx: DshContext): () => void {
-  ctx.provide(KUMO_SEARCH_SERVICE, { id: "kumo" });
+  ctx.provide(BRUINE_SEARCH_SERVICE, { id: "bruine" });
   const provider = makeSearchProvider(readSearchConfig(), process.env, fetch as unknown as FetchLike);
   let dispose: (() => void) | undefined;
   // Register when the `web` runtime mounts — never declared as a module-level

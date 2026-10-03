@@ -18,7 +18,7 @@ const SETTINGS = [
   "      displayName: Local Server",
   "      api: openai-completions",
   "      baseURL: 'http://127.0.0.1:8081/v1'",
-  "      apiKeyEnv: KUMO_LOCAL_API_KEY",
+  "      apiKeyEnv: BRUINE_LOCAL_API_KEY",
   "      models:",
   "        - id: 'Ornith.gguf'",
   "          name: 'Ornith 1.5 9B'",
@@ -124,7 +124,7 @@ function harness(opts: { picks?: number[]; models?: Record<string, Array<{ id: s
 }
 
 async function attach(h: H, opts: { env?: string; settings?: string } = {}): Promise<string> {
-  const home = await mkdtemp(join(tmpdir(), "kumo-t37-"));
+  const home = await mkdtemp(join(tmpdir(), "bruine-t37-"));
   await mkdir(home, { recursive: true });
   process.env.DSH_HOME = home;
   if (opts.settings !== undefined) await writeFile(join(home, "settings.yaml"), opts.settings);
@@ -183,12 +183,12 @@ describe("provider rows (T39)", () => {
         listConfigurableProviders: () => [{ provider: "deepseek-official", displayName: "DeepSeek" }],
       },
       [
-        { id: "local", displayName: "Local Server", baseUrl: "http://127.0.0.1:8081/v1", apiKeyEnv: "KUMO_LOCAL_API_KEY", models: [{ id: "Ornith.gguf" }] },
+        { id: "local", displayName: "Local Server", baseUrl: "http://127.0.0.1:8081/v1", apiKeyEnv: "BRUINE_LOCAL_API_KEY", models: [{ id: "Ornith.gguf" }] },
         { id: "openrouter", apiKeyEnv: "OPENROUTER_API_KEY", models: [{ id: "qwen/qwen3-32b" }] },
       ],
     );
     expect(rows.map((r) => r.id)).toEqual(["local", "openrouter"]);
-    expect(rows[0]).toMatchObject({ live: true, label: "Local Server", baseUrl: "http://127.0.0.1:8081/v1", apiKeyEnv: "KUMO_LOCAL_API_KEY" });
+    expect(rows[0]).toMatchObject({ live: true, label: "Local Server", baseUrl: "http://127.0.0.1:8081/v1", apiKeyEnv: "BRUINE_LOCAL_API_KEY" });
   });
 
   // The measured reason the dormant directory is opt-in: pi-ai ships ~60 of them.
@@ -251,15 +251,15 @@ describe("provider rows (T39)", () => {
       label: "Local Server",
       live: true,
       baseUrl: "http://127.0.0.1:8081/v1",
-      apiKeyEnv: "KUMO_LOCAL_API_KEY",
+      apiKeyEnv: "BRUINE_LOCAL_API_KEY",
       models: [{ id: "a" }, { id: "b" }],
     };
     const line = providerLine(row, { provider: "local", model: "a" }, true);
     expect(line).toContain("(current route)");
     expect(line).toContain("http://127.0.0.1:8081/v1");
-    expect(line).toContain("key KUMO_LOCAL_API_KEY set");
+    expect(line).toContain("key BRUINE_LOCAL_API_KEY set");
     expect(line).toContain("2 model(s)");
-    expect(providerLine(row, undefined, false)).toContain("no KUMO_LOCAL_API_KEY");
+    expect(providerLine(row, undefined, false)).toContain("no BRUINE_LOCAL_API_KEY");
     expect(providerLine({ id: "deepseek-official", label: "DeepSeek", live: false, models: [] }, undefined, false)).toContain(
       "not configured",
     );
@@ -267,16 +267,16 @@ describe("provider rows (T39)", () => {
 
   test("`/provider` lists every provider and never writes anything", async () => {
     const h = harness();
-    const home = await attach(h, { settings: SETTINGS, env: "KUMO_LOCAL_API_KEY=e2e\n" });
+    const home = await attach(h, { settings: SETTINGS, env: "BRUINE_LOCAL_API_KEY=e2e\n" });
     const before = await readFile(join(home, "settings.yaml"), "utf8");
     const out = h.picker.runProviderCommand();
     expect(out).toContain("Providers (2):");
     expect(out).toContain("Local Server [local] (current route)");
     expect(out).toContain("http://127.0.0.1:8081/v1");
-    expect(out).toContain("key KUMO_LOCAL_API_KEY set");
+    expect(out).toContain("key BRUINE_LOCAL_API_KEY set");
     expect(out).toContain("no OPENROUTER_API_KEY");
     // The dormant directory is counted, not dumped.
-    expect(out).toContain("+ 1 more kumo can add");
+    expect(out).toContain("+ 1 more bruine can add");
     expect(out).toContain("/provider all lists them");
     expect(out).toContain("In use: local/Ornith.gguf");
     expect(await readFile(join(home, "settings.yaml"), "utf8")).toBe(before);
@@ -343,12 +343,12 @@ describe("model rows (T37)", () => {
     expect(out.undeclared).toEqual([]);
   });
 
-  test("a server model kumo never recorded is named, with the fix in one command", async () => {
+  test("a server model bruine never recorded is named, with the fix in one command", async () => {
     const h = harness({ picks: [0, 0] });
     await attach(h, { settings: SETTINGS });
     await h.picker.runCommand("/model");
     expect(h.notices.join("\n")).toContain(
-      "Local Server also serves 1 model(s) kumo has not recorded (loaded-only-model): run kumo setup",
+      "Local Server also serves 1 model(s) bruine has not recorded (loaded-only-model): run bruine setup",
     );
   });
 });
@@ -392,7 +392,7 @@ describe("the picker (T37)", () => {
     expect(h.saved).toEqual([]);
   });
 
-  test("a declared route dsh has not mounted points at kumo setup", async () => {
+  test("a declared route dsh has not mounted points at bruine setup", async () => {
     const h = harness({ picks: [2] }); // local-2, the unmounted one
     // settings.yaml declares a second route the runtime never mounted.
     await attach(h, {
@@ -415,15 +415,15 @@ describe("the picker (T37)", () => {
     });
     expect(h.picker.providerRows().map((r: { id: string }) => r.id)).toEqual(["local", "openrouter", "local-2"]);
     const reply = await h.picker.runCommand("/model");
-    expect(reply).toBe("Spare is not configured yet. Run kumo setup to add it.");
+    expect(reply).toBe("Spare is not configured yet. Run bruine setup to add it.");
     expect(h.asked).toHaveLength(1);
   });
 
-  test("a live provider with no model configured points at kumo setup", async () => {
+  test("a live provider with no model configured points at bruine setup", async () => {
     const h = harness({ picks: [0] });
     await attach(h, { settings: "llm-pi-ai:\n  providers: {}\n" });
     const reply = await h.picker.runCommand("/model");
-    expect(reply).toBe("Local Server has no model configured. Run kumo setup.");
+    expect(reply).toBe("Local Server has no model configured. Run bruine setup.");
   });
 
   test("with no askChoice (non-TTY) the same facts come back as text", async () => {
@@ -437,13 +437,13 @@ describe("the picker (T37)", () => {
     expect(out).toContain('Use "/model <provider>/<model>" to switch.');
   });
 
-  test("no provider at all points at kumo setup", async () => {
+  test("no provider at all points at bruine setup", async () => {
     const h = harness();
     await attach(h, { settings: "agent-default-model:\n  provider: local\n  model: m\n" });
     h.llm.listProviders = () => [];
     h.llm.listConfigurableProviders = () => [];
-    expect(await h.picker.runCommand("/model")).toBe("No provider is configured. Run kumo setup.");
-    expect(h.picker.runProviderCommand()).toBe("No provider is configured. Run kumo setup.");
+    expect(await h.picker.runCommand("/model")).toBe("No provider is configured. Run bruine setup.");
+    expect(h.picker.runProviderCommand()).toBe("No provider is configured. Run bruine setup.");
   });
 });
 
@@ -479,7 +479,7 @@ describe("the switch (T37)", () => {
     const reply = await h.picker.runCommand("/model local/loaded-only-model");
     expect(h.holder.current).toEqual({ provider: "local", model: "Ornith.gguf" });
     expect(h.saved).toEqual([]);
-    expect(reply).toBe('Model "loaded-only-model" is not configured on local. Run kumo setup to record it.');
+    expect(reply).toBe('Model "loaded-only-model" is not configured on local. Run bruine setup to record it.');
   });
 
   test("the footer follows the route: pretty name, window, and a cleared context", async () => {
@@ -620,13 +620,13 @@ describe("recent routes, f2 (T38)", () => {
 describe("wiring (T37)", () => {
   test("the plugin registers /model and /provider in dsh's commands service", async () => {
     const { apply, name } = await import("../src/plugins/model.js");
-    expect(name).toBe("kumo-model");
+    expect(name).toBe("bruine-model");
     const registered: Array<{ name: string; description: string }> = [];
     const ctx = {
       get: (service: string) =>
         service === "commands"
           ? { register: (d: { name: string; description: string }) => registered.push(d) }
-          : service === "kumoRepl"
+          : service === "bruineRepl"
             ? { agent: {}, selection: {}, ui: undefined }
             : undefined,
       inject: () => {},
@@ -640,10 +640,10 @@ describe("wiring (T37)", () => {
 
   test("env key names are read without ever exposing a value", async () => {
     const { readEnvKeys } = await import("../src/plugins/model.js");
-    const home = await mkdtemp(join(tmpdir(), "kumo-t37-env-"));
-    await writeFile(join(home, ".env"), "# a comment\nKUMO_LOCAL_API_KEY=secret\n\nexport OPENROUTER_API_KEY='x'\nbad line\n");
+    const home = await mkdtemp(join(tmpdir(), "bruine-t37-env-"));
+    await writeFile(join(home, ".env"), "# a comment\nBRUINE_LOCAL_API_KEY=secret\n\nexport OPENROUTER_API_KEY='x'\nbad line\n");
     const keys = readEnvKeys(home);
-    expect([...keys].sort()).toEqual(["KUMO_LOCAL_API_KEY", "OPENROUTER_API_KEY"]);
+    expect([...keys].sort()).toEqual(["BRUINE_LOCAL_API_KEY", "OPENROUTER_API_KEY"]);
     expect([...keys].some((k) => k.includes("secret"))).toBe(false);
     expect(readEnvKeys(join(home, "nope"))).toEqual(new Set());
   });

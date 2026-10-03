@@ -1,9 +1,9 @@
 /**
- * T35 — `kumo setup` on an existing install: prefill from settings.yaml,
+ * T35 — `bruine setup` on an existing install: prefill from settings.yaml,
  * change-one-thing menu, Skip everywhere.
  *
  * Unit: home with Aron's settings.yaml shape (compat + reasoningEfforts +
- * contextWindow, no kumo.json) → Models step lists the route as current;
+ * contextWindow, no bruine.json) → Models step lists the route as current;
  * Save without changes → settings.yaml semantically identical.
  */
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
@@ -15,14 +15,14 @@ import { SetupFlow } from "../src/setup/flow.js";
 import { discoveredLabel, currentModelsSummary } from "../src/setup/discover.js";
 import { loadPrefill, isExistingInstall } from "../src/setup/full.js";
 
-const ARON_SETTINGS = `# Written by BOS on 2026-09-25, effort block added 2026-09-26 (same shape as kumo setup T34).
+const ARON_SETTINGS = `# Written by BOS on 2026-09-25, effort block added 2026-09-26 (same shape as bruine setup T34).
 llm-pi-ai:
   providers:
     local:
       displayName: Ornith 1.5 9B (home server)
       api: openai-completions
       baseURL: http://192.168.1.64:8081/v1
-      apiKeyEnv: KUMO_LOCAL_API_KEY
+      apiKeyEnv: BRUINE_LOCAL_API_KEY
       models:
         - id: /etc/ajean/models/Ornith-1.5-9B-Q4_K_M.gguf
           name: Ornith 1.5 9B
@@ -40,9 +40,9 @@ agent-default-model:
   model: /etc/ajean/models/Ornith-1.5-9B-Q4_K_M.gguf
 `;
 
-describe("T35 prefill from settings.yaml (Aron shape, no kumo.json)", () => {
+describe("T35 prefill from settings.yaml (Aron shape, no bruine.json)", () => {
   test("Models step lists the route as current, preselected", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-t35-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-t35-"));
     await writeFile(join(home, "settings.yaml"), ARON_SETTINGS);
     const pre = loadPrefill(home);
     expect(pre).toBeDefined();
@@ -68,7 +68,7 @@ describe("T35 prefill from settings.yaml (Aron shape, no kumo.json)", () => {
   });
 
   test("Save without changes → settings.yaml semantically identical", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-t35-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-t35-"));
     await writeFile(join(home, "settings.yaml"), ARON_SETTINGS);
     const pre = loadPrefill(home)!;
     const flow = new SetupFlow(pre);
@@ -89,13 +89,13 @@ describe("T35 prefill from settings.yaml (Aron shape, no kumo.json)", () => {
   });
 
   test("first install (no files) → no prefill, no existing install", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-t35-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-t35-"));
     expect(loadPrefill(home)).toBeUndefined();
     expect(isExistingInstall(undefined)).toBe(false);
   });
 
-  test("installed skills survive a theme-only Save (no `skills` in kumo.json)", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-t35-"));
+  test("installed skills survive a theme-only Save (no `skills` in bruine.json)", async () => {
+    const home = await mkdtemp(join(tmpdir(), "bruine-t35-"));
     await writeFile(join(home, "settings.yaml"), ARON_SETTINGS);
     await mkdir(join(home, "skills"), { recursive: true });
     await writeFile(
@@ -110,8 +110,8 @@ describe("T35 prefill from settings.yaml (Aron shape, no kumo.json)", () => {
     expect(plan.skills.chosen).toEqual(["git-workflow"]);
   });
 
-  test("an explicit empty skills list in kumo.json still wins over the manifest", async () => {
-    const home = await mkdtemp(join(tmpdir(), "kumo-t35-"));
+  test("an explicit empty skills list in bruine.json still wins over the manifest", async () => {
+    const home = await mkdtemp(join(tmpdir(), "bruine-t35-"));
     await writeFile(join(home, "settings.yaml"), ARON_SETTINGS);
     await writeFile(join(home, "bruine.json"), JSON.stringify({ skills: [] }));
     await mkdir(join(home, "skills"), { recursive: true });

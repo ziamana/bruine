@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import type { Terminal } from "@earendil-works/pi-tui";
-import { KumoUi } from "../src/ui/kumo-ui.js";
+import { BruineUi } from "../src/ui/bruine-ui.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
 
 class FakeTerminal implements Terminal {
@@ -35,10 +35,10 @@ class FakeTerminal implements Terminal {
 
 const plain = (s: string): string => s.replace(/\r/g, "").replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
 
-async function ui(): Promise<KumoUi> {
-  vi.stubEnv("KUMO_HOME", await mkdtemp(join(tmpdir(), "kumo-air-")));
-  vi.stubEnv("KUMO_NO_UPDATE_CHECK", "1");
-  const shell = new KumoUi(
+async function ui(): Promise<BruineUi> {
+  vi.stubEnv("BRUINE_HOME", await mkdtemp(join(tmpdir(), "bruine-air-")));
+  vi.stubEnv("BRUINE_NO_UPDATE_CHECK", "1");
+  const shell = new BruineUi(
     "0.1.0",
     { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} },
     new FakeTerminal(),

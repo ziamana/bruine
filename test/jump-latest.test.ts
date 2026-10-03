@@ -7,7 +7,7 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, describe, expect, test } from "vitest";
 import { ASCII_ICONS, UNICODE_ICONS } from "../src/render/chars.js";
 import { JumpToLatest } from "../src/ui/jump-latest.js";
-import { KumoUi } from "../src/ui/kumo-ui.js";
+import { BruineUi } from "../src/ui/bruine-ui.js";
 import { MouseFeature, type MouseControl } from "../src/ui/mouse.js";
 import { viewportTop } from "../src/ui/selection.js";
 import { resetColorDepth } from "../src/ui/palette.js";
@@ -78,14 +78,14 @@ describe("the pill (D5)", () => {
   });
 
   test("the chip is the `chip` surface, and only where a background is allowed", () => {
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     try {
       const row = pill().render(60)[0]!;
       expect(row).toContain("\x1b[48;2;38;44;63m"); // chip #262c3f
       expect(row).toContain("\x1b[38;2;125;207;255m"); // sky #7dcfff
     } finally {
-      process.env.KUMO_COLOR = "basic";
+      process.env.BRUINE_COLOR = "basic";
       resetColorDepth();
     }
     // 16 colors: no surface to tint, so the pill is the label in sky and the chip
@@ -146,7 +146,7 @@ describe("where the pill is on screen (D5)", () => {
 
 describe("the mouse on the pill (D5)", () => {
   afterEach(() => {
-    process.env.KUMO_COLOR = "basic";
+    process.env.BRUINE_COLOR = "basic";
     resetColorDepth();
   });
 
@@ -280,9 +280,9 @@ describe("the pill in the real shell (D5)", () => {
   }
 
   /** A transcript tall enough that the window has something above it to show. */
-  async function shell(): Promise<{ ui: KumoUi; terminal: FakeTerminal; painted: () => string }> {
+  async function shell(): Promise<{ ui: BruineUi; terminal: FakeTerminal; painted: () => string }> {
     const terminal = new FakeTerminal();
-    const ui = new KumoUi(
+    const ui = new BruineUi(
       "test",
       { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} },
       terminal,
@@ -290,7 +290,7 @@ describe("the pill in the real shell (D5)", () => {
     );
     for (let i = 0; i < 40; i++) ui.addChat({ render: () => [`line ${String(i)}`], invalidate: () => {} });
     ui.start();
-    // One frame first: the window is fed by the frames kumo has painted.
+    // One frame first: the window is fed by the frames bruine has painted.
     ui.tui.render(terminal.columns);
     return { ui, terminal, painted: () => ui.tui.render(terminal.columns).map(strip).join("\n") };
   }

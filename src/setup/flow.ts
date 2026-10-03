@@ -47,7 +47,7 @@ export interface RolePick {
   contextWindow?: number;
 }
 
-/** Rebuild a RolePick from a kumo.json model ref (prefill for `kumo setup`). */
+/** Rebuild a RolePick from a bruine.json model ref (prefill for `bruine setup`). */
 export function roleFromModelRef(ref: {
   provider: string;
   model: string;
@@ -95,11 +95,11 @@ export interface SetupAnswers {
    */
   settingsOrig?: SettingsDoc;
   /**
-   * T35: the parsed kumo.json the prefill came from (for model-ref
+   * T35: the parsed bruine.json the prefill came from (for model-ref
    * preservation: name / missing baseUrl / etc stay untouched when the
    * route did not change). Never set by wizard steps.
    */
-  kumoOrig?: Record<string, unknown>;
+  bruineOrig?: Record<string, unknown>;
 }
 
 export function defaultAnswers(): SetupAnswers {
@@ -202,13 +202,13 @@ export class SetupFlow {
   /**
    * T35 menu: merge one step's result without moving the index.
    * Validation is deferred to saveFromMenu (roles must still be valid).
-   * settingsOrig / kumoOrig are never overwritten by step patches.
+   * settingsOrig / bruineOrig are never overwritten by step patches.
    */
   apply(patch: Partial<SetupAnswers>): void {
-    const { settingsOrig, kumoOrig } = this.#answers;
+    const { settingsOrig, bruineOrig } = this.#answers;
     this.#answers = { ...this.#answers, ...patch };
     if (settingsOrig !== undefined) this.#answers.settingsOrig = settingsOrig;
-    if (kumoOrig !== undefined) this.#answers.kumoOrig = kumoOrig;
+    if (bruineOrig !== undefined) this.#answers.bruineOrig = bruineOrig;
   }
 
   cancel(): void {
@@ -330,10 +330,10 @@ export class SetupFlow {
           };
         } else {
           providers[name] = {
-            displayName: d.displayName ?? `Kumo server ${key}`,
+            displayName: d.displayName ?? `Bruine server ${key}`,
             api: "openai-completions",
             baseURL: d.baseUrl,
-            apiKeyEnv: d.apiKey?.env ?? "KUMO_LOCAL_API_KEY",
+            apiKeyEnv: d.apiKey?.env ?? "BRUINE_LOCAL_API_KEY",
             // T19.A.2: an `off` effort so the Auto judge can get a plain answer.
             models: [],
           };
@@ -380,9 +380,9 @@ export class SetupFlow {
     const mainFresh = modelFor(a.roles.main)!;
     const fastFresh = modelFor(fast)!;
     const visionFresh = modelFor(a.roles.vision);
-    const kumoModelsOrig = a.kumoOrig?.models as Record<string, any> | undefined;
+    const bruineModelsOrig = a.bruineOrig?.models as Record<string, any> | undefined;
     const reuseForRole = (role: string, freshRef: ModelRef): ModelRef => {
-      const o = kumoModelsOrig?.[role];
+      const o = bruineModelsOrig?.[role];
       if (o !== null && typeof o === "object" && (o as any).provider === freshRef.provider && (o as any).model === freshRef.model) {
         return deepCopy(o) as ModelRef;
       }
@@ -396,17 +396,17 @@ export class SetupFlow {
     {
       const mainIsDefaultFast = a.roles.fast === undefined;
       const origFastMissingOrSame =
-        kumoModelsOrig?.fast === undefined ||
-        (kumoModelsOrig?.main !== undefined &&
-          (kumoModelsOrig.fast as any)?.provider === (kumoModelsOrig.main as any)?.provider &&
-          (kumoModelsOrig.fast as any)?.model === (kumoModelsOrig.main as any)?.model);
+        bruineModelsOrig?.fast === undefined ||
+        (bruineModelsOrig?.main !== undefined &&
+          (bruineModelsOrig.fast as any)?.provider === (bruineModelsOrig.main as any)?.provider &&
+          (bruineModelsOrig.fast as any)?.model === (bruineModelsOrig.main as any)?.model);
       main = reuseForRole("main", mainFresh);
-      if (mainIsDefaultFast && origFastMissingOrSame && kumoModelsOrig !== undefined) {
+      if (mainIsDefaultFast && origFastMissingOrSame && bruineModelsOrig !== undefined) {
         // Keep fast identical to main (as the saved home does).
-        fastRef = main.provider === (kumoModelsOrig.main as any)?.provider && main.model === (kumoModelsOrig.main as any)?.model
-          ? (deepCopy(kumoModelsOrig.fast ?? kumoModelsOrig.main) as ModelRef)
+        fastRef = main.provider === (bruineModelsOrig.main as any)?.provider && main.model === (bruineModelsOrig.main as any)?.model
+          ? (deepCopy(bruineModelsOrig.fast ?? bruineModelsOrig.main) as ModelRef)
           : reuseForRole("fast", fastFresh);
-        if (kumoModelsOrig.fast === undefined) fastRef = main;
+        if (bruineModelsOrig.fast === undefined) fastRef = main;
       } else {
         fastRef = reuseForRole("fast", fastFresh);
       }
@@ -432,7 +432,7 @@ export class SetupFlow {
     }
     doc["agent-default-model"] = { provider: main.provider, model: main.model };
     // dsh's ui-theme registry only accepts light/dark/system (T21.7 note):
-    // high-contrast is kumo's own setting and maps to dark for dsh surfaces.
+    // high-contrast is bruine's own setting and maps to dark for dsh surfaces.
     // T35: an original without ui-theme stays without it when the effective
     // preference is dark (implicit default) so Save-without-changes round-trips.
     // Fresh installs (no original) always write it, as before.
@@ -453,7 +453,7 @@ export class SetupFlow {
     }
 
     const env: Array<[string, string]> = [];
-    if (usesLocalServer(a)) env.push(["KUMO_LOCAL_API_KEY", "local"]);
+    if (usesLocalServer(a)) env.push(["BRUINE_LOCAL_API_KEY", "local"]);
     for (const role of [a.roles.main, a.roles.fast, a.roles.vision]) {
       const key = role?.discovered?.apiKey;
       if (key !== undefined && !env.some(([name]) => name === key.env)) env.push([key.env, key.value]);
@@ -462,7 +462,7 @@ export class SetupFlow {
       if (value.trim() !== "") env.push([name, value.trim()]);
     }
 
-    const kumoJson = JSON.stringify(
+    const bruineJson = JSON.stringify(
       {
         mode: "full",
         models: {
@@ -486,7 +486,7 @@ export class SetupFlow {
 
     return {
       settingsYaml: renderSettingsYaml(doc),
-      kumoJson: `${kumoJson}\n`,
+      bruineJson: `${bruineJson}\n`,
       env,
       skills: {
         homeSkillsDir: join(opts.dshHome, "skills"),
@@ -499,29 +499,29 @@ export class SetupFlow {
 
 export interface SetupPlan {
   settingsYaml: string;
-  kumoJson: string;
+  bruineJson: string;
   env: Array<[string, string]>;
   skills: { homeSkillsDir: string; bundledRoot: string; chosen: string[] };
 }
 
-/** Writes the plan: settings.yaml + kumo.json atomically, .env merged, skills synced. */
+/** Writes the plan: settings.yaml + bruine.json atomically, .env merged, skills synced. */
 export async function commitPlan(dshHome: string, plan: SetupPlan): Promise<void> {
   if (plan.env.some(([name]) => name === undefined)) throw new Error("bad env entry");
   await writeAtom(join(dshHome, "settings.yaml"), plan.settingsYaml, 0o600);
-  // T34: per-model effort levels are runtime state (kumo-effort owns them);
-  // a wizard Save rewrites kumo.json but must not forget the user's choices.
-  let kumoJson = plan.kumoJson;
+  // T34: per-model effort levels are runtime state (bruine-effort owns them);
+  // a wizard Save rewrites bruine.json but must not forget the user's choices.
+  let bruineJson = plan.bruineJson;
   try {
     const previous = JSON.parse(await readFile(configReadPath(dshHome), "utf8")) as Record<string, unknown>;
     if (previous.reasoningEffort !== undefined) {
-      const doc = JSON.parse(kumoJson) as Record<string, unknown>;
+      const doc = JSON.parse(bruineJson) as Record<string, unknown>;
       doc.reasoningEffort = previous.reasoningEffort;
-      kumoJson = `${JSON.stringify(doc, null, 2)}\n`;
+      bruineJson = `${JSON.stringify(doc, null, 2)}\n`;
     }
   } catch {
-    // no previous kumo.json: write the plan as-is
+    // no previous bruine.json: write the plan as-is
   }
-  await writeAtom(configWritePath(dshHome), kumoJson, 0o600);
+  await writeAtom(configWritePath(dshHome), bruineJson, 0o600);
   for (const [name, value] of plan.env) {
     await writeEnvVar(join(dshHome, ".env"), name, value);
   }

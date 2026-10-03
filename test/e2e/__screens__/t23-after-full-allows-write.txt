@@ -4,7 +4,7 @@
   › Write auto.txt                                                                                
 
   ✓ write  auto.txt  1.0s
-    ⎿ <path>/tmp/kumo-e2e-project-8slOAq/auto.txt</path>
+    ⎿ <path>/tmp/bruine-e2e-project-8slOAq/auto.txt</path>
       <type>file</type>
       <content>
       Created file
@@ -15,7 +15,7 @@
   › Write full.txt                                                                                
 
   ✓ write  full.txt  1.0s
-    ⎿ <path>/tmp/kumo-e2e-project-8slOAq/full.txt</path>
+    ⎿ <path>/tmp/bruine-e2e-project-8slOAq/full.txt</path>
       <type>file</type>
       <content>
       Created file

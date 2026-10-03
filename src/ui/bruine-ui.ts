@@ -1,4 +1,4 @@
-import { runtimeHome, configReadPath } from "../compat.js";
+import { appEnv, runtimeHome, configReadPath } from "../compat.js";
 import { parse as parseYaml } from "yaml";
 import {
   Container,
@@ -21,7 +21,7 @@ import {
   truncateToWidth,
   visibleWidth,
 } from "@earendil-works/pi-tui";
-import { kumoIcons, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, type BruineIcons } from "../render/chars.js";
 import { ansi, editorTheme, selectListTheme } from "./theme.js";
 import { bgEnabled, paint, setTerminalBackdrop, type PaletteRole } from "./palette.js";
 import { ChatTranscript, Gap, Margin, PlainGlyphEditor } from "./chat-layout.js";
@@ -71,13 +71,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   noticeForStartup,
-  readKumoJsonDoc,
+  readBruineJsonDoc,
   readUpdateCache,
   resolveDshHome,
   updateCheckEnabled,
 } from "../update.js";
 
-export interface KumoUiHandlers {
+export interface BruineUiHandlers {
   /** Enter on the editor (or the equivalent submit). */
   onSubmit(text: string): void;
   /** User typed or sent (for aborting background suggestion). */
@@ -164,14 +164,14 @@ export function helpLineParts(width: number, sep = "\u00b7"): Array<[string, str
 }
 
 /**
- * The plugin entry points kumo itself declares.
+ * The plugin entry points bruine itself declares.
  *
- * dsh mounts a bundle by its package exports, so this map IS the list of kumo's
+ * dsh mounts a bundle by its package exports, so this map IS the list of bruine's
  * plugins: an export that is not a module (`./cordis.patch.yml`, `./package.json`)
  * is configuration, not a plugin, and is left out by the rule rather than by name.
  * Read from the package that is running, so it cannot drift from the code.
  */
-export function readKumoPlugins(): string[] {
+export function readBruinePlugins(): string[] {
   try {
     const raw = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
       exports?: Record<string, string>;
@@ -195,10 +195,10 @@ class NoticeBox extends Container {
 
 /** The server or provider a route talks to, for the header: a host, else a provider name. */
 export function headerHost(
-  kumoJson?: { models?: { main?: { baseUrl?: string; provider?: string } } },
+  bruineJson?: { models?: { main?: { baseUrl?: string; provider?: string } } },
   fallbackProvider?: string,
 ): string {
-  const main = kumoJson?.models?.main;
+  const main = bruineJson?.models?.main;
   if (typeof main?.baseUrl === "string" && main.baseUrl !== "") {
     try {
       return new URL(main.baseUrl).hostname;
@@ -211,7 +211,7 @@ export function headerHost(
   return "?";
 }
 
-export function readKumoJsonForHeader(dshHome?: string): {
+export function readBruineJsonForHeader(dshHome?: string): {
   models?: { main?: { baseUrl?: string; provider?: string; model?: string; name?: string; contextWindow?: number } };
 } | undefined {
   try {
@@ -275,7 +275,7 @@ export function routeLabel(route: { provider?: string; model?: string; name?: st
   return route.provider === undefined || route.provider === "" ? model : `${route.provider} / ${model}`;
 }
 
-/** One `llm-pi-ai.providers` entry as kumo needs to show it (T37). */
+/** One `llm-pi-ai.providers` entry as bruine needs to show it (T37). */
 export interface SettingsProvider {
   id: string;
   displayName?: string;
@@ -289,7 +289,7 @@ export interface SettingsProvider {
  * T37: every provider settings.yaml declares, not only the default one. The
  * model picker needs the whole set: a route that setup already wrote is
  * offered even when the server does not advertise it right now (a llama.cpp
- * server swaps its loaded model without kumo knowing).
+ * server swaps its loaded model without bruine knowing).
  */
 export function readSettingsProviders(dshHome?: string): SettingsProvider[] {
   try {
@@ -324,13 +324,13 @@ export function readSettingsProviders(dshHome?: string): SettingsProvider[] {
   }
 }
 
-/** settings.yaml reader: default route + baseURL/name/window (real YAML parser; the hand-written one broke on kumo's own list style). */
+/** settings.yaml reader: default route + baseURL/name/window (real YAML parser; the hand-written one broke on bruine's own list style). */
 export function readSettingsRoute(dshHome?: string): SettingsRoute | undefined {
   try {
     const home = dshHome ?? runtimeHome();
     const p = join(home, "settings.yaml");
     if (!existsSync(p)) return undefined;
-    const doc = parseKumoSettingsYaml(readFileSync(p, "utf8"));
+    const doc = parseBruineSettingsYaml(readFileSync(p, "utf8"));
     if (doc === undefined) return undefined;
     return doc;
   } catch {
@@ -338,7 +338,7 @@ export function readSettingsRoute(dshHome?: string): SettingsRoute | undefined {
   }
 }
 
-function parseKumoSettingsYaml(text: string): SettingsRoute | undefined {
+function parseBruineSettingsYaml(text: string): SettingsRoute | undefined {
   const doc = parseYaml(text) as any;
   const def = doc?.["agent-default-model"];
   const provider = typeof def?.provider === "string" ? def.provider : undefined;
@@ -363,17 +363,17 @@ function parseKumoSettingsYaml(text: string): SettingsRoute | undefined {
 }
 
 /**
- * The kumo TUI shell (T13a), pi-tui main-screen mode: header, chat
+ * The bruine TUI shell (T13a), pi-tui main-screen mode: header, chat
  * transcript, bordered multi-line editor, footer. Replaces readline while a
  * terminal is attached.
  */
-export class KumoUi {
+export class BruineUi {
   readonly tui: TUI;
   readonly terminal: Terminal;
   readonly chat: ChatTranscript;
   readonly editor: PlainGlyphEditor;
   readonly footer: FooterComponent;
-  readonly icons: KumoIcons;
+  readonly icons: BruineIcons;
   /** The frame: header, a scrollable transcript, and the band pinned under it. */
   readonly shell: Shell;
   /** D5: the one control under a held window, and the way back to the live edge. */
@@ -413,9 +413,9 @@ export class KumoUi {
 
   constructor(
     version: string,
-    handlers: KumoUiHandlers,
+    handlers: BruineUiHandlers,
     terminal?: Terminal,
-    icons: KumoIcons = kumoIcons(),
+    icons: BruineIcons = bruineIcons(),
   ) {
     this.icons = icons;
     this.terminal = terminal ?? withEscapeFilter(new ProcessTerminal());
@@ -442,7 +442,7 @@ export class KumoUi {
     this.taskPanel = new TaskPanel(icons);
     this.noticeBox = new NoticeBox();
     try {
-      // T28b.1: settings.yaml is the source of truth; kumo.json only a fallback.
+      // T28b.1: settings.yaml is the source of truth; bruine.json only a fallback.
       const route = readSettingsRoute();
       if (route !== undefined) {
         const init: Record<string, unknown> = { model: route.model, provider: route.provider };
@@ -453,7 +453,7 @@ export class KumoUi {
         }
         this.footer.set(init as never);
       } else {
-        const doc = readKumoJsonForHeader();
+        const doc = readBruineJsonForHeader();
         const main = doc?.models?.main;
         if (main !== undefined) {
           const init: Record<string, unknown> = {};
@@ -541,7 +541,7 @@ export class KumoUi {
     this.tui.addInputListener((data: string) => this.#onInput(data, handlers));
   }
 
-  #onInput(data: string, handlers: KumoUiHandlers): ReturnType<TuiInputListener> {
+  #onInput(data: string, handlers: BruineUiHandlers): ReturnType<TuiInputListener> {
     const mouse = this.mouse.read(data);
     if (mouse.handled) {
       // A chunk can carry a release and the key typed after it in one read. The
@@ -557,7 +557,7 @@ export class KumoUi {
   }
 
   /** Everything that is a key: the mode switches, the editor, the slash commands. */
-  #onKey(data: string, handlers: KumoUiHandlers): ReturnType<TuiInputListener> {
+  #onKey(data: string, handlers: BruineUiHandlers): ReturnType<TuiInputListener> {
     // T60: "the user typed something" is a question about the encoding, and
     // under the kitty protocol a letter is an escape sequence. Reading it as
     // bytes meant a background suggestion was never dismissed by typing.
@@ -765,14 +765,14 @@ export class KumoUi {
   start(): void {
     this.tui.setFocus(this.promptFrame);
     // A launch takes the whole terminal: what the shell printed before (a system
-    // banner, the last command's output) is cleared from view, and kumo starts at the
-    // top. Only the visible screen; the scrollback is the user's. KUMO_NO_CLEAR=1,
+    // banner, the last command's output) is cleared from view, and bruine starts at the
+    // top. Only the visible screen; the scrollback is the user's. BRUINE_NO_CLEAR=1,
     // CI and a pipe keep the terminal exactly as it was.
-    if (process.stdout.isTTY === true && process.env.CI !== "1" && process.env.KUMO_NO_CLEAR !== "1") {
+    if (process.stdout.isTTY === true && process.env.CI !== "1" && appEnv("NO_CLEAR") !== "1") {
       this.terminal.clearScreen();
     }
     this.tui.start();
-    // T56: ask for the mouse, so a drag can be seen and copied. KUMO_MOUSE_SELECT=0
+    // T56: ask for the mouse, so a drag can be seen and copied. BRUINE_MOUSE_SELECT=0
     // and a form both keep the terminal's.
     this.mouse.start();
     void this.probeBackdrop();
@@ -999,7 +999,7 @@ export class KumoUi {
    * `/reload`: re-read what the terminal and `settings.yaml` say, in place, and
    * redraw. It is deliberately not a code reload: the modules are already loaded,
    * so a change in `src/` still needs a build and a restart. What it does cover is
-   * everything kumo memoized at startup and would otherwise show stale for the
+   * everything bruine memoized at startup and would otherwise show stale for the
    * whole session: the route behind the status bar, and the painted surfaces (the
    * terminal background, re-probed with OSC 11).
    *
@@ -1097,7 +1097,7 @@ export class KumoUi {
   /**
    * What the session loaded, told once and drawn many times.
    *
-   * The startup load reads the real sources (the skills manifest kumo wrote, the
+   * The startup load reads the real sources (the skills manifest bruine wrote, the
    * plugin entry points of the package that is running); a caller that knows better
    * — a plugin mounting something extra — replaces the list it owns.
    */
@@ -1115,7 +1115,7 @@ export class KumoUi {
    * with no skills, or a package that cannot be read, simply has no section.
    */
   async #loadResources(): Promise<void> {
-    const plugins = readKumoPlugins();
+    const plugins = readBruinePlugins();
     let skills: string[] = [];
     try {
       const home = runtimeHome();
@@ -1149,7 +1149,7 @@ export class KumoUi {
       } catch {
         host = undefined;
       }
-      this.#cachedHost = host ?? headerHost(readKumoJsonForHeader(), this.footer.state.provider);
+      this.#cachedHost = host ?? headerHost(readBruineJsonForHeader(), this.footer.state.provider);
     }
     return this.#cachedHost;
   }
@@ -1383,7 +1383,7 @@ export class KumoUi {
   async #maybeUpdateNotice(version: string): Promise<void> {
     try {
       const home = resolveDshHome();
-      const doc = await readKumoJsonDoc(home);
+      const doc = await readBruineJsonDoc(home);
       // The TUI shell only exists on an interactive terminal, so the TTY
       // gate was already passed by the launcher.
       if (!updateCheckEnabled({ doc, isTTY: true })) return;
@@ -1403,7 +1403,7 @@ export class KumoUi {
     this.clearNoticeBox();
     this.#setConfirming(true);
     const title = new Text(
-      ansi.red("Enable full access? kumo will run commands and edit files without asking."),
+      ansi.red("Enable full access? bruine will run commands and edit files without asking."),
       1,
       0,
     );

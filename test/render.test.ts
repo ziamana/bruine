@@ -105,7 +105,7 @@ describe("render plugin (T24.5 piped, no spinner, no CR)", () => {
 
   test("turn/end error prints the T33b two lines (never the raw code)", () => {
     const prev = process.env.DSH_HOME;
-    process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "kumo-render-err-"));
+    process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "bruine-render-err-"));
     try {
       const { screen, event } = setup();
       event("turn/end", { turn: 1, reason: { kind: "error", error: { code: "LLM_TIMEOUT", message: "timed out" } } });

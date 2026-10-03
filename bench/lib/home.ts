@@ -1,5 +1,5 @@
 /**
- * T36 — the bench home. One disposable `KUMO_HOME` per run: the route under
+ * T36 — the bench home. One disposable `BRUINE_HOME` per run: the route under
  * test, Full access mode (the task copy is disposable), no search, and the
  * variant's persona in the profile patch. Bundles are symlinked from this
  * checkout, so a run needs no network and no npm install.
@@ -17,7 +17,7 @@ const require = createRequire(import.meta.url);
 export interface BenchHomeOptions {
   /** Disposable home for this run (removed and rebuilt). */
   home: string;
-  /** The kumo checkout: bundles are linked from here, `dist/bin.js` runs it. */
+  /** The bruine checkout: bundles are linked from here, `dist/bin.js` runs it. */
   repoRoot: string;
   route: ProviderRoute;
   /** Route model id, as spelled in the settings file. */
@@ -28,7 +28,7 @@ export interface BenchHomeOptions {
   /** API key values for the route's `apiKeyEnv` (from the user's own .env). */
   env?: Record<string, string>;
   /**
-   * An empty directory used as HOME for the run. kumo's `.agents/skills`
+   * An empty directory used as HOME for the run. bruine's `.agents/skills`
    * migration and anything else home-relative would otherwise change the
    * prompt (or the file system) of the machine the bench runs on.
    */
@@ -50,7 +50,7 @@ export function benchHomeSettings(
   };
 }
 
-export function benchHomeKumoJson(
+export function benchHomeBruineJson(
   opts: Pick<BenchHomeOptions, "route" | "model">,
 ): Record<string, unknown> {
   const doc: Record<string, unknown> = {
@@ -74,9 +74,9 @@ export function benchHomeKumoJson(
 }
 
 /**
- * Environment for one kumo run: the process environment minus every kumo/dsh
+ * Environment for one bruine run: the process environment minus every bruine/dsh
  * and credential variable, plus the bench home and this route's key only.
- * A leaked `KUMO_*` or a second route's key must not change what is measured.
+ * A leaked `BRUINE_*` or a second route's key must not change what is measured.
  */
 export function benchEnv(
   opts: Pick<BenchHomeOptions, "home" | "route" | "tools" | "repoRoot" | "env" | "fakeHome">,
@@ -85,20 +85,20 @@ export function benchEnv(
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(base)) {
     if (value === undefined) continue;
-    if (/(API_KEY|TOKEN|SECRET|PASSWORD|^DSH_|^KUMO_)/i.test(key)) continue;
+    if (/(API_KEY|TOKEN|SECRET|PASSWORD|^DSH_|^BRUINE_|^KUMO_)/i.test(key)) continue;
     out[key] = value;
   }
-  out["KUMO_HOME"] = opts.home;
+  out["BRUINE_HOME"] = opts.home;
   out["DSH_HOME"] = opts.home;
   out["DSH_TELEMETRY_DISABLED"] = "1";
-  out["KUMO_NO_UPDATE_CHECK"] = "1";
-  out["KUMO_NO_ANIMATION"] = "1";
-  out["KUMO_ASCII"] = "1";
+  out["BRUINE_NO_UPDATE_CHECK"] = "1";
+  out["BRUINE_NO_ANIMATION"] = "1";
+  out["BRUINE_ASCII"] = "1";
   // Read by the bundle patch (lean unless the bench asks for the full catalog).
-  out["KUMO_TOOLS"] = opts.tools === "full" ? "full" : "lean";
+  out["BRUINE_TOOLS"] = opts.tools === "full" ? "full" : "lean";
   out["CI"] = "1";
   // Where check.sh finds the shared test helpers (node-tests.sh, py-tests.sh).
-  out["KUMO_BENCH_TOOLS"] = join(opts.repoRoot, "bench", "tools");
+  out["BRUINE_BENCH_TOOLS"] = join(opts.repoRoot, "bench", "tools");
   // An empty HOME: no user skills, no user settings, no .npmrc.
   if (opts.fakeHome !== undefined) {
     out["HOME"] = opts.fakeHome;
@@ -106,7 +106,7 @@ export function benchEnv(
   }
   // Local servers ignore the key's value; a cloud route gets the real one.
   const keyEnv = routeKeyEnv(opts.route);
-  out[keyEnv ?? "KUMO_LOCAL_API_KEY"] = opts.env?.[keyEnv ?? "KUMO_LOCAL_API_KEY"] ?? "bench";
+  out[keyEnv ?? "BRUINE_LOCAL_API_KEY"] = opts.env?.[keyEnv ?? "BRUINE_LOCAL_API_KEY"] ?? "bench";
   return out;
 }
 
@@ -116,7 +116,7 @@ export function sessionsRoot(home: string): string {
 }
 
 /**
- * Build (or rebuild) the bench home: settings, kumo.json, .env, the profile,
+ * Build (or rebuild) the bench home: settings, bruine.json, .env, the profile,
  * the variant persona, and the two bundle symlinks that let dsh boot the
  * checkout offline. `home` is removed first: nothing survives between runs.
  */
@@ -127,7 +127,7 @@ export async function writeBenchHome(opts: BenchHomeOptions): Promise<{ profileD
 
   const settings = benchHomeSettings(opts);
   await writeFile(join(home, "settings.yaml"), renderSettingsYaml(settings), "utf8");
-  await writeFile(join(home, "bruine.json"), `${JSON.stringify(benchHomeKumoJson(opts), null, 2)}\n`, "utf8");
+  await writeFile(join(home, "bruine.json"), `${JSON.stringify(benchHomeBruineJson(opts), null, 2)}\n`, "utf8");
   const env = opts.env ?? {};
   const lines = Object.entries(env).map(([k, v]) => `${k}=${v}`);
   await writeFile(join(home, ".env"), `${lines.join("\n")}\n`, "utf8");
@@ -178,6 +178,6 @@ export async function stageTask(
   // content hash rather than by "the file is still there".
   git(["init", "-q"], target);
   git(["add", "-A"], target);
-  git(["-c", "user.email=bench@kumo.invalid", "-c", "user.name=kumo-bench", "commit", "-q", "-m", "bench baseline"], target);
+  git(["-c", "user.email=bench@bruine.invalid", "-c", "user.name=bruine-bench", "commit", "-q", "-m", "bench baseline"], target);
   return resolve(target);
 }

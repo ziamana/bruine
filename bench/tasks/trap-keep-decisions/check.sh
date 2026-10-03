@@ -5,7 +5,7 @@
 # by digest, and a fourth one must be appended.
 set -eu
 cd "$(dirname "$0")"
-TOOLS="${KUMO_BENCH_TOOLS:-../../tools}"
+TOOLS="${BRUINE_BENCH_TOOLS:-../../tools}"
 "$TOOLS/py-tests.sh"
 
 LOG=docs/decisions.md

@@ -7,7 +7,7 @@ import {
   type Component,
 } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
-import { kumoIcons, withoutEmoji, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, withoutEmoji, type BruineIcons } from "../render/chars.js";
 import { blendHex, bgEnabled, boxLine, colorDepth, fillLine, paintHex, NUAGE, type PaletteRole } from "./palette.js";
 import { reasoningStyle } from "../render/reasoning.js";
 import { ansi } from "./theme.js";
@@ -33,7 +33,7 @@ const RAIL_FADE = {
   red: [NUAGE.rose.hex, NUAGE.railErrorEnd.hex],
   // T55 P1c: the live rail is the brightest mark in the transcript. A tool in
   // flight and a tool that finished ten seconds ago used to be the same blue, so
-  // "where is kumo right now" meant reading every block.
+  // "where is bruine right now" meant reading every block.
   active: [NUAGE.railActive.hex, NUAGE.railActiveEnd.hex],
 } as const;
 
@@ -64,7 +64,7 @@ function sameLines(a: readonly string[], b: readonly string[]): boolean {
 
 /** Own block spacing/padding once, without changing the model's transcript. */
 export class ChatTranscript extends Container {
-  constructor(private icons: KumoIcons = kumoIcons()) {
+  constructor(private icons: BruineIcons = bruineIcons()) {
     super();
   }
   /** What each block was laid out as, and from what, so a block that did not change is not laid out again. */

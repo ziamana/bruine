@@ -68,7 +68,7 @@ export function standaloneInstruction(lastUser: string, answerExcerpt: string): 
   return `${SUGGEST_INSTRUCTION}\n\nLast user prompt: ${lastUser}\nLast answer (excerpt): ${answerExcerpt}`;
 }
 
-const SOURCE = { kind: "plugin", plugin: "kumo-suggest" } as const;
+const SOURCE = { kind: "plugin", plugin: "bruine-suggest" } as const;
 
 export interface SuggestionRequest {
   provider: string;

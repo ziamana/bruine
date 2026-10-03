@@ -1,3 +1,3 @@
 export function boot(): void {
-  // TODO(kumo): read the profile
+  // TODO(bruine): read the profile
 }

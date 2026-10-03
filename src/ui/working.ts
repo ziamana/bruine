@@ -2,7 +2,7 @@ import { visibleWidth, type Component } from "@earendil-works/pi-tui";
 import { formatElapsed } from "../render/elapsed.js";
 import { clipCells } from "../render/reasoning.js";
 import { dropSpinner, rainLevel } from "./rain.js";
-import { kumoIcons, isAscii, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, isAscii, type BruineIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 import { terminalMotionAllowed } from "./logo-motion.js";
 
@@ -15,13 +15,13 @@ export class WorkingComponent implements Component {
   private activity: TurnActivity;
   constructor(
     now: () => number = Date.now,
-    private icons: KumoIcons = kumoIcons(),
+    private icons: BruineIcons = bruineIcons(),
     activity?: TurnActivity,
   ) {
     this.activity = activity ?? new TurnActivity(now);
     if (!activity) this.activity.start();
     // ASCII suppresses decorative logo motion, but its activity spinner still ticks.
-    this.#animate = terminalMotionAllowed({ env: { ...process.env, KUMO_ASCII: "0" } });
+    this.#animate = terminalMotionAllowed({ env: { ...process.env, BRUINE_ASCII: "0" } });
   }
   get state(): WorkingState { return this.activity.state; }
   set state(state: WorkingState) { this.activity.setState(state); }

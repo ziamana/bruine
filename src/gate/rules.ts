@@ -1,5 +1,5 @@
 /**
- * The kumo permission gate — pure rules (T16.C, hardened by T18). Modes never
+ * The bruine permission gate — pure rules (T16.C, hardened by T18). Modes never
  * change the tool catalog or system prompt (ARCHITECTURE section 0 cache
  * rule): enforcement happens here, on `tools/pre-execute`, plus appended
  * announcement messages.

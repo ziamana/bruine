@@ -9,5 +9,5 @@ test("the slug is appended to the title", () => {
 });
 
 test("a title that is already a slug still works", () => {
-  assert.equal(formatTitle(article("kumo-bench")), "kumo-bench (kumo-bench)");
+  assert.equal(formatTitle(article("bruine-bench")), "bruine-bench (bruine-bench)");
 });

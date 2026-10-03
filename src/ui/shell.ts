@@ -1,7 +1,7 @@
 /**
  * The frame, and a transcript the app can scroll without losing the composer.
  *
- * The defect: kumo runs on the main screen, so the frame is printed whole and the
+ * The defect: bruine runs on the main screen, so the frame is printed whole and the
  * terminal scrolls it. The composer sits at the END of that frame, which is exactly
  * where the visible viewport ends — so reading anything above the last screenful
  * scrolled the input bar out of sight, and the only way back was to scroll to the

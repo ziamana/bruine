@@ -14,8 +14,8 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe("iconsFor (T14.5)", () => {
-  test("KUMO_ASCII=1 forces ASCII", () => {
-    expect(iconsFor({ KUMO_ASCII: "1", LANG: "fr_FR.UTF-8" }, "linux")).toBe(ASCII_ICONS);
+  test("BRUINE_ASCII=1 forces ASCII", () => {
+    expect(iconsFor({ BRUINE_ASCII: "1", LANG: "fr_FR.UTF-8" }, "linux")).toBe(ASCII_ICONS);
   });
 
   test("UTF-8 locale → unicode glyphs", () => {

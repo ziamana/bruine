@@ -9,7 +9,7 @@ const saved = { ...process.env };
 afterEach(() => { process.env = { ...saved }; resetColorDepth(); });
 
 for (const icons of [UNICODE_ICONS, ASCII_ICONS]) test.each([100, 60, 30])("subagent count sits below the model at %i columns", width => {
-  process.env.KUMO_COLOR = "basic"; delete process.env.NO_COLOR; resetColorDepth();
+  process.env.BRUINE_COLOR = "basic"; delete process.env.NO_COLOR; resetColorDepth();
   const footer = new FooterComponent(icons, { cwd: "/tmp" });
   footer.set({ modelName: "qwen 3.8 flash", effort: "low", subagents: 1, tps: 14 });
   const rows = footer.render(width);

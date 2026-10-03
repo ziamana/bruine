@@ -5,7 +5,7 @@
  * pi walks every message in its session and adds the usage on it, so `↑` and `↓`
  * on that footer are the totals of the session and not of the request that
  * happened to be last — and they survive a compaction, which replaces the
- * messages but not the tokens already paid for. kumo counts the same total from
+ * messages but not the tokens already paid for. bruine counts the same total from
  * the reports as they arrive, and the two agree because one report is the
  * accounting of one model call.
  *

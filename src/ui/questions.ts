@@ -1,6 +1,6 @@
 import { isKeyRelease, matchesKey, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
-import { kumoIcons, isAscii, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, isAscii, type BruineIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 import { boxLine } from "./palette.js";
 import { Box } from "./box.js";
@@ -32,7 +32,7 @@ const OTHER_LABEL = "Other…";
  * / `[ ]` in a UI that speaks ✓ ✗ ▍ █ everywhere else, so the one control with a
  * selection state was the only one not drawn in the product's own vocabulary.
  */
-export function checkMarks(icons: KumoIcons): { on: string; off: string } {
+export function checkMarks(icons: BruineIcons): { on: string; off: string } {
   return isAscii(icons) ? { on: "[x]", off: "[ ]" } : { on: "◉", off: "○" };
 }
 
@@ -50,7 +50,7 @@ function padCells(text: string, width: number): string {
 /**
  * Multi-question form above the editor (T28A). Handles Up/Down/Left/Right,
  * Space (multi), Enter, Esc, and Other… free-text input. Purely keyboard
- * driven; rendered by KumoUi in the notice box (never over chat).
+ * driven; rendered by BruineUi in the notice box (never over chat).
  */
 export class QuestionForm implements Component {
   #index = 0;
@@ -67,7 +67,7 @@ export class QuestionForm implements Component {
 
   constructor(
     readonly questions: QuestionInput[],
-    private icons: KumoIcons = kumoIcons(),
+    private icons: BruineIcons = bruineIcons(),
     private version = "",
   ) {
     this.#filters = questions.map(() => "");
@@ -159,7 +159,7 @@ export class QuestionForm implements Component {
       ...(q.multiSelect ? ["Space toggle"] : []), "esc clear/cancel",
     ].join(ascii ? " / " : " • ");
     rows.push(...wrapTextWithAnsi(ansi.gray(hints), inner).map(row));
-    rows.push(edge(`kumo v${this.version}`, true));
+    rows.push(edge(`bruine v${this.version}`, true));
     return rows;
   }
 

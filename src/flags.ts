@@ -2,7 +2,7 @@
  * T42 — the launcher's own flags, parsed before anything else.
  *
  * Pure, and it **claims nothing it does not own**: the first token it does not
- * recognize ends kumo's parsing, because everything after it belongs to dsh or
+ * recognize ends bruine's parsing, because everything after it belongs to dsh or
  * to the booted tree. A `-p` that is the value of another flag (`--model -p`)
  * is not a print request.
  */
@@ -19,7 +19,7 @@ export interface HeadlessRequest {
 export interface ParsedFlags {
   headless: HeadlessRequest | undefined;
   permission?: "ask" | "auto" | "full";
-  /** Strip kumo's own flags; the rest goes to dsh verbatim. */
+  /** Strip bruine's own flags; the rest goes to dsh verbatim. */
   passthrough: string[];
   /** `--output-format` named a format that does not exist. */
   error?: string;
@@ -106,7 +106,7 @@ export function parseFlags(argv: readonly string[]): ParsedFlags {
   }
 
   if (prompts.length === 0) {
-    // No task: kumo boots the REPL. `--output-format` on its own is not ours to
+    // No task: bruine boots the REPL. `--output-format` on its own is not ours to
     // interpret, so it stays in the passthrough for dsh.
     return { headless: undefined, passthrough, ...(permission !== undefined ? { permission } : {}) };
   }

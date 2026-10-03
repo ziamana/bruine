@@ -1,4 +1,4 @@
-import { configReadPath } from "../compat.js";
+import { appEnv, configReadPath } from "../compat.js";
 import { spawn, type SpawnOptions } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
@@ -7,7 +7,7 @@ import { delimiter, join } from "node:path";
 const CONFIG_FILES = ["settings.yaml", "bruine.json"] as const;
 
 /**
- * Editors that take over the terminal kumo is drawing in. Opening one from inside the
+ * Editors that take over the terminal bruine is drawing in. Opening one from inside the
  * screen would fight it for the keyboard, so an `$EDITOR` that is one of these is passed
  * over rather than launched.
  */
@@ -49,8 +49,8 @@ function onPath(command: string, env: NodeJS.ProcessEnv, exists: (p: string) => 
   return dirs.some((dir) => names.some((name) => exists(join(dir, name))));
 }
 
-/** What kumo.json says under `editor`, or nothing: a missing or broken file is no opinion. */
-function editorFromKumoJson(home: string): string | undefined {
+/** What bruine.json says under `editor`, or nothing: a missing or broken file is no opinion. */
+function editorFromBruineJson(home: string): string | undefined {
   try {
     const doc = JSON.parse(readFileSync(configReadPath(home), "utf8")) as { editor?: unknown };
     return typeof doc.editor === "string" && doc.editor.trim() !== "" ? doc.editor : undefined;
@@ -62,7 +62,7 @@ function editorFromKumoJson(home: string): string | undefined {
 /**
  * The editor to open the config in, and why.
  *
- * What the user said wins: `KUMO_EDITOR`, then `editor` in kumo.json. After that the
+ * What the user said wins: `BRUINE_EDITOR`, then `editor` in bruine.json. After that the
  * desktop's own: `$VISUAL` and `$EDITOR` when they are graphical, then a graphical editor
  * found on the PATH (Kate before the rest), then the system's opener. A terminal editor
  * is never launched from inside the screen.
@@ -74,8 +74,8 @@ export function resolveEditor(
   exists: (p: string) => boolean = existsSync,
 ): EditorChoice | undefined {
   const stated: Array<[string, string | undefined]> = [
-    ["KUMO_EDITOR", env.KUMO_EDITOR],
-    ["bruine.json", editorFromKumoJson(home)],
+    ["BRUINE_EDITOR", appEnv("EDITOR", env)],
+    ["bruine.json", editorFromBruineJson(home)],
   ];
   for (const [source, line] of stated) {
     const split = line === undefined ? undefined : splitCommand(line);
@@ -104,8 +104,8 @@ export interface OpenResult {
 }
 
 /**
- * Launch the editor on the files, detached: closing kumo must not close the editor, and
- * the editor must not read kumo's keyboard. Resolves once the program has started, or
+ * Launch the editor on the files, detached: closing bruine must not close the editor, and
+ * the editor must not read bruine's keyboard. Resolves once the program has started, or
  * says why it could not.
  */
 export function openInEditor(

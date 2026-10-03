@@ -6,7 +6,7 @@ const questions = [{ id: "database", header: "review", question: "Which database
 test.each([100, 60, 30])("popup fits %i columns and displays the selected description", width => {
   const form = new QuestionForm(questions);
   const rows = form.render(width);
-  expect(rows.join("\n")).toContain("review"); expect(rows.join("\n")).toContain("kumo v");
+  expect(rows.join("\n")).toContain("review"); expect(rows.join("\n")).toContain("bruine v");
   expect(rows.join("\n").replace(/\x1b\[[0-9;]*m/g, "").replace(/\s+/g, " ")).toContain("Local storage without");
   for (const row of rows) expect(visibleWidth(row)).toBeLessThanOrEqual(width);
 });
@@ -35,5 +35,5 @@ test("ASCII popup uses ASCII structure and marks", () => {
   expect(form.render(30).join("\n").replace(/\x1b\[[0-9;]*m/g, "")).not.toMatch(/[^\x00-\x7f]/);
 });
 test("the question footer displays the version supplied by its host", () => {
-  expect(new QuestionForm(questions, ASCII_ICONS, "9.8.7").render(60).join("\n")).toContain("kumo v9.8.7");
+  expect(new QuestionForm(questions, ASCII_ICONS, "9.8.7").render(60).join("\n")).toContain("bruine v9.8.7");
 });

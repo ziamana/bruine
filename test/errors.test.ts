@@ -1,5 +1,5 @@
 /**
- * T33b — the error mapping table (ticket §2) and the kumo.log sink.
+ * T33b — the error mapping table (ticket §2) and the bruine.log sink.
  * D7 — the error block the user actually reads: what happened, which model, what
  * to do, at 100, 60 and 30 columns and with no colour at all.
  */
@@ -25,7 +25,7 @@ describe("describeLlmError (T33b table)", () => {
   test("connection refused → reach line + llama.cpp hint", () => {
     const r = describeLlmError({ code: "TRANSPORT", message: "fetch failed ECONNREFUSED" }, route);
     expect(r.message).toBe("Can't reach your model server at http://192.168.1.64:8081/v1");
-    expect(r.hint).toBe("Is llama.cpp / Ollama / LM Studio running?  Change it: kumo setup");
+    expect(r.hint).toBe("Is llama.cpp / Ollama / LM Studio running?  Change it: bruine setup");
   });
 
   test("timeout → seconds when known", () => {
@@ -38,7 +38,7 @@ describe("describeLlmError (T33b table)", () => {
     for (const f of [{ code: "AUTH", message: "401 unauthorized" }, { message: "x", status: 403 }]) {
       const r = describeLlmError(f, route);
       expect(r.message).toBe("The API key was refused by Ornith 1.5 9B (home server)");
-      expect(r.hint).toBe("Set a new key: kumo setup");
+      expect(r.hint).toBe("Set a new key: bruine setup");
     }
   });
 
@@ -46,7 +46,7 @@ describe("describeLlmError (T33b table)", () => {
     const r = describeLlmError({ code: "PI_AI_ERROR", message: "404 no deployment found", status: 404 }, route);
     expect(r.message).toBe('Model "ornith.gguf" not found on http://192.168.1.64:8081/v1');
     expect(r.wantAvailableModels).toBe(true);
-    expect(r.hint).toContain("Change it: kumo setup");
+    expect(r.hint).toContain("Change it: bruine setup");
   });
 
   test("context overflow → compact/new", () => {
@@ -70,7 +70,7 @@ describe("describeLlmError (T33b table)", () => {
   test("unknown code → first line only, point at the log (never a stack)", () => {
     const r = describeLlmError({ code: "WEIRD", message: "first line\nsecond line\nat Object.<anonymous>" }, route);
     expect(r.message).toBe("first line");
-    expect(r.hint).toContain("logs/kumo.log");
+    expect(r.hint).toContain("logs/bruine.log");
   });
 
   test("formatK matches the ticket spelling", () => {
@@ -79,7 +79,7 @@ describe("describeLlmError (T33b table)", () => {
   });
 });
 
-describe("kumo.log + /v1/models list (T33b)", () => {
+describe("bruine.log + /v1/models list (T33b)", () => {
   const prev = process.env.DSH_HOME;
   afterEach(() => {
     if (prev === undefined) delete process.env.DSH_HOME;
@@ -87,11 +87,11 @@ describe("kumo.log + /v1/models list (T33b)", () => {
     vi.unstubAllGlobals();
   });
 
-  test("appendErrorLog writes code + status + message to $DSH_HOME/logs/kumo.log", async () => {
-    const home = mkdtempSync(join(tmpdir(), "kumo-t33b-log-"));
+  test("appendErrorLog writes code + status + message to $DSH_HOME/logs/bruine.log", async () => {
+    const home = mkdtempSync(join(tmpdir(), "bruine-t33b-log-"));
     process.env.DSH_HOME = home;
     await appendErrorLog({ code: "TRANSPORT", status: undefined, message: "fetch failed" });
-    const log = readFileSync(join(home, "logs", "kumo.log"), "utf8");
+    const log = readFileSync(join(home, "logs", "bruine.log"), "utf8");
     expect(log).toContain("[llm-error] code=TRANSPORT fetch failed");
   });
 
@@ -110,7 +110,7 @@ describe("kumo.log + /v1/models list (T33b)", () => {
 
 describe("ErrorBlock (D7: what happened, which model, what to do)", () => {
   afterEach(() => {
-    process.env.KUMO_COLOR = "basic";
+    process.env.BRUINE_COLOR = "basic";
     resetColorDepth();
   });
   const net = describeLlmError({ code: "TRANSPORT", message: "fetch failed ECONNREFUSED" }, route);
@@ -121,7 +121,7 @@ describe("ErrorBlock (D7: what happened, which model, what to do)", () => {
     const lines = block.render(100).map(strip);
     expect(lines[0]).toBe("Error: Can't reach your model server at http://192.168.1.64:8081/v1");
     expect(lines[1]).toBe("Model: Ornith-1.5-9B-Q4_K_M");
-    expect(lines[2]).toContain("kumo setup");
+    expect(lines[2]).toContain("bruine setup");
     // The rule the whole line exists for: never a path to the weights.
     expect(lines.join("\n")).not.toContain("/etc");
     expect(lines.join("\n")).not.toContain(".gguf");
@@ -131,9 +131,9 @@ describe("ErrorBlock (D7: what happened, which model, what to do)", () => {
     const lines = new ErrorBlock(stopped, { modelName: "Ornith 1.5 9B" }).render(100).map(strip);
     expect(lines[0]).toBe("Error: Retry failed after 2 attempts: Retry cancelled");
     expect(lines[1]).toBe("Model: Ornith 1.5 9B");
-    // Not the generic "if it repeats: kumo setup": the user stopped it on purpose.
+    // Not the generic "if it repeats: bruine setup": the user stopped it on purpose.
     expect(lines[2]).toContain("You stopped this turn");
-    expect(lines[2]).not.toContain("logs/kumo.log");
+    expect(lines[2]).not.toContain("logs/bruine.log");
   });
 
   test("an error with no route at all does not invent one", () => {
@@ -151,7 +151,7 @@ describe("ErrorBlock (D7: what happened, which model, what to do)", () => {
     expect(painted).toContain("\x1b[1m"); // the `Error:` label is bold
     expect(painted).toContain("\x1b[31m"); // rose, at 16 colors
     expect(block.render(100)[1]).toContain("\x1b[90m"); // the model row is muted
-    process.env.KUMO_COLOR = "none";
+    process.env.BRUINE_COLOR = "none";
     resetColorDepth();
     expect(block.render(100).join("")).not.toMatch(/\x1b\[/);
   });
@@ -166,7 +166,7 @@ describe("ErrorBlock (D7: what happened, which model, what to do)", () => {
     // 16 colors: no surface to tint, so the rail carries the state (D1's rule), and
     // it runs the full height of the card.
     expect(frame.filter((line) => /\x1b\[31m▍/.test(line))).toHaveLength(frame.length - 1);
-    process.env.KUMO_COLOR = "truecolor";
+    process.env.BRUINE_COLOR = "truecolor";
     resetColorDepth();
     expect(transcript.render(60).join("")).toContain("\x1b[48;2;58;24;32m"); // toolErr #3a1820
   });
@@ -197,9 +197,9 @@ describe("ErrorBlock (D7: what happened, which model, what to do)", () => {
     const block = new ErrorBlock(describeLlmError({ code: "PI_AI_ERROR", status: 404, message: "404 not found" }, route), {
       model: "ornith.gguf",
     });
-    expect(block.render(100).map(strip)[2]).toContain("Change it: kumo setup");
-    block.setHint("Available: a.gguf, b.gguf. Change it: kumo setup");
-    expect(block.render(100).map(strip)[2]).toBe("Available: a.gguf, b.gguf. Change it: kumo setup");
+    expect(block.render(100).map(strip)[2]).toContain("Change it: bruine setup");
+    block.setHint("Available: a.gguf, b.gguf. Change it: bruine setup");
+    expect(block.render(100).map(strip)[2]).toBe("Available: a.gguf, b.gguf. Change it: bruine setup");
     expect(block.render(100).map(strip)[0]).toMatch(/^Error: Model "ornith.gguf" not found/);
   });
 

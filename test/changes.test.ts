@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { ChangedFilesComponent, changedSince, parseNumstat, parsePorcelain, turnChanges, type GitStatus } from "../src/ui/changes.js";
 import { strip } from "./fakes.js";
 import { ToolCallComponent } from "../src/ui/tool-call-component.js";
-import { KumoUi } from "../src/ui/kumo-ui.js";
+import { BruineUi } from "../src/ui/bruine-ui.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
 import { visibleWidth, type Terminal } from "@earendil-works/pi-tui";
 import type { ToolResult } from "../src/platform/tool.js";
@@ -15,7 +15,7 @@ import type { ToolResult } from "../src/platform/tool.js";
  *   git mv renamed-old.txt renamed-new.txt; rm tracked.txt
  *   printf x > "a file with spaces.txt"
  *
- * The `-z` form is the one kumo reads, and it is the reason the last path has no
+ * The `-z` form is the one bruine reads, and it is the reason the last path has no
  * quotes around it: without `-z`, git writes `?? "a file with spaces.txt"`, and
  * a path with a quote or a backslash in it would arrive escaped.
  */
@@ -156,7 +156,7 @@ class FakeTerminal implements Terminal {
 
 describe("the line in the transcript (T59)", () => {
   test("the turn's files land in the chat, and an empty list lands nothing", async () => {
-    const ui = new KumoUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), UNICODE_ICONS);
+    const ui = new BruineUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), UNICODE_ICONS);
     const painted = (): string => ui.tui.render(100).map(strip).join("\n");
     ui.showTurnChanges([]);
     expect(painted()).not.toContain("changed");

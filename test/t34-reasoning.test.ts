@@ -1,7 +1,7 @@
 /**
  * T34 — reasoning effort that really works: template detection from llama.cpp
  * /props, the compat/reasoningEfforts blocks setup writes, the runtime
- * kumo-effort plugin (levels, defaults, /effort, ctrl+e), and the T28b
+ * bruine-effort plugin (levels, defaults, /effort, ctrl+e), and the T28b
  * follow-up: Auto judge and ghost suggestion send thinking OFF through the
  * same T34 mechanism.
  */
@@ -173,9 +173,9 @@ describe("wizard buildPlan carries the template (T34)", () => {
     return flow;
   }
 
-  test("kumo.json models.main carries the template (round-trip on re-save)", () => {
+  test("bruine.json models.main carries the template (round-trip on re-save)", () => {
     const plan = walked().buildPlan({ dshHome: "/h", bundledSkillsRoot: "/p", bundledSkills: [] });
-    const json = JSON.parse(plan.kumoJson) as { models: Record<string, unknown> };
+    const json = JSON.parse(plan.bruineJson) as { models: Record<string, unknown> };
     expect(json.models.main).toMatchObject({
       provider: "local",
       model: "ornith",
@@ -185,8 +185,8 @@ describe("wizard buildPlan carries the template (T34)", () => {
 
   test("roleFromModelRef restores the template so Save keeps the compat block", async () => {
     const plan = walked().buildPlan({ dshHome: "/h", bundledSkillsRoot: "/p", bundledSkills: [] });
-    const ref = (JSON.parse(plan.kumoJson) as any).models.main;
-    // rebuild the answers the way `kumo setup` prefill does, then re-plan:
+    const ref = (JSON.parse(plan.bruineJson) as any).models.main;
+    // rebuild the answers the way `bruine setup` prefill does, then re-plan:
     const flow2 = new SetupFlow();
     const pick = roleFromModelRef(ref);
     expect(pick?.discovered?.template).toEqual(ref.template);
@@ -204,7 +204,7 @@ describe("wizard buildPlan carries the template (T34)", () => {
   });
 });
 
-describe("kumo-effort runtime (T34)", () => {
+describe("bruine-effort runtime (T34)", () => {
   test("isBinaryLevels / labels", () => {
     expect(isBinaryLevels(["off", "low"])).toBe(true);
     expect(isBinaryLevels(["off", "low", "medium", "high"])).toBe(false);
@@ -278,8 +278,8 @@ describe("kumo-effort runtime (T34)", () => {
   });
 
   async function attach(h: ReturnType<typeof harness>) {
-    // kumo.json for persistence + template lookup goes to a temp home.
-    const home = await mkdtemp(join(tmpdir(), "kumo-t34-"));
+    // bruine.json for persistence + template lookup goes to a temp home.
+    const home = await mkdtemp(join(tmpdir(), "bruine-t34-"));
     await mkdir(home, { recursive: true });
     process.env.DSH_HOME = home;
     h.home = home;
@@ -315,7 +315,7 @@ describe("kumo-effort runtime (T34)", () => {
   test("cloud models: no default (provider decides), footer auto", async () => {
     const h = harness(["off", "low", "medium", "high"]);
     h.holder.current = { provider: "openrouter", model: "m1" };
-    const home = await mkdtemp(join(tmpdir(), "kumo-t34-"));
+    const home = await mkdtemp(join(tmpdir(), "bruine-t34-"));
     process.env.DSH_HOME = home;
     await writeFile(join(home, "bruine.json"), JSON.stringify({ models: {} }));
     await h.effort.attach({ agent: {}, selection: h.holder, ui: h.ui as never } as never, h.llm as never);
@@ -333,7 +333,7 @@ describe("kumo-effort runtime (T34)", () => {
     expect(h.notices.at(-1)).toBe("Effort: high (next message)");
     expect(reply).toBe("Effort: high (next message)");
     expect(h.footerState.effort).toBe("high");
-    // remembered per model in kumo.json:
+    // remembered per model in bruine.json:
     await h.effort.persisted;
     const doc = JSON.parse(await readFile(join(h.home!, "bruine.json"), "utf8")) as any;
     expect(doc.reasoningEffort).toEqual({ m1: "high" });
@@ -429,7 +429,7 @@ describe("kumo-effort runtime (T34)", () => {
 describe("judge + suggestion send thinking OFF through T34 (T28b)", () => {
   // The models a T34 setup writes always declare `off` (binary or effort
   // templates), so askJudge / triggerSuggest can turn thinking off. These
-  // assert the kumo side asks for exactly the level that switches it.
+  // assert the bruine side asks for exactly the level that switches it.
   test("judge on a T34 binary route asks for off", async () => {
     let seen: any;
     const llm: any = {

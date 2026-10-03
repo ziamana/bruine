@@ -4,7 +4,7 @@
 # code was read.
 set -eu
 cd "$(dirname "$0")"
-echo "kumo-bench-check-mode: expected-answer"
+echo "bruine-bench-check-mode: expected-answer"
 if [ ! -f answer.txt ]; then
   echo "answer.txt was not written" >&2
   exit 1

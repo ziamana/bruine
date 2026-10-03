@@ -1,4 +1,4 @@
-import { appHome } from "./compat.js";
+import { appEnv, appHome } from "./compat.js";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -14,15 +14,15 @@ export interface Launch {
 
 export interface LaunchOptions {
   /**
-   * Pinned dsh entry script (from resolveDshEntry). When set, kumo launches
+   * Pinned dsh entry script (from resolveDshEntry). When set, bruine launches
    * exactly that copy with the current Node binary; when absent it falls back
    * to whatever `dsh` is on the PATH.
    */
   dshEntry?: string;
-  /** kumo.json `telemetry`. dsh telemetry is ON upstream, so kumo disables it
+  /** bruine.json `telemetry`. dsh telemetry is ON upstream, so bruine disables it
    * unless the user opted in. */
   telemetry?: boolean;
-  /** Fixed at startup from kumo.json; never changed during a session. */
+  /** Fixed at startup from bruine.json; never changed during a session. */
   tools?: "lean" | "full";
   /** Path implementation, injectable (path.win32) for cross-platform tests. */
   pathMod?: typeof path;
@@ -41,9 +41,14 @@ export function buildLaunch(
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
     if (value !== undefined) out[key] = value;
+    if (key.startsWith("KUMO_")) {
+      const suffix = key.slice(5);
+      const effective = appEnv(suffix, env);
+      if (effective !== undefined) out[`BRUINE_${suffix}`] = effective;
+    }
   }
   out.DSH_HOME = appHome(env, home, pathMod);
-  out.KUMO_TOOLS = opts.tools === "full" ? "full" : "lean";
+  out.BRUINE_TOOLS = opts.tools === "full" ? "full" : "lean";
   if (opts.telemetry !== true) {
     out.DSH_TELEMETRY_DISABLED = "1";
   }
@@ -55,7 +60,7 @@ export function buildLaunch(
 }
 
 /**
- * Resolve the exact dsh copy installed as a dependency of kumo (the product
+ * Resolve the exact dsh copy installed as a dependency of bruine (the product
  * pins its version; upgrades are a deliberate ticket, never PATH drift).
  */
 export function resolveDshEntry(): string | undefined {
@@ -95,7 +100,7 @@ export function runDsh(entry: string | undefined, args: string[], env: Record<st
   return { status: result.status, ...(result.error ? { error: result.error as NodeJS.ErrnoException } : {}), ...(capture ? { output } : {}) };
 }
 
-/** The launcher-only flags kumo answers itself (T11.2: first argument only). */
+/** The launcher-only flags bruine answers itself (T11.2: first argument only). */
 export function flagMode(argv: string[]): "help" | "version" | null {
   const first = argv[0];
   if (first === "--help" || first === "-h") return "help";

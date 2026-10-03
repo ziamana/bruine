@@ -1,9 +1,9 @@
-import type { DshContext, KumoRepl } from "./ctx.js";
-import type { KumoModesService } from "./modes.js";
+import type { DshContext, BruineRepl } from "./ctx.js";
+import type { BruineModesService } from "./modes.js";
 import type { RenderService } from "./render.js";
 
 /** Stable Cordis plugin name. */
-export const name = "kumo-approval";
+export const name = "bruine-approval";
 
 export interface ApprovalRequestLike {
   agent: unknown;
@@ -46,17 +46,17 @@ export function parseAnswer(line: string): boolean {
 }
 
 export function apply(ctx: DshContext): void {
-  let repl: KumoRepl | undefined;
+  let repl: BruineRepl | undefined;
   let render: RenderService | undefined;
-  let modes: Pick<KumoModesService, "rememberFor" | "decisionFor" | "governs"> | undefined;
-  ctx.inject(["kumoRepl"], (c: any) => {
-    repl = c.kumoRepl;
+  let modes: Pick<BruineModesService, "rememberFor" | "decisionFor" | "governs"> | undefined;
+  ctx.inject(["bruineRepl"], (c: any) => {
+    repl = c.bruineRepl;
   });
-  ctx.inject(["kumoRender"], (c: any) => {
-    render = c.kumoRender;
+  ctx.inject(["bruineRender"], (c: any) => {
+    render = c.bruineRender;
   });
-  ctx.inject(["kumoModes"], (c: any) => {
-    modes = c.kumoModes;
+  ctx.inject(["bruineModes"], (c: any) => {
+    modes = c.bruineModes;
   });
 
   ctx.on(

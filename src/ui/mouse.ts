@@ -1,11 +1,12 @@
+import { appEnv } from "../compat.js";
 /**
  * T56 — the mouse, as one thing with one owner.
  *
- * This used to be eight fields and seven methods threaded through `KumoUi`, in a
+ * This used to be eight fields and seven methods threaded through `BruineUi`, in a
  * file that was already over a thousand lines, for a feature that is entirely
  * separable from the shell: read the reports, hold the gesture, copy on release,
  * say so in the corner, and own the one terminal sequence nobody else writes. All
- * of that lives here, and `KumoUi` keeps two lines: a field, and the input hook.
+ * of that lives here, and `BruineUi` keeps two lines: a field, and the input hook.
  *
  * It owns:
  *
@@ -42,7 +43,7 @@ export type CopyClipboard = (text: string) => Promise<CopyOutcome>;
 
 /** T56: what `/mouse` says, and the cost it names rather than hides. */
 export const MOUSE_ON_NOTICE =
-  "Mouse selection on: drag to select, release to copy. The wheel scrolls kumo's transcript window, so the input bar stays put.";
+  "Mouse selection on: drag to select, release to copy. The wheel scrolls bruine's transcript window, so the input bar stays put.";
 export const MOUSE_OFF_NOTICE =
   "Mouse selection off: the wheel scrolls the terminal's scrollback again, input bar and all, and dragging selects nothing.";
 
@@ -94,7 +95,7 @@ export interface MouseFeatureOptions {
   readText: (span: SelectionSpan) => string;
   /**
    * Move the app's transcript window, negative up. The wheel's only way to scroll
-   * now that kumo owns the window rather than the terminal.
+   * now that bruine owns the window rather than the terminal.
    */
   scroll?: (rows: number) => void;
   /** A press on a control rather than on text (D5: the jump-to-latest pill). */
@@ -250,7 +251,7 @@ export class MouseFeature {
   /**
    * T56: the wheel, and what it moves.
    *
-   * It could not scroll, and the reason was never a missing feature in kumo: on the
+   * It could not scroll, and the reason was never a missing feature in bruine: on the
    * main screen the scrollback belongs to the terminal, holding the mouse takes the
    * wheel away from it, and the app cannot move the terminal's cursor itself.
    * `TuiMainScreen` tracks the hardware cursor and repaints by relative movement,
@@ -259,7 +260,7 @@ export class MouseFeature {
    * to preserve (`tui-main-screen.js:244`).
    *
    * What changed is the frame, not the terminal: the shell now owns a transcript
-   * window (`shell.ts`), so a wheel notch scrolls a window kumo is painting and the
+   * window (`shell.ts`), so a wheel notch scrolls a window bruine is painting and the
    * composer stays on the last row. A shell with no window behind it (an old one,
    * a form) still cannot scroll, and then the notice is the whole of it.
    */
@@ -299,7 +300,7 @@ export class MouseFeature {
  * switch, not a constant, and the user can flip it mid-session.
  */
 export function mouseSelectionAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
-  const value = (env["KUMO_MOUSE_SELECT"] ?? "").trim().toLowerCase();
+  const value = (appEnv("MOUSE_SELECT", env) ?? "").trim().toLowerCase();
   return value !== "0" && value !== "off" && value !== "no" && value !== "false";
 }
 
@@ -307,7 +308,7 @@ export function mouseSelectionAllowed(env: NodeJS.ProcessEnv = process.env): boo
  * T56: optional raw trace, for when "the mouse works one time in ten" comes back
  * and the only way to know why is what the terminal actually sent.
  *
- * `KUMO_MOUSE_DEBUG=/path/to/file` appends every chunk that looks like a mouse
+ * `BRUINE_MOUSE_DEBUG=/path/to/file` appends every chunk that looks like a mouse
  * report, JSON-escaped, one per line. Off unless the variable is set, and a
  * failure to write is swallowed: a diagnostic must never be the reason the UI
  * stops.
@@ -324,6 +325,6 @@ export function mouseTrace(path: string | undefined, chunk: string): void {
 
 /** The trace path, if the user asked for one. */
 export function mouseTracePath(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const value = env["KUMO_MOUSE_DEBUG"];
+  const value = appEnv("MOUSE_DEBUG", env);
   return value === undefined || value.trim() === "" ? undefined : value;
 }

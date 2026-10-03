@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { visibleWidth, stripTerminalSequences, type Terminal } from "@earendil-works/pi-tui";
 import { tick } from "./fakes.js";
 import { PromptFrame } from "../src/ui/prompt-frame.js";
-import { KumoUi } from "../src/ui/kumo-ui.js";
+import { BruineUi } from "../src/ui/bruine-ui.js";
 import { TurnActivity } from "../src/ui/turn-activity.js";
 import { ReasoningComponent } from "../src/ui/reasoning-component.js";
 import { fgCode, resetColorDepth } from "../src/ui/palette.js";
@@ -34,8 +34,8 @@ class FakeTerminal implements Terminal {
 const saved = { ...process.env };
 afterEach(() => { process.env = { ...saved }; resetColorDepth(); });
 test.each([100, 60, 30])("composer keeps rules, cursor and multi-line input at %i columns", async width => {
-  process.env.KUMO_COLOR = "truecolor"; resetColorDepth();
-  const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), UNICODE_ICONS);
+  process.env.BRUINE_COLOR = "truecolor"; resetColorDepth();
+  const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), UNICODE_ICONS);
   // The footer is being redesigned by the parallel agent; this test owns only input.
   ui.footer.render = () => [];
   ui.promptFrame.focused = true; ui.editor.setText("first line\nsecond line");
@@ -58,7 +58,7 @@ test.each([100, 60, 30])("composer keeps rules, cursor and multi-line input at %
   await ui.shutdown();
 });
 test("unfocused idle rules recede and ASCII rules preserve the editor scroll indicators", () => {
-  process.env.KUMO_COLOR = "basic"; resetColorDepth();
+  process.env.BRUINE_COLOR = "basic"; resetColorDepth();
   const editor = { focused: false, borderColor: (text: string) => text };
   const content = { render: () => [editor.borderColor("──↑──"), "cursor", editor.borderColor("──↓──")], invalidate() {} };
   const frame = new PromptFrame(content, editor, new TurnActivity(() => 0), ASCII_ICONS);
@@ -94,7 +94,7 @@ test("one turn clock survives activity transitions and rendering does not replac
 
 for (const ascii of [false, true]) {
   test.each([100, 60, 30])(`activity lives inside the ${ascii ? "ASCII" : "Unicode"} rule at %i columns`, width => {
-    process.env.KUMO_COLOR = "basic"; process.env.KUMO_NO_ANIMATION = "1"; resetColorDepth();
+    process.env.BRUINE_COLOR = "basic"; process.env.BRUINE_NO_ANIMATION = "1"; resetColorDepth();
     let now = 0;
     const activity = new TurnActivity(() => now);
     const editor = { focused: false, borderColor: (text: string) => text };
@@ -135,9 +135,9 @@ test("a separately bundled reasoning component arms ASCII repaints and drives Th
   const tty = process.stdout.isTTY;
   vi.useFakeTimers(); vi.setSystemTime(0);
   process.stdout.isTTY = true;
-  process.env.KUMO_ASCII = "1"; process.env.TERM = "xterm-256color";
-  delete process.env.CI; delete process.env.KUMO_NO_ANIMATION;
-  const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), ASCII_ICONS);
+  process.env.BRUINE_ASCII = "1"; process.env.TERM = "xterm-256color";
+  delete process.env.CI; delete process.env.BRUINE_NO_ANIMATION;
+  const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), ASCII_ICONS);
   const reasoning = new BundledReasoning();
   const transcriptFrames = new Set<string>();
   const ruleFrames = new Set<string>();
@@ -169,7 +169,7 @@ test("a separately bundled reasoning component arms ASCII repaints and drives Th
 test("reasoning alone starts and stops repaints when the prompt activity is inactive", async () => {
   const tty = process.stdout.isTTY;
   vi.useFakeTimers(); vi.setSystemTime(0); process.stdout.isTTY = false;
-  const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), ASCII_ICONS);
+  const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), ASCII_ICONS);
   const reasoning = new ReasoningComponent(Date.now, ASCII_ICONS);
   const frames = new Set<string>();
   const repaint = vi.spyOn(ui.tui, "requestRender").mockImplementation(() => {
@@ -194,8 +194,8 @@ test("reasoning alone starts and stops repaints when the prompt activity is inac
 
 for (const ascii of [false, true]) for (const color of ["basic", "none"]) {
   test.each([100, 60, 30])(`connected ${ascii ? "ASCII" : "Unicode"} frame (${color}) fits %i columns`, async width => {
-    process.env.KUMO_COLOR = color; resetColorDepth();
-    const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), ascii ? ASCII_ICONS : UNICODE_ICONS);
+    process.env.BRUINE_COLOR = color; resetColorDepth();
+    const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), ascii ? ASCII_ICONS : UNICODE_ICONS);
     try {
       ui.promptFrame.focused = true; ui.editor.setText("hello\nsecond line");
       const rows = ui.promptFrame.render(width);
@@ -214,7 +214,7 @@ for (const ascii of [false, true]) for (const color of ["basic", "none"]) {
 }
 
 test("frame keeps ghost text, pasted input, chips and scroll counts", async () => {
-  const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), UNICODE_ICONS);
+  const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), UNICODE_ICONS);
   try {
     ui.editor.setGhost("a suggested message");
     expect(ui.promptFrame.render(30).join("\n")).toContain("a suggested message");
@@ -244,7 +244,7 @@ test("frame keeps ghost text, pasted input, chips and scroll counts", async () =
 });
 
 test.each([100, 60, 30])("autocomplete stays below the editor frame at %i columns", async width => {
-  const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), UNICODE_ICONS);
+  const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), UNICODE_ICONS);
   try {
     ui.setAutocompleteCommands([{ name: "help", description: "Show help" }, { name: "history", description: "Recent sessions" }]);
     ui.promptFrame.handleInput("/");
@@ -263,9 +263,9 @@ test.each([100, 60, 30])("autocomplete stays below the editor frame at %i column
 test("finishing a turn keeps repaints alive until the footer counters settle", async () => {
   const tty = process.stdout.isTTY;
   vi.useFakeTimers(); vi.setSystemTime(0); process.stdout.isTTY = true;
-  delete process.env.CI; delete process.env.KUMO_ASCII; delete process.env.KUMO_NO_ANIMATION;
+  delete process.env.CI; delete process.env.BRUINE_ASCII; delete process.env.BRUINE_NO_ANIMATION;
   process.env.TERM = "xterm-256color";
-  const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), UNICODE_ICONS);
+  const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), UNICODE_ICONS);
   const readings = new Set<string>();
   const repaint = vi.spyOn(ui.tui, "requestRender").mockImplementation(() => {
     readings.add(stripTerminalSequences(ui.footer.render(100)[1]!));

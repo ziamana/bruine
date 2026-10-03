@@ -1,5 +1,5 @@
 import { Markdown, Text, type Component } from "@earendil-works/pi-tui";
-import { kumoIcons, withoutEmoji, type KumoIcons } from "../render/chars.js";
+import { bruineIcons, withoutEmoji, type BruineIcons } from "../render/chars.js";
 import { oneBlankBetween, shapeAnswer } from "../render/markdown.js";
 import { ansi, markdownThemeFor } from "./theme.js";
 import { pasteChip } from "./chat-layout.js";
@@ -8,8 +8,8 @@ import { revealAllowed, Typewriter, type TypewriterOptions } from "./typewriter.
 export interface AssistantTextOptions {
   /** Repaint hook. Left out, the text is never held back. */
   onTick?: () => void;
-  icons?: KumoIcons;
-  /** Overrides the motion gate (no tty, CI, KUMO_ASCII, KUMO_NO_ANIMATION). */
+  icons?: BruineIcons;
+  /** Overrides the motion gate (no tty, CI, BRUINE_ASCII, BRUINE_NO_ANIMATION). */
   animate?: boolean;
   typewriter?: TypewriterOptions;
 }
@@ -21,7 +21,7 @@ export interface AssistantTextOptions {
  * T57: the markdown is re-parsed on a timer instead of on every token. A local
  * model delivers tokens far faster than the layout can settle, so parsing per
  * token made the paragraph flicker instead of stream. When animation is off
- * (`KUMO_NO_ANIMATION=1`, CI, no tty, KUMO_ASCII) the typewriter shows every
+ * (`BRUINE_NO_ANIMATION=1`, CI, no tty, BRUINE_ASCII) the typewriter shows every
  * delta at once and this component behaves exactly as it did before.
  */
 export class AssistantTextComponent implements Component {
@@ -29,7 +29,7 @@ export class AssistantTextComponent implements Component {
   #tw: Typewriter;
 
   constructor(opts: AssistantTextOptions = {}) {
-    const icons = opts.icons ?? kumoIcons();
+    const icons = opts.icons ?? bruineIcons();
     this.#md = new Markdown("", 0, 0, markdownThemeFor(icons), undefined, {
       // Prose is read at a fixed measure and code keeps the width it needs, so a
       // wide terminal gains air around the answer instead of lines through it.
@@ -82,7 +82,7 @@ export class AssistantTextComponent implements Component {
 /** A finished user message: a tinted band in the transcript (Nuage). */
 export function userMessageComponent(text: string): Component {
   const chip = pasteChip(text);
-  const prompt = ansi.cyan(kumoIcons().prompt);
+  const prompt = ansi.cyan(bruineIcons().prompt);
   const body = chip ?? ansi.text(withoutEmoji(text));
   const t = new Text(`${prompt} ${body}`, 0, 0) as Text & { surface?: boolean };
   t.surface = true;

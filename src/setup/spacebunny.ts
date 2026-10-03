@@ -13,7 +13,7 @@ export const SPACE_BUNNY = {
   model: "space-bunny-free",
   contextWindow: 1_000_000,
   routeName: "opencode-zen",
-  keyEnv: "KUMO_ZEN_API_KEY",
+  keyEnv: "BRUINE_ZEN_API_KEY",
   /** The gateway's public key: free models take it, and refuse every other value. */
   keyValue: "public",
 } as const;

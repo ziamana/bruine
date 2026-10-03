@@ -103,7 +103,7 @@ test("headless -p writes only the answer and exits; json has a completed result"
     h.child.kill();
     await h.until(() => h.exit !== undefined);
     const invoke = (args: string[], input?: string) => new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
-      const env = { ...process.env, KUMO_HOME: h.home, DSH_HOME: h.home, KUMO_LOCAL_API_KEY: "e2e", KUMO_NO_UPDATE_CHECK: "1", DSH_TELEMETRY_DISABLED: "1" };
+      const env = { ...process.env, BRUINE_HOME: h.home, DSH_HOME: h.home, BRUINE_LOCAL_API_KEY: "e2e", BRUINE_NO_UPDATE_CHECK: "1", DSH_TELEMETRY_DISABLED: "1" };
       const child = spawn(process.execPath, [join(process.cwd(), "dist", "bin.js"), ...args], {
         cwd: h.project, env, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       });
@@ -347,7 +347,7 @@ test("modes: Shift+Tab Plan/Build and /auto /ask /full change real permissions",
     const chatModeLines = () => h.screen().filter((line) => /^  ›/.test(line) && /mode|access/i.test(line));
     h.press("shiftTab");
     await h.until(() => badges(h) === "ask plan", 2000, "Plan label");
-    await h.waitFor("Plan mode: kumo reads and plans");
+    await h.waitFor("Plan mode: bruine reads and plans");
     expect(chatModeLines()).toEqual([]);
     await h.dump("t23-after-footer-plan");
     await h.prompt("Write plan.txt");
@@ -360,11 +360,11 @@ test("modes: Shift+Tab Plan/Build and /auto /ask /full change real permissions",
     expect(chatModeLines()).toEqual([]);
     h.press("shiftTab");
     await h.until(() => badges(h) === "ask", 2000, "Build");
-    await h.waitFor("Build mode: kumo can change files again.");
+    await h.waitFor("Build mode: bruine can change files again.");
     expect(chatModeLines()).toEqual([]);
     await h.prompt("/auto");
     await h.until(() => badges(h) === "auto", 2000, "Auto");
-    await h.waitFor("Auto: kumo decides, risky actions still ask.");
+    await h.waitFor("Auto: bruine decides, risky actions still ask.");
     expect(chatModeLines()).toEqual([]);
     // `auto` is the `sky` role now, not the raw yellow of T23: what has to survive
     // is that it is a different colour from the `ask` badge it replaced.
@@ -389,7 +389,7 @@ test("modes: Shift+Tab Plan/Build and /auto /ask /full change real permissions",
     await h.dump("t23-after-full-confirmation");
     h.press("down"); await delay(50); h.press("enter");
     await h.until(() => badges(h) === "FULL ACCESS", 2000, "Full access");
-    await h.waitFor("Full access: kumo never asks.");
+    await h.waitFor("Full access: bruine never asks.");
     expect(chatModeLines()).toEqual([]);
     // Full access is still the one badge that has to be noticed (T23): bold rose.
     expect(barCell(h, "place", "FULL ACCESS").getFgColor()).toBe(CELL.rose);
@@ -480,7 +480,7 @@ test("the row reads what the request really cost: ↑ ↓ cache hit (D3)", async
     // where one would be (the harness never writes a `.git`).
     expect(placeRow(h)).not.toContain("\u2387");
     // The place row still says where the tools run, and what they may do.
-    expect(placeRow(h)).toContain("kumo-e2e-project-");
+    expect(placeRow(h)).toContain("bruine-e2e-project-");
     expect(badges(h)).toBe("ask");
   });
 });
@@ -544,7 +544,7 @@ test("keys: ctrl+c clears typed text first, and quits only on an empty editor", 
     await h.waitFor("DRAFT_TO_CLEAR");
     h.press("ctrlC");
     await h.until(() => !h.screen().join("\n").includes("DRAFT_TO_CLEAR"), 1000, "cleared editor");
-    // Clearing text is not leaving: kumo is still here after the first press.
+    // Clearing text is not leaving: bruine is still here after the first press.
     await delay(300);
     expect(h.exit).toBeUndefined();
     h.press("ctrlC");
@@ -553,9 +553,9 @@ test("keys: ctrl+c clears typed text first, and quits only on an empty editor", 
   });
 });
 
-test.skipIf(process.platform === "win32")("/config opens settings.yaml and kumo.json in the editor the user chose", async () => {
+test.skipIf(process.platform === "win32")("/config opens settings.yaml and bruine.json in the editor the user chose", async () => {
   await scenario("config-open", [], async (h) => {
-    // The editor is a script that records what it was asked to open: kumo.json says which.
+    // The editor is a script that records what it was asked to open: bruine.json says which.
     const recorder = join(h.project, "fake-editor.sh");
     const record = join(h.project, "opened.txt");
     writeFileSync(recorder, `#!/bin/sh\nprintf '%s\\n' "$@" > '${record}'\n`);
@@ -565,11 +565,11 @@ test.skipIf(process.platform === "win32")("/config opens settings.yaml and kumo.
 
     h.type("/config");
     h.press("enter");
-    await h.waitFor("Opened settings.yaml and kumo.json in fake-editor.sh");
+    await h.waitFor("Opened settings.yaml and bruine.json in fake-editor.sh");
     await h.until(() => existsSync(record), 3000, "the editor ran");
     const opened = readFileSync(record, "utf8").trim().split("\n");
     expect(opened).toEqual([join(h.home, "settings.yaml"), join(h.home, "bruine.json")]);
-    // The screen says what to do next, and kumo is still running.
+    // The screen says what to do next, and bruine is still running.
     expect(h.screen().join("\n")).toContain("/reload");
     expect(h.exit).toBeUndefined();
   });
@@ -699,7 +699,7 @@ test("cache: the main requests only append, and the suggestion is the end of the
       expect(history(mains[i]!).length).toBeGreaterThan(before.length);
     }
 
-    // The only other request kumo sends is the next-message suggestion: at most one per turn. It is
+    // The only other request bruine sends is the next-message suggestion: at most one per turn. It is
     // the end of the conversation, not a request of its own: the same system prompt and tools, a
     // main request's messages untouched, and two more (the answer, then the ask). A server that
     // caches the start of a request answers it from the cache the conversation already built.
@@ -718,7 +718,7 @@ test("cache: the main requests only append, and the suggestion is the end of the
 });
 
 test("a finished turn leaves a ring on the prompt's rule for a second, then it is plain", async () => {
-  const h = await Harness.start([textScript("RIPPLE_DONE")], "ask", false, { env: { KUMO_NO_RIPPLE: "0" } });
+  const h = await Harness.start([textScript("RIPPLE_DONE")], "ask", false, { env: { BRUINE_NO_RIPPLE: "0" } });
   try {
     await h.waitFor("e2e-model", 30_000);
     await h.waitStable(150, 2000);
@@ -1303,7 +1303,7 @@ test("effort: defaults medium; /effort off and ctrl+e high change request params
   await templateScenario("effort-cycle", [
     textScript("TURN_ONE"), textScript("TURN_TWO"), textScript("TURN_THREE"),
   ], "ask", EFFORT_TEMPLATE, async (h) => {
-    // Setup wrote the template → kumo defaults a local thinking model to medium.
+    // Setup wrote the template → bruine defaults a local thinking model to medium.
     await h.until(() => effortOf(h) === "medium", 15_000, "effort medium");
     await h.prompt("one");
     await h.waitFor("TURN_ONE");
@@ -1406,16 +1406,16 @@ test("errors: 401 then 404 print the exact two lines (T33b)", async () => {
       await h.prompt("first");
       await h.waitFor("The API key was refused by", 30_000);
       const s1 = h.screen().join("\n");
-      expect(s1).toContain("Set a new key: kumo setup");
+      expect(s1).toContain("Set a new key: bruine setup");
       expect(s1).not.toContain("at Object");
       await h.prompt("second");
       await h.waitFor('Model "e2e-model" not found on', 30_000);
       // T55: the error line is printed without waiting for the model list, and
       // the list fills the hint in once the server answers, so the screen is
       // waited on for the finished hint rather than for the message alone.
-      await h.waitFor("Available: e2e-model. Change it: kumo setup", 30_000);
+      await h.waitFor("Available: e2e-model. Change it: bruine setup", 30_000);
       const s2 = h.screen().join("\n");
-      expect(s2).toContain("Available: e2e-model. Change it: kumo setup");
+      expect(s2).toContain("Available: e2e-model. Change it: bruine setup");
       // Each turn's receipt belongs under its own error, not above it. Turn 1
       // failed too (401), so it is turn 2's receipt that closes the 404.
       const err2 = s2.indexOf('Model "e2e-model" not found on');
@@ -1442,7 +1442,7 @@ test("errors: connection refused prints the reach line (T33b)", async () => {
       await h.prompt("hello");
       await h.waitFor("Can't reach your model server at http://127.0.0.1:1/v1", 40_000);
       expect(h.screen().join("\n")).toContain(
-        "Is llama.cpp / Ollama / LM Studio running?  Change it: kumo setup",
+        "Is llama.cpp / Ollama / LM Studio running?  Change it: bruine setup",
       );
     },
     { baseUrlOverride: "http://127.0.0.1:1/v1" },
@@ -1482,13 +1482,13 @@ test("legacy route: one setup hint from the /props probe, gone after the first p
     [textScript("TURN_DONE")],
     async (h) => {
       await h.waitFor(
-        "Effort control is available for this model: run kumo setup to enable it.",
+        "Effort control is available for this model: run bruine setup to enable it.",
         20_000,
       );
       await h.prompt("hi");
       await h.waitFor("TURN_DONE");
       await delay(500);
-      expect(h.screen().join("\n")).not.toContain("run kumo setup to enable it");
+      expect(h.screen().join("\n")).not.toContain("run bruine setup to enable it");
     },
     {
       legacy: true,
@@ -1533,7 +1533,7 @@ test("/model switches the wire model and keeps the prompt prefix byte-identical 
       // dsh's own durable notice, appended at the end: the cache-safe mechanism.
       expect(JSON.stringify(b2.messages)).toContain("model changed");
 
-      // Cache rule: kumo rewrote NOTHING. The persona is composed at boot (T36),
+      // Cache rule: bruine rewrote NOTHING. The persona is composed at boot (T36),
       // so it still names the first model — a route switch does not touch the
       // prompt, and dsh appends its own notice at the end of the history.
       const sysText = (b: typeof b1): string =>
@@ -1546,7 +1546,7 @@ test("/model switches the wire model and keeps the prompt prefix byte-identical 
       expect(sysText(b1)).toContain("powered by e2e-model Pretty");
       // What DOES change is the wire role label: pi-ai sends `developer` for one
       // model and `system` for another. That is the provider's per-model
-      // convention, not kumo editing the prompt — and it is why a route switch
+      // convention, not bruine editing the prompt — and it is why a route switch
       // costs one cache rebuild, exactly like /new would.
       const role = (b: typeof b1): string | undefined =>
         b.messages.find((m) => ["system", "developer"].includes(m.role))?.role;
@@ -1574,8 +1574,8 @@ test("/model <route> sets directly and /provider lists them all (T37, T39)", asy
       await h.prompt("/provider");
       await h.waitFor("Providers (2):");
       await h.waitFor("Local Server [local] (current route)");
-      await h.waitFor("KUMO_LOCAL_API_KEY");
-      await h.waitFor("+ 39 more kumo can add");
+      await h.waitFor("BRUINE_LOCAL_API_KEY");
+      await h.waitFor("+ 39 more bruine can add");
       await h.waitFor("In use: local/e2e-model");
       await h.dump("t37-provider-list");
 

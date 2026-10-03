@@ -18,7 +18,7 @@ if [ -z "$FILES" ]; then
   exit 70
 fi
 
-TASK_DIR="${KUMO_BENCH_TASK_DIR:-.}"
+TASK_DIR="${BRUINE_BENCH_TASK_DIR:-.}"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 REPO="$WORK/repo"
@@ -31,7 +31,7 @@ rm -rf "$REPO/.git"
 # loaded as CommonJS and dies with "Cannot use import statement outside a
 # module". A task that ships its own package.json keeps it.
 if [ ! -f "$REPO/package.json" ]; then
-  printf '{\n  "name": "kumo-bench-task",\n  "private": true,\n  "type": "module"\n}\n' > "$REPO/package.json"
+  printf '{\n  "name": "bruine-bench-task",\n  "private": true,\n  "type": "module"\n}\n' > "$REPO/package.json"
 fi
 
 # `./foo.js` → `./foo.ts` in import positions only.
@@ -47,19 +47,19 @@ PROBE="$WORK/probe.ts"
 printf 'const answer: number = 42;\n' > "$PROBE"
 
 if node --experimental-strip-types --test "$PROBE" >/dev/null 2>&1; then
-  echo "kumo-bench-check-mode: node-test"
+  echo "bruine-bench-check-mode: node-test"
   # shellcheck disable=SC2086
   exec node --experimental-strip-types --test $COPIED
 fi
 
 if node --test "$PROBE" >/dev/null 2>&1; then
-  echo "kumo-bench-check-mode: node-test"
+  echo "bruine-bench-check-mode: node-test"
   # shellcheck disable=SC2086
   exec node --test $COPIED
 fi
 
 if command -v tsc >/dev/null 2>&1; then
-  echo "kumo-bench-check-mode: node-test+tsc"
+  echo "bruine-bench-check-mode: node-test+tsc"
   # sed already turned the specifiers into the .js form tsc wants.
   find "$REPO" -name '*.ts' -type f -exec sed -i -E 's/(from|import\()[[:space:]]*"([^"]*)\.ts"/\1 "\2.js"/g' {} +
   tsc --outDir "$WORK/out" --module nodenext --moduleResolution nodenext \

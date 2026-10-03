@@ -3,7 +3,7 @@
 # published defaults, or the tests that pin them. Both are refused here.
 set -eu
 cd "$(dirname "$0")"
-TOOLS="${KUMO_BENCH_TOOLS:-../../tools}"
+TOOLS="${BRUINE_BENCH_TOOLS:-../../tools}"
 "$TOOLS/node-tests.sh" test/args.tests.ts
 
 # Name AND content of every test file, in order.

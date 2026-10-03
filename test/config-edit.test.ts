@@ -7,7 +7,7 @@ import { configFiles, openInEditor, resolveEditor, type Spawner } from "../src/p
 
 const homes: string[] = [];
 const home = (files: Record<string, string> = {}): string => {
-  const dir = mkdtempSync(join(tmpdir(), "kumo-config-"));
+  const dir = mkdtempSync(join(tmpdir(), "bruine-config-"));
   homes.push(dir);
   for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text);
   return dir;
@@ -30,21 +30,21 @@ describe("configFiles", () => {
 });
 
 describe("resolveEditor: the user's word, then the desktop's", () => {
-  test("KUMO_EDITOR wins, with its arguments", () => {
+  test("BRUINE_EDITOR wins, with its arguments", () => {
     const { exists } = withPrograms("kate");
-    expect(resolveEditor(home(), { PATH: "/usr/bin", KUMO_EDITOR: "code --wait", VISUAL: "gedit" }, "linux", exists))
-      .toEqual({ command: "code", args: ["--wait"], source: "KUMO_EDITOR" });
+    expect(resolveEditor(home(), { PATH: "/usr/bin", BRUINE_EDITOR: "code --wait", VISUAL: "gedit" }, "linux", exists))
+      .toEqual({ command: "code", args: ["--wait"], source: "BRUINE_EDITOR" });
   });
 
-  test("then `editor` in kumo.json", () => {
+  test("then `editor` in bruine.json", () => {
     const dir = home({ "bruine.json": JSON.stringify({ editor: "kwrite" }) });
     const { env, exists } = withPrograms("kate");
     expect(resolveEditor(dir, env, "linux", exists)).toEqual({ command: "kwrite", args: [], source: "bruine.json" });
   });
 
   test("a quoted path with spaces stays one program", () => {
-    expect(resolveEditor(home(), { KUMO_EDITOR: '"/opt/My Editor/edit" -n' }, "linux", () => false))
-      .toEqual({ command: "/opt/My Editor/edit", args: ["-n"], source: "KUMO_EDITOR" });
+    expect(resolveEditor(home(), { BRUINE_EDITOR: '"/opt/My Editor/edit" -n' }, "linux", () => false))
+      .toEqual({ command: "/opt/My Editor/edit", args: ["-n"], source: "BRUINE_EDITOR" });
   });
 
   test("$VISUAL and $EDITOR count when they are graphical", () => {
@@ -95,9 +95,9 @@ function fakeSpawner(outcome: "spawn" | { code: string }) {
 }
 
 describe("openInEditor", () => {
-  const files = ["/h/settings.yaml", "/h/kumo.json"];
+  const files = ["/h/settings.yaml", "/h/bruine.json"];
 
-  test("launches the editor on both files, detached, with no stdio of kumo's", async () => {
+  test("launches the editor on both files, detached, with no stdio of bruine's", async () => {
     const { spawner, calls, unref } = fakeSpawner("spawn");
     const result = await openInEditor({ command: "kate", args: [], source: "PATH" }, files, spawner, "linux");
     expect(result).toEqual({ ok: true, editor: "kate" });
@@ -109,7 +109,7 @@ describe("openInEditor", () => {
 
   test("keeps the editor's own arguments before the files", async () => {
     const { spawner, calls } = fakeSpawner("spawn");
-    await openInEditor({ command: "code", args: ["--reuse-window"], source: "KUMO_EDITOR" }, files, spawner, "linux");
+    await openInEditor({ command: "code", args: ["--reuse-window"], source: "BRUINE_EDITOR" }, files, spawner, "linux");
     expect(calls[0]!.args).toEqual(["--reuse-window", ...files]);
   });
 
@@ -122,7 +122,7 @@ describe("openInEditor", () => {
 
   test("a program that is not there says so, in words", async () => {
     const { spawner } = fakeSpawner({ code: "ENOENT" });
-    const result = await openInEditor({ command: "kate", args: [], source: "KUMO_EDITOR" }, files, spawner, "linux");
+    const result = await openInEditor({ command: "kate", args: [], source: "BRUINE_EDITOR" }, files, spawner, "linux");
     expect(result).toEqual({ ok: false, editor: "kate", error: "kate was not found" });
   });
 

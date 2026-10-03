@@ -40,7 +40,7 @@ function declaresVision(value: unknown): boolean {
 
 /**
  * What one model entry says about images. An entry that declares nothing is
- * "unknown", not "no": kumo's routes are local servers that answer
+ * "unknown", not "no": bruine's routes are local servers that answer
  * `/v1/models` with the truth, and refusing a screenshot because settings.yaml
  * was silent would be the wrong default.
  */
@@ -62,7 +62,7 @@ export function entrySeesImages(entry: ModelEntry): boolean {
   return entryVisionAnswer(entry) === "yes";
 }
 
-/** The `/v1/models` payload shape kumo cares about; anything else is ignored. */
+/** The `/v1/models` payload shape bruine cares about; anything else is ignored. */
 export function modelsPayloadSeesImages(payload: unknown, model: string): VisionAnswer {
   const list = Array.isArray(payload)
     ? payload
@@ -77,7 +77,7 @@ export function modelsPayloadSeesImages(payload: unknown, model: string): Vision
   return entrySeesImages(entry as ModelEntry) ? "yes" : "no";
 }
 
-/** settings.yaml, read the same way kumo reads the rest of the route. */
+/** settings.yaml, read the same way bruine reads the rest of the route. */
 export function settingsEntryAnswer(entry: unknown): VisionAnswer {
   return entryVisionAnswer(entry);
 }
@@ -89,7 +89,7 @@ export type FetchLike = (
 
 /**
  * Ask one OpenAI-compatible server what its models can do. Only private and
- * loopback hosts are probed: kumo's own routes are local, and a public base URL
+ * loopback hosts are probed: bruine's own routes are local, and a public base URL
  * is never a clipboard-sized request away from sending bytes somewhere else.
  */
 export async function probeVision(

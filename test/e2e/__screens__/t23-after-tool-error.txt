@@ -1,10 +1,10 @@
- kumo v0.0.1                                                                                        
+ bruine v0.0.1                                                                                        
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands                                         
 
   › Read absent.txt                                                                               
 
   ✗ read  absent.txt  1.0s
-    ⎿ Error: cannot read "/tmp/kumo-e2e-project-6xlTt1/absent.txt": not found
+    ⎿ Error: cannot read "/tmp/bruine-e2e-project-6xlTt1/absent.txt": not found
 
   ERROR_HANDLED                                                                                   
 

@@ -1,29 +1,29 @@
 /**
- * T36 — running one measurement. `runKumo` spawns the kumo command headless
+ * T36 — running one measurement. `runBruine` spawns the bruine command headless
  * (piped, no TTY) with the bench home and the task prompt, and stops it at the
  * wall-clock limit; `runCheck` runs the task's `check.sh` and reads its verdict.
- * Both are small enough to test with a fake kumo and a shell stub.
+ * Both are small enough to test with a fake bruine and a shell stub.
  */
 import { spawn, spawnSync } from "node:child_process";
 import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export interface RunKumoOptions {
+export interface RunBruineOptions {
   /** argv[0] + any leading args (e.g. [node, dist/bin.js]). */
   command: string[];
-  /** The prompt (task.md) as one argument — kumo sends it before its loop. */
+  /** The prompt (task.md) as one argument — bruine sends it before its loop. */
   prompt: string;
   cwd: string;
   env: Record<string, string>;
   /** Wall-clock limit in milliseconds. */
   timeoutMs: number;
-  /** kumo's own stdout lands here for post-mortem reading. */
+  /** bruine's own stdout lands here for post-mortem reading. */
   logPath: string;
   /** Its stderr goes here, and only here: this is what the row calls errors. */
   errLogPath?: string;
 }
 
-export interface KumoRun {
+export interface BruineRun {
   exitCode: number | null;
   signal: string | null;
   wallSec: number;
@@ -38,11 +38,11 @@ export interface KumoRun {
   logPath: string;
 }
 
-/** Spawn kumo once, kill it at the limit, never let it inherit a TTY. */
-export function runKumo(opts: RunKumoOptions): Promise<KumoRun> {
+/** Spawn bruine once, kill it at the limit, never let it inherit a TTY. */
+export function runBruine(opts: RunBruineOptions): Promise<BruineRun> {
   const started = Date.now();
   const errPath = opts.errLogPath ?? `${opts.logPath}.err`;
-  return new Promise<KumoRun>((resolveRun) => {
+  return new Promise<BruineRun>((resolveRun) => {
     void Promise.all([open(opts.logPath, "w"), open(errPath, "w")])
       .then(async ([handle, errHandle]) => {
         const child = spawn(opts.command[0] as string, [...opts.command.slice(1), opts.prompt], {
@@ -52,7 +52,7 @@ export function runKumo(opts: RunKumoOptions): Promise<KumoRun> {
         });
         let timedOut = false;
         let interrupted = false;
-        // Ctrl+C (or a TERM from a supervisor) takes the kumo child with it and
+        // Ctrl+C (or a TERM from a supervisor) takes the bruine child with it and
         // marks the run unfinished, so the caller skips the verdict.
         const forward = (signal: NodeJS.Signals) => (): void => {
           interrupted = true;
@@ -62,7 +62,7 @@ export function runKumo(opts: RunKumoOptions): Promise<KumoRun> {
         const onTerm = forward("SIGTERM");
         process.on("SIGINT", onInt);
         process.on("SIGTERM", onTerm);
-        const done = (run: KumoRun): void => {
+        const done = (run: BruineRun): void => {
           process.off("SIGINT", onInt);
           process.off("SIGTERM", onTerm);
           resolveRun(run);
@@ -116,7 +116,7 @@ export function runKumo(opts: RunKumoOptions): Promise<KumoRun> {
 }
 
 /**
- * What kumo wrote on stderr: its own complaints. An informational line the
+ * What bruine wrote on stderr: its own complaints. An informational line the
  * launcher prints on stdout ("kept your 8 skills…") is not an error.
  */
 export async function logErrors(errLogPath: string, limit = 5): Promise<string[]> {
@@ -139,14 +139,14 @@ export interface CheckResult {
   /** null = the check could not run here (exit 70, or no shell). */
   passed: boolean | null;
   exitCode: number | null;
-  /** What check.sh says it checks (`kumo-bench-check-mode:` line). */
+  /** What check.sh says it checks (`bruine-bench-check-mode:` line). */
   mode: string;
   /** Last useful output line, for the run row / debugging. */
   detail: string;
   seconds: number;
 }
 
-const CHECK_MODE = /^kumo-bench-check-mode:\s*(.+)$/m;
+const CHECK_MODE = /^bruine-bench-check-mode:\s*(.+)$/m;
 
 /**
  * Run `<taskDir>/check.sh`: exit 0 = pass, 70 = this machine cannot run the
@@ -162,7 +162,7 @@ export function runCheck(
     cwd: taskDir,
     encoding: "utf8",
     timeout: opts.timeoutMs ?? 120_000,
-    env: { ...process.env, ...opts.env, KUMO_BENCH_TASK_DIR: taskDir },
+    env: { ...process.env, ...opts.env, BRUINE_BENCH_TASK_DIR: taskDir },
   });
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
   const mode = CHECK_MODE.exec(output)?.[1]?.trim() ?? "unspecified";

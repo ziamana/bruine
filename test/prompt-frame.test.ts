@@ -258,3 +258,27 @@ test.each([100, 60, 30])("autocomplete stays below the editor frame at %i column
     for (const row of rows) expect(visibleWidth(row)).toBeLessThanOrEqual(width);
   } finally { await ui.shutdown(); }
 });
+
+test("finishing a turn keeps repaints alive until the footer counters settle", async () => {
+  const tty = process.stdout.isTTY;
+  vi.useFakeTimers(); vi.setSystemTime(0); process.stdout.isTTY = true;
+  delete process.env.CI; delete process.env.KUMO_ASCII; delete process.env.KUMO_NO_ANIMATION;
+  process.env.TERM = "xterm-256color";
+  const ui = new KumoUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), UNICODE_ICONS);
+  const readings = new Set<string>();
+  const repaint = vi.spyOn(ui.tui, "requestRender").mockImplementation(() => {
+    readings.add(stripTerminalSequences(ui.footer.render(100)[1]!));
+  });
+  try {
+    ui.footer.set({ inputTokens: 100, outputTokens: 10 }); ui.showWorking();
+    ui.footer.set({ inputTokens: 1600, outputTokens: 536 });
+    ui.onTurnEnd({ tools: [], wallSec: 1, outputTokens: 536, cancelled: false, error: false });
+    expect(ui.activity.active).toBe(false); expect(ui.footer.active).toBe(true);
+    vi.advanceTimersByTime(700);
+    expect(readings.size).toBeGreaterThan(3);
+    expect([...readings].at(-1)).toContain("↑1.6k ↓536");
+    expect(ui.footer.active).toBe(false);
+    const finished = repaint.mock.calls.length;
+    vi.advanceTimersByTime(400); expect(repaint.mock.calls).toHaveLength(finished);
+  } finally { await ui.shutdown(); repaint.mockRestore(); process.stdout.isTTY = tty; vi.useRealTimers(); }
+});

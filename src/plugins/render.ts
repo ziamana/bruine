@@ -186,8 +186,12 @@ export function attachTui(
     let comp = tools.get(id);
     if (comp === undefined) {
       // A question has a shape of its own: the call is drawn from its first byte, and
-      // the form's answers settle it (KumoUi hands them to the registered call).
-      const question = toolName === "ask_user_question" ? new QuestionCallComponent(Date.now, ui.icons) : undefined;
+      // the form's answers settle it (KumoUi hands them to the registered call). The
+      // repaint hook is what the reveal writes through, so a question is watched being
+      // written instead of jumping from one model-sized piece to the next.
+      const question = toolName === "ask_user_question"
+        ? new QuestionCallComponent(Date.now, ui.icons, { onTick: () => ui.requestRender() })
+        : undefined;
       comp = question ?? new ToolCallComponent(toolName, Date.now, ui.icons);
       tools.set(id, comp);
       if (needBreak) {
@@ -267,6 +271,34 @@ export function attachTui(
     }
   };
 
+  let subagentCount = 0;
+  const refreshSubagents = (): void => {
+    type LiveAgent = { session?: { id?: unknown }; status?: string };
+    const registry = ctx.get("agents") as {
+      list?(): LiveAgent[];
+      isOwnedBy?(id: unknown, owner: unknown): boolean;
+    } | undefined;
+    const candidates = registry?.list?.() ?? [];
+    const root = liveAgent();
+    const owned = new Set<unknown>([root]);
+    // Runtime ownership includes grandchildren, independently of session ids.
+    let changed = true;
+    while (changed && registry?.isOwnedBy) {
+      changed = false;
+      for (const candidate of candidates) {
+        if (owned.has(candidate) || candidate.session?.id === undefined) continue;
+        for (const parent of owned) {
+          if (!registry.isOwnedBy(candidate.session.id, parent)) continue;
+          owned.add(candidate); changed = true; break;
+        }
+      }
+    }
+    const count = candidates.filter(candidate => candidate !== root && owned.has(candidate) && candidate.status === "running").length;
+    if (count === subagentCount) return;
+    subagentCount = count;
+    ui.footer.set({ subagents: count });
+    ui.requestRender();
+  };
   // The suggestion for the next prompt starts from the conversation's own request, so the server
   // answers it out of the cache it already holds: remember the last one the loop sent.
   const mainRequests = new MainRequestMemory();
@@ -278,6 +310,11 @@ export function attachTui(
     },
     { global: true, prepend: true },
   );
+  const offAgentCreated = ctx.on("agent/created", refreshSubagents);
+  const offAgentStatus = ctx.on("agent/status", refreshSubagents);
+  const offAgentDisposed = ctx.on("agent/disposed", refreshSubagents);
+  refreshSubagents();
+
   const offStream = ctx.on("agent/assistant-stream", ({ agent: subject, frame }: any) => {
     if (subject !== liveAgent()) return;
     const f = frame as StreamFrame;
@@ -422,6 +459,7 @@ export function attachTui(
         return;
       }
       case "turn/start":
+        refreshSubagents();
         tps.reset();
         ui.footer.set({ tps: 0, pp: undefined, cachePct: undefined, cacheFirst: false });
         turnStartWall = Date.now();
@@ -671,6 +709,10 @@ export function attachTui(
     for (const comp of tools.values()) comp.cancel();
     ui.requestRender();
     offRequest();
+    offAgentCreated();
+    offAgentStatus();
+    offAgentDisposed();
+    if (subagentCount > 0) { ui.footer.set({ subagents: 0 }); ui.requestRender(); }
     offStream();
     offSession();
   };

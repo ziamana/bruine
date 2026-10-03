@@ -181,6 +181,23 @@ export class Typewriter {
     this.#disarm();
   }
 
+  /**
+   * Throw the buffer away and reveal `text` from the start.
+   *
+   * For the case `push` cannot serve: what is on screen is not a prefix of what
+   * arrived, so the text changed shape rather than grew. `flush` is not it —
+   * flushing shows what is already buffered, and the buffer still holds the old
+   * text, which would then be painted twice.
+   */
+  reset(text: string): void {
+    this.#buffer = text;
+    this.#heldAt = undefined;
+    this.#heldTicks = 0;
+    this.#shown = this.#onTick === undefined ? text.length : 0;
+    if (this.animating) this.#arm();
+    else this.#disarm();
+  }
+
   dispose(): void {
     this.#disarm();
     this.#onTick = undefined;

@@ -7,9 +7,12 @@ import { clipStart } from "../render/reasoning.js";
 import { ansi } from "./theme.js";
 import { bgEnabled, onBg, paint, type PaletteRole } from "./palette.js";
 import { displayPlace } from "./place.js";
+import { terminalMotionAllowed } from "./logo-motion.js";
 
 /** The breathing room between the two ends of a row, in cells. */
 const GAP = 2;
+const TOKEN_SETTLE_MS = 650;
+type TokenReadings = Pick<FooterState, "inputTokens" | "outputTokens">;
 
 export interface FooterState {
   contextUsed?: number;
@@ -36,6 +39,8 @@ export interface FooterState {
   outputTokens?: number;
   /** D3: tokens served out of the prompt cache (R) — the session total behind CH. */
   cacheRead?: number;
+  /** Running agents owned by this conversation. */
+  subagents?: number;
 }
 
 function formatK(n: number): string {
@@ -175,10 +180,8 @@ function twoUp(left: string, right: string, width: number): string {
  *
  * The labels are a luxury, not a reading: a row too narrow for `cached 34k` keeps
  * the letters (`R34k CH99.9%`) and loses nothing but the words. A narrow terminal
- * then loses readings, in the order they stop being true: the throughput first (it
- * only moves while a model generates), then the cache (a rate, not an amount), then
- * the context (a number the eye knows by heart after an hour). The route is never
- * the thing that is dropped, and never the thing that is cut.
+ * then gives up the cache and context before the route. Measured decode and
+ * prefill rates keep their own rows when necessary, independently of that squeeze.
  */
 export class FooterComponent implements Component {
   state: FooterState = {};
@@ -187,6 +190,8 @@ export class FooterComponent implements Component {
   #cwd: string;
   #home: string;
   #branch: string | undefined;
+  #heldTokens: TokenReadings | undefined;
+  #tokenMotion: { from: TokenReadings; to: TokenReadings; startedAt: number } | undefined;
 
   constructor(icons: KumoIcons = kumoIcons(), opts: { cwd?: string; home?: string } = {}) {
     this.#ascii = icons.think === "*";
@@ -201,8 +206,52 @@ export class FooterComponent implements Component {
     // The branch belongs to the directory, so it is re-read when the directory
     // changes and never otherwise — `set` is called on every usage chunk.
     const moved = next.cwd !== undefined && next.cwd !== (this.state.cwd ?? this.#cwd);
+    const countKeys = ["inputTokens", "outputTokens"] as const;
+    if (countKeys.some(key => Object.hasOwn(next, key) && next[key] !== this.state[key])) {
+      this.#tokenMotion = undefined;
+      if (countKeys.some(key => Object.hasOwn(next, key) && this.state[key] !== undefined &&
+        (next[key] === undefined || next[key]! < this.state[key]!))) this.#heldTokens = undefined;
+    }
     this.state = { ...this.state, ...next };
     if (moved) this.#branch = readGitBranch(this.state.cwd ?? this.#cwd);
+  }
+
+  /** Keep the previous totals visible until the answer is complete. */
+  beginTurn(): void {
+    if (this.#heldTokens) return;
+    this.#heldTokens = { ...this.#displayTokens() };
+    this.#tokenMotion = undefined;
+  }
+
+  /** Settle the two displayed counters without changing the reported totals. */
+  endTurn(): void {
+    const from = this.#heldTokens;
+    this.#heldTokens = undefined;
+    if (!from) return;
+    const to = { inputTokens: this.state.inputTokens, outputTokens: this.state.outputTokens };
+    const changed = from.inputTokens !== to.inputTokens || from.outputTokens !== to.outputTokens;
+    this.#tokenMotion = changed && terminalMotionAllowed({ ascii: this.#ascii })
+      ? { from, to, startedAt: Date.now() } : undefined;
+  }
+
+  get active(): boolean {
+    return this.#tokenMotion !== undefined && Date.now() - this.#tokenMotion.startedAt < TOKEN_SETTLE_MS;
+  }
+
+  #displayTokens(): TokenReadings {
+    if (this.#heldTokens) return this.#heldTokens;
+    const motion = this.#tokenMotion;
+    if (!motion) return { inputTokens: this.state.inputTokens, outputTokens: this.state.outputTokens };
+    const progress = Math.min(1, Math.max(0, (Date.now() - motion.startedAt) / TOKEN_SETTLE_MS));
+    if (progress === 1) return { inputTokens: this.state.inputTokens, outputTokens: this.state.outputTokens };
+    const eased = 1 - (1 - progress) ** 3;
+    const count = (key: keyof TokenReadings): number | undefined => {
+      const target = motion.to[key];
+      if (target === undefined) return undefined;
+      const initial = motion.from[key] ?? 0;
+      return Math.round(initial + (target - initial) * eased);
+    };
+    return { inputTokens: count("inputTokens"), outputTokens: count("outputTokens") };
   }
 
   render(width: number): string[] {
@@ -210,11 +259,18 @@ export class FooterComponent implements Component {
     const place = this.#placeRow(w);
     const turn = this.#turnRow(w);
     const rows = [place, turn.line];
-    // The throughput is the first reading to go, and it goes as soon as the row
-    // above it has had to leave something out: a rate nobody asked for does not
-    // deserve the row it would take from the readings that were.
-    const speed = turn.whole ? this.#speedRow(w) : undefined;
-    if (speed !== undefined) rows.push(speed);
+    const count = this.state.subagents ?? 0;
+    const agents = count > 0 ? this.#ink("sky")(`subagents ${Math.floor(count)}`) : "";
+    const firstRoom = agents ? Math.max(1, w - visibleWidth(agents) - GAP) : w;
+    const speeds = this.#speedRows(w, firstRoom);
+    if (agents) {
+      const first = speeds[0] ?? "";
+      if (visibleWidth(first) + GAP + visibleWidth(agents) <= w) {
+        rows.push(twoUp(first, agents, w), ...speeds.slice(1));
+      } else {
+        rows.push(twoUp("", agents, w), ...speeds);
+      }
+    } else rows.push(...speeds);
     return rows;
   }
 
@@ -345,11 +401,12 @@ export class FooterComponent implements Component {
    */
   #metricTiers(): { long: string; short: string }[] {
     const s = this.state;
+    const tokens = this.#displayTokens();
     const up = this.#ascii ? "^" : "\u2191";
     const down = this.#ascii ? "v" : "\u2193";
     const io = [
-      s.inputTokens === undefined ? undefined : this.#ink("text")(`${up}${formatK(s.inputTokens)}`),
-      s.outputTokens === undefined ? undefined : this.#ink("text")(`${down}${formatK(s.outputTokens)}`),
+      tokens.inputTokens === undefined ? undefined : this.#ink("text")(`${up}${formatK(tokens.inputTokens)}`),
+      tokens.outputTokens === undefined ? undefined : this.#ink("text")(`${down}${formatK(tokens.outputTokens)}`),
     ].filter((part): part is string => part !== undefined).join(" ");
     // The cache answers twice: how much the session was served, and how well the
     // last call hit. One label each, so the two are never confused for one.
@@ -394,19 +451,20 @@ export class FooterComponent implements Component {
     return [row(both, cache, context), row(both, context), both];
   }
 
-  /** The throughput, in sky: a rate and nothing else. */
-  #speedRow(width: number): string | undefined {
+  /** Keep each measured rate readable, independently of the other readings. */
+  #speedRows(width: number, firstRoom: number): string[] {
     const s = this.state;
-    if (s.tps === undefined || !(s.tps > 0)) return undefined;
-    // `↯` and not `⚡`: the bolt is an emoji, two cells wide in half the fonts kumo
-    // runs in, and a row one cell off is a row that wraps.
     const bolt = this.#ascii ? "*" : "\u21af";
-    const rate = `${this.#ink("sky")(s.tps.toFixed(1))} ${this.#ink("muted")("tok/s")}`;
-    const line =
-      s.pp !== undefined && s.pp > 0
-        ? `${this.#ink("faint")(bolt)} ${this.#ink("muted")("TPS:")} ${rate}  ${this.#ink("muted")(`prefill ${formatK(Math.round(s.pp * 10) / 10)} tok/s`)}`
-        : `${this.#ink("faint")(bolt)} ${this.#ink("muted")("TPS:")} ${rate}`;
-    return truncateToWidth(line, width);
+    const rates: string[] = [];
+    if (s.tps !== undefined && Number.isFinite(s.tps) && s.tps > 0) {
+      rates.push(`${this.#ink("faint")(bolt)} ${this.#ink("muted")("TPS:")} ${this.#ink("sky")(s.tps.toFixed(1))} ${this.#ink("muted")("tok/s")}`);
+    }
+    if (s.pp !== undefined && Number.isFinite(s.pp) && s.pp > 0) {
+      rates.push(this.#ink("muted")(`prefill ${formatK(Math.round(s.pp * 10) / 10)} tok/s`));
+    }
+    if (rates.length === 0) return [];
+    const together = rates.join("  ");
+    return visibleWidth(together) <= firstRoom ? [together] : rates.map(rate => truncateToWidth(rate, width));
   }
 
   invalidate(): void {

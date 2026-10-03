@@ -47,8 +47,10 @@ describe("the transcript window keeps the composer on the last row", () => {
     const live = block(...Array.from({ length: 30 }, (_, i) => `line ${String(i)}`));
     const shell = new Shell([block("header")], live, [block("editor"), block("footer")], () => 20);
     const frame = shell.render(40).map(strip);
-    // No window, so no height budget: the terminal scrolls, which is the old deal.
-    expect(frame).toHaveLength(33);
+    // No window, so no height budget: the terminal scrolls, which is the old deal,
+    // plus the one blank row the bar keeps under itself.
+    expect(frame).toHaveLength(34);
+    expect(frame.at(-1)).toBe("");
     expect(shell.scrolled).toBe(false);
   });
 
@@ -59,8 +61,9 @@ describe("the transcript window keeps the composer on the last row", () => {
     shell.scrollBy(3);
     const frame = shell.render(40).map(strip);
     expect(frame).toHaveLength(20);
-    // The two rows the band owns are still the last two rows, on screen.
-    expect(frame.slice(-2)).toEqual(["editor", "footer"]);
+    // The two rows the band owns are still the last two rows before the blank,
+    // on screen, with a row of air under them.
+    expect(frame.slice(-3)).toEqual(["editor", "footer", ""]);
     // And the window really moved: the newest line is no longer the last one shown.
     expect(frame).not.toContain("line 29");
     expect(frame).toContain("line 26");
@@ -82,8 +85,9 @@ describe("the transcript window keeps the composer on the last row", () => {
     // composer. A hint that took a second row would push the band off the screen.
     expect(held.filter((l) => l.includes("Jump to latest"))).toHaveLength(1);
     const at = (needle: string): number => held.findIndex((l) => l.includes(needle));
-    expect(at("editor")).toBe(held.length - 1);
-    expect(at("Jump to latest")).toBe(held.length - 2);
+    expect(at("editor")).toBe(held.length - 2);
+    expect(at("Jump to latest")).toBe(held.length - 3);
+    expect(held.at(-1)).toBe("");
     expect(held).toHaveLength(20);
 
     shell.toEnd();
@@ -92,8 +96,8 @@ describe("the transcript window keeps the composer on the last row", () => {
     // which is also the moment the row stops being drawn.
     expect(pill.visible).toBe(false);
     expect(home.join("\n")).not.toContain("Jump to latest");
-    // 1 header + 30 transcript + 1 editor: the whole frame, as before.
-    expect(home).toHaveLength(32);
+    // 1 header + 30 transcript + 1 editor + the blank row: the whole frame.
+    expect(home).toHaveLength(33);
   });
 
   test("the window never runs past the top of the history", () => {
@@ -123,7 +127,7 @@ describe("the transcript window keeps the composer on the last row", () => {
     expect(newestShown()).toBe(before);
     expect(shell.back).toBe(3);
     expect(newestShown()).not.toBe("line 14");
-    expect(shell.render(40).map(strip).at(-1)).toBe("editor");
+    expect(shell.render(40).map(strip).at(-2)).toBe("editor");
   });
 
   test("a live turn does not move the reading a single row (D5 bug: the frame animated)", () => {
@@ -151,7 +155,7 @@ describe("the transcript window keeps the composer on the last row", () => {
     // the pill still says where the user is.
     expect(shell.back).toBe(6);
     expect(shell.scrolled).toBe(true);
-    expect(shell.render(40).map(strip).at(-1)).toBe("editor");
+    expect(shell.render(40).map(strip).at(-2)).toBe("editor");
     // PageDown still walks it home, and the window is the live edge again.
     shell.scrollBy(-6);
     expect(shell.back).toBe(0);
@@ -223,10 +227,11 @@ describe("the transcript window keeps the composer on the last row", () => {
     shell.scrollBy(500);
     const frame = shell.render(40).map(strip);
     const shown = frame.filter((l) => l.startsWith("line "));
-    // 12 rows less the header and the editor: ten lines, from the very first.
-    expect(shown).toEqual(lines.slice(0, 10));
+    // 12 rows less the header, the editor and the blank under it: nine lines,
+    // from the very first.
+    expect(shown).toEqual(lines.slice(0, 9));
     expect(frame[0]).toBe("header");
-    expect(frame.at(-1)).toBe("editor");
+    expect(frame.slice(-2)).toEqual(["editor", ""]);
     expect(frame).toHaveLength(12);
   });
 
@@ -261,14 +266,15 @@ describe("the transcript window keeps the composer on the last row", () => {
     shell.scrollBy(20);
     const middle = shell.render(40).map(strip);
     expect(middle).not.toContain("HEADER");
-    expect(middle.at(-1)).toBe("editor");
-    expect(middle.filter((l) => l.startsWith("line "))).toHaveLength(11);
+    expect(middle.at(-2)).toBe("editor");
+    expect(middle.filter((l) => l.startsWith("line "))).toHaveLength(10);
     // All the way up, the header is the first line of the first page.
     shell.scrollBy(500);
     const top = shell.render(40).map(strip);
     expect(top[0]).toBe("HEADER");
     expect(top.filter((l) => l.startsWith("line "))[0]).toBe("line 0");
-    expect(top.at(-1)).toBe("editor");
+    expect(top.at(-2)).toBe("editor");
+    expect(top.at(-1)).toBe("");
     expect(top).toHaveLength(12);
   });
 
@@ -280,8 +286,25 @@ describe("the transcript window keeps the composer on the last row", () => {
     const frame = shell.render(40).map(strip);
     // Too small to fit both, and the floor keeps the band whole rather than
     // spending the last rows on the window: a composer cut in half is worse.
-    expect(frame.at(-2)).toBe("editor");
-    expect(frame.at(-1)).toBe("footer");
+    expect(frame.slice(-3)).toEqual(["editor", "footer", ""]);
+  });
+});
+
+describe("the bar keeps a row of air under it", () => {
+  test("one blank row at the bottom, at rest and with the window held, at any height", () => {
+    // The footer is read in one glance and it is the last thing on the screen: a bar
+    // flush against the last row of a terminal reads as cut off rather than finished.
+    for (const rows of [30, 20, 12, 5]) {
+      const live = block(...Array.from({ length: 40 }, (_, i) => `line ${String(i)}`));
+      const shell = new Shell([block("header")], live, [block("editor"), block("footer")], () => rows);
+      const atRest = shell.render(40).map(strip);
+      expect(atRest.slice(-3), `at rest, ${rows} rows`).toEqual(["editor", "footer", ""]);
+      shell.scrollBy(6);
+      const held = shell.render(40).map(strip);
+      expect(held.slice(-3), `held, ${rows} rows`).toEqual(["editor", "footer", ""]);
+      // And a held frame is still exactly the terminal, or the window scrolls.
+      expect(held).toHaveLength(Math.max(8, rows));
+    }
   });
 });
 
@@ -308,11 +331,12 @@ describe("PageUp keeps the composer where the user left it", () => {
     // The claim, on the real screen: the frame is exactly the terminal, so nothing
     // scrolls, and the composer is still on the last row where it was left.
     expect(scrolled).toHaveLength(terminal.rows);
-    expect(scrolled.at(-1)).toBe(frame().at(-1));
-    // D3: the last row of the frame is the footer's route row — a context
+    expect(scrolled.at(-1)).toBe("");
+    expect(scrolled.at(-2)).toBe(frame().at(-2));
+    // D3: the last row of the band is the footer's route row — a context
     // percentage and a model name, or an honest `no model` — so the band still
     // holds the bottom of the screen while the transcript is read above.
-    expect(scrolled.at(-1)).toMatch(/%|no model/);
+    expect(scrolled.at(-2)).toMatch(/%|no model/);
     // And the way back is on screen, so the window is not a mystery.
     expect(scrolled.join("\n")).toContain("Jump to latest message");
 

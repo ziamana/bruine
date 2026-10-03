@@ -136,18 +136,15 @@ describe("degradation (D3: throughput, then cache, then context)", () => {
   const wide = rows(at(full), 100);
   expect(wide).toHaveLength(3);
 
-  test("the throughput goes first", () => {
-    // 68 cells is the last width that holds every reading and the whole route.
-    expect(rows(at(full), 70)).toHaveLength(3);
-    expect(rows(at(full), 68)).toHaveLength(3);
-    // One cell less and the row above has to leave the cache out — so the rate,
-    // which is only true while a model generates, leaves with it.
-    const squeezed = rows(at(full), 67);
-    expect(squeezed).toHaveLength(2);
-    expect(squeezed.join("")).not.toContain("TPS");
-    // A longer route squeezes the same way, whatever the width: it is the readings
-    // that give up room to the route, never the other way round.
-    expect(rows(at({ ...full, model: "Ornith-1.5-9B-Q4_K_M-instruct-uncensored" }), 70)).toHaveLength(2);
+  test("throughput stays visible when the metrics row gives up readings", () => {
+    for (const width of [70, 68, 67, 60, 30]) {
+      const squeezed = rows(at(full), width);
+      expect(squeezed).toHaveLength(3);
+      expect(squeezed[2]).toContain("TPS: 78.0 tok/s");
+    }
+    const longRoute = rows(at({ ...full, model: "Ornith-1.5-9B-Q4_K_M-instruct-uncensored" }), 70);
+    expect(longRoute).toHaveLength(3);
+    expect(longRoute[2]).toContain("TPS: 78.0 tok/s");
   });
 
   test("then the cache, then the context, and the route is never cut", () => {
@@ -264,10 +261,11 @@ describe("widths, ASCII and no colour (D3)", () => {
     expect(lines[2]).toContain("TPS");
   });
 
-  test("the prefill rate rides with the throughput, and leaves with it", () => {
+  test("prefill shares the speed row when it fits and wraps when it does not", () => {
     const f = at({ tps: 78, pp: 1_200 });
     expect(rows(f, 100)[2]).toContain("prefill 1.2k tok/s");
-    expect(rows(f, 24).join("")).not.toContain("prefill");
+    expect(rows(f, 24).join("\n")).toContain("prefill 1.2k tok/s");
+    expect(rows(f, 24).join("\n")).toContain("TPS: 78.0 tok/s");
   });
 });
 

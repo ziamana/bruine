@@ -91,6 +91,120 @@ describe("QuestionCallComponent: the question is drawn while the model writes it
   });
 });
 
+describe("QuestionCallComponent: the question is watched being written", () => {
+  /** The reveal's clock, owned by the test: nothing waits for real time here. */
+  function live(payload_ = payload) {
+    const timers = new Map<number, () => void>();
+    let next = 1;
+    const c = new QuestionCallComponent(() => 0, UNICODE_ICONS, {
+      animate: true,
+      onTick: () => {},
+      typewriter: {
+        setTimer: (fn) => {
+          const handle = next++;
+          timers.set(handle, fn);
+          return handle;
+        },
+        clearTimer: (handle) => {
+          timers.delete(handle as number);
+        },
+      },
+    });
+    const tick = (times = 1): void => {
+      for (let i = 0; i < times; i += 1) for (const fn of [...timers.values()]) fn();
+    };
+    return { c, tick, payload: payload_ };
+  }
+
+  test("the text is written out, not dropped on screen whole", () => {
+    const { c, tick } = live();
+    c.args(payload.slice(0, payload.indexOf("Sur quel") + 12));
+    // The arguments have arrived; the reader has not caught up yet.
+    expect(text(c)).not.toContain("Sur quel sujet souhaitez-vous");
+    tick(2);
+    const shown = text(c);
+    expect(shown).toContain("Sur quel");
+    expect(shown).not.toContain("Sur quel s");
+    // And the reveal finishes: a call that ends half-written is a lie.
+    tick(60);
+    expect(text(c)).toContain("Sur quel s");
+  });
+
+  test("the question is not written twice when the options change shape", () => {
+    const { c, tick } = live();
+    const at = payload.indexOf('{"label":"Une');
+    c.args(payload.slice(0, at));
+    tick(60);
+    c.args(payload.slice(at));
+    tick(60);
+    // The option count went from one to three, which changes the summary line
+    // rather than extending it. The question line above it keeps what it wrote.
+    const out = text(c);
+    expect(out.match(/Sur quel sujet/g)).toHaveLength(1);
+    expect(out).toContain("3 option(s): Un projet de code, Une décision technique, Autre");
+  });
+
+  test("the header says what the call is while the question is still being written", () => {
+    const withHeader = JSON.stringify({
+      questions: [{ id: "q1", header: "Sujet du jour", question: "Sur quel sujet voulez-vous ?" }],
+    });
+    const at = withHeader.indexOf('"question"');
+    const { c, tick } = live();
+    // The keys before the question carry nothing to read, and the row said
+    // nothing at all through them. The header is short and lands first.
+    c.args(withHeader.slice(0, at - 1));
+    tick(30);
+    expect(text(c)).toContain("Sujet du jour");
+    // And the question takes the line over as soon as it starts arriving.
+    c.args(withHeader.slice(at - 1));
+    tick(60);
+    const out = text(c);
+    expect(out).toContain("Sur quel sujet voulez-vous ?");
+    expect(out).not.toContain("Sujet du jour");
+  });
+
+  test("an answered call shows the whole question, however it was written", () => {
+    const { c, tick } = live();
+    c.args(payload);
+    // The answer lands while the reveal is still typing: the record cannot read
+    // short, so everything the reader missed is out at once.
+    c.answer([{ id: "q1", selected: ["Autre"] }]);
+    tick(60);
+    const out = text(c);
+    expect(out).toContain("✓ Autre");
+    expect(out).toContain("Q: Sur quel sujet souhaitez-vous");
+    expect(out).toContain("Options:");
+  });
+
+  test("a cancelled call says so and leaves nothing half-written", () => {
+    const { c, tick } = live();
+    c.args(payload.slice(0, payload.indexOf("Sur quel") + 8));
+    c.cancel();
+    expect(c.rail).toBe("red");
+    expect(text(c)).toContain("Cancelled");
+    tick(60);
+    expect(text(c)).toContain("Sur quel");
+  });
+
+  test("no repaint hook means the call is never held back", () => {
+    const c = new QuestionCallComponent(() => 0, UNICODE_ICONS);
+    c.args(payload.slice(0, payload.indexOf("Sur quel") + 12));
+    expect(text(c)).toContain("Sur quel s");
+  });
+
+  test("whole arguments finish the reveal, even behind an unbalanced delimiter", () => {
+    const { c, tick } = live();
+    // `3 option(s)` leaves a `(` open at the frontier, and the reveal parks there
+    // until a delta frees it. A complete call gets no further delta, so it has to
+    // show what it has rather than sit on "3 option" behind the form.
+    c.args(payload);
+    tick(2);
+    const out = text(c);
+    expect(out).toContain("3 option(s): Un projet de code, Une décision technique, Autre");
+    expect(out).toContain("Waiting for user input…");
+  });
+});
+
 describe("ToolCallComponent: any call is drawn while it is being written", () => {
   test("a command is read out of the partial arguments, word by word", () => {
     const c = new ToolCallComponent("bash", () => 0, UNICODE_ICONS);

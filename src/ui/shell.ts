@@ -12,7 +12,8 @@
  * move the terminal's cursor (`mouse.ts:212`). It has to be the frame. Scrolled
  * back, the transcript is windowed to end `back` lines above its live end, blank
  * rows make up the difference, and the frame is exactly the height of the terminal
- * — so nothing scrolls, the band sits on the last row, and the composer stays put.
+ * — so nothing scrolls, the band sits one row above the last, and the composer
+ * stays put.
  *
  * The live path is untouched: at rest the transcript renders whole and the terminal
  * scrolls it exactly as before.
@@ -102,6 +103,13 @@ export class Shell extends Container {
       if (i < this.#split) top.push(...child.render(width));
       else if (i > this.#split) bottom.push(...child.render(width));
     }
+    // One blank row under the bar, always.
+    //
+    // The footer is the last thing on the screen and it is read in one glance, so a
+    // bar flush against the last row of the terminal reads as cut off rather than
+    // finished. It costs the window one row (`area` below counts it), and the band
+    // moves up by one, which is the whole change.
+    bottom.push("");
     const live = this.transcript.render(width);
     // The header is the first thing in the document, not a bar pinned over it: the
     // window reads the header and the transcript as one scroll, so the wordmark comes

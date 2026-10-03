@@ -177,6 +177,29 @@ describe("the reveal (T57)", () => {
     expect(tw.text).toBe("text more");
     tick();
   });
+
+  test("reset reveals the new text from its first character, and never the old one", () => {
+    const { tw, tick } = clock();
+    tw.push("Choose mode");
+    for (let i = 0; i < 3; i += 1) tick();
+    // The text changed shape instead of growing: what is buffered is no longer a
+    // prefix of it, and pushing on top would print both.
+    tw.reset("Which database should I use for the ledger?");
+    expect(tw.text).toBe("");
+    tick();
+    expect(tw.text.length).toBeGreaterThan(0);
+    expect(tw.text.startsWith("Which")).toBe(true);
+    for (let i = 0; i < 40; i += 1) tick();
+    expect(tw.text).toBe("Which database should I use for the ledger?");
+  });
+
+  test("a reset with nobody watching shows the whole text at once", () => {
+    const tw = new Typewriter();
+    tw.push("Choose mode");
+    tw.reset("Which database?");
+    expect(tw.text).toBe("Which database?");
+    expect(tw.animating).toBe(false);
+  });
 });
 
 describe("the switch (T57)", () => {

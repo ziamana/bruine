@@ -1,3 +1,4 @@
+import { LOGO } from "../src/ui/logo-motion.js";
 import { Text, visibleWidth, type Terminal } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
 import { mkdtempSync } from "node:fs";
@@ -441,7 +442,7 @@ describe("BruineUi shell (T13a, fake terminal)", () => {
     const { ui } = makeUi();
     const lines = ui.tui.render(60).map(strip);
     const text = lines.join("\n");
-    expect(text).toContain("bruine");
+    expect(text).toContain(LOGO[0].slice(0, 4));
     expect(text).toContain("v0.2.0");
     expect(text).toContain("escape interrupt");
     // D3: the footer's three rows are the place, the turn and the route — a session
@@ -938,7 +939,7 @@ describe("BruineUi shell (T13a, fake terminal)", () => {
       expect(new Set(phases).size).toBe(1);
       // The mark is there from the first frame and it is the finished one: no ghosted
       // frames, no half-drawn wordmark, nothing that is not the final glyphs.
-      expect(phases.every((frame) => /[\u2588\u2584\u2580]/.test(frame) && !/[\u2591\u2592\u2593]/.test(frame))).toBe(true);
+      expect(phases.every((frame) => frame.includes(LOGO[0].slice(0, 4)) && !/[\u2591\u2592\u2593]/.test(frame))).toBe(true);
       const frame = ui.tui.render(60).map(strip).join("\n");
       expect(frame).toContain("ctrl+d exit");
       const after = phases.length;

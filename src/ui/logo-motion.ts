@@ -2,20 +2,17 @@ import { appEnv } from "../compat.js";
 import { hash01 } from "./rain.js";
 
 /**
- * The permanent three-row BRUINE wordmark. Every motion frame occupies these cells.
- *
- * Three rows because two were not enough to tell the letters apart: a two-row B reads as a D
- * and a two-row E as a C. Each letter is drawn on a pixel grid six lines tall and folded into
- * half blocks, so the shapes are the ones a person expects.
+ * The permanent three-row BRUINE wordmark, in the `future` FIGlet font: fine heavy lines that
+ * read as the word at a glance. Every motion frame occupies these cells.
  *
  * C7: the mark belongs to the setup welcome now. The interactive screen says its
  * name in a line of text instead, so the only place this is drawn is the one screen
  * where the user is not reading anything yet.
  */
 export const LOGO = [
-  "█▀▀▄ █▀▀▄ █  █ ▀█▀ █▄ █ █▀▀▀",
-  "█▀▀▄ █▀█  █  █  █  █▀▄█ █▀▀ ",
-  "█▄▄▀ █  █ ▀▄▄▀ ▄█▄ █ ▀█ █▄▄▄",
+  "┏┓ ┏━┓╻ ╻╻┏┓╻┏━╸",
+  "┣┻┓┣┳┛┃ ┃┃┃┗┫┣╸ ",
+  "┗━┛╹┗╸┗━┛╹╹ ╹┗━╸",
 ] as const;
 export const LOGO_STOPS = ["#7dcfff", "#b4a7ff", "#ff9ed2", "#7dcfff"] as const;
 

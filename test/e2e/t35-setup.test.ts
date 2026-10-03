@@ -302,6 +302,8 @@ test("existing setup menu explains navigation and keeps exit without saving visi
     expect(await h.selectedLine()).toContain("Exit without saving");
     h.press("enter");
     await h.waitFor("configuration postponed");
+    // The message is printed a moment before the process is gone.
+    await h.until(() => h.exit !== undefined, 5000, "the process to exit");
     expect(h.exit?.exitCode).toBe(0);
     expect(await readFile(join(home, "settings.yaml"), "utf8")).toBe(settings);
   } finally {

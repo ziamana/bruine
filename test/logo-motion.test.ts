@@ -11,38 +11,12 @@ describe("the BRUINE mark", () => {
     expect(new Set(LOGO.map((row) => [...row].length)).size).toBe(1);
   });
 
-  test("is the six letters B R U I N E, each as the shape a reader expects", () => {
-    // Folded back to pixels: a half block is two lines, so each row is two lines of the letter.
-    const lines = (row: string): [string, string] => [
-      [...row].map((c) => (c === "█" || c === "▀" ? "#" : ".")).join(""),
-      [...row].map((c) => (c === "█" || c === "▄" ? "#" : ".")).join(""),
-    ];
-    const pixels = LOGO.flatMap((row) => lines(row));
-    expect(pixels).toHaveLength(6);
-    // Letters sit at these columns: B(4) R(4) U(4) I(3) N(4) E(4) with one blank between.
-    const spans = [[0, 4], [5, 9], [10, 14], [15, 18], [19, 23], [24, 28]] as const;
-    const letter = (i: number): string[] => pixels.map((line) => line.slice(spans[i]![0], spans[i]![1]));
-    const B = ["###.", "#..#", "###.", "#..#", "#..#", "###."];
-    const R = ["###.", "#..#", "###.", "#.#.", "#..#", "#..#"];
-    const U = ["#..#", "#..#", "#..#", "#..#", "#..#", ".##."];
-    const I = ["###", ".#.", ".#.", ".#.", ".#.", "###"];
-    const N = ["#..#", "##.#", "##.#", "#.##", "#.##", "#..#"];
-    const E = ["####", "#...", "###.", "#...", "#...", "####"];
-    expect([B, R, U, I, N, E].map((_, i) => letter(i))).toEqual([B, R, U, I, N, E]);
-  });
-
-  test("no letter is the shape of another: a B is not a D, an E is not a C", () => {
-    const D = ["###.", "#..#", "#..#", "#..#", "#..#", "###."];
-    const C = [".###", "#...", "#...", "#...", "#...", ".###"];
-    const lines = (row: string): [string, string] => [
-      [...row].map((c) => (c === "█" || c === "▀" ? "#" : ".")).join(""),
-      [...row].map((c) => (c === "█" || c === "▄" ? "#" : ".")).join(""),
-    ];
-    const pixels = LOGO.flatMap((row) => lines(row));
-    const first = pixels.map((l) => l.slice(0, 4));
-    const last = pixels.map((l) => l.slice(24, 28));
-    expect(first).not.toEqual(D);
-    expect(last).not.toEqual(C);
+  test("is the word BRUINE in the `future` font, and nothing else", () => {
+    expect([...LOGO]).toEqual([
+      "┏┓ ┏━┓╻ ╻╻┏┓╻┏━╸",
+      "┣┻┓┣┳┛┃ ┃┃┃┗┫┣╸ ",
+      "┗━┛╹┗╸┗━┛╹╹ ╹┗━╸",
+    ]);
   });
 });
 

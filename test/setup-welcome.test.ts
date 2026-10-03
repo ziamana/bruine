@@ -83,7 +83,7 @@ describe("the welcome rain", () => {
       try {
         const lines = welcome.render(100).map(plain).filter((l) => l.trim() !== "");
         expect(lines).toHaveLength(3);
-        expect(lines.join("")).toMatch(/█▀▀▄ █▀▀▄ █  █/);
+        expect(lines.join("")).toMatch(/┏┓ ┏━┓╻ ╻/);
       } finally {
         Date.now = realNow;
       }
@@ -92,8 +92,8 @@ describe("the welcome rain", () => {
 
   test("a narrow screen gets the word and no rain", async () => {
     await withMotion(async () => {
-      const lines = new SetupWelcome(() => 12).render(20).map(plain).filter((l) => l.trim() !== "");
-      expect(lines).toEqual(["       BRUINE"]);
+      const lines = new SetupWelcome(() => 12).render(18).map(plain).filter((l) => l.trim() !== "");
+      expect(lines).toEqual(["      BRUINE"]);
     });
   });
 });

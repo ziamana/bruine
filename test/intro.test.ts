@@ -336,7 +336,7 @@ describe("the banner plays the entrance", () => {
     ascii.ui.start();
     expect(ascii.ui.introPlaying).toBe(false);
     await ascii.ui.shutdown();
-    const narrow = make(UNICODE_ICONS, 50);
+    const narrow = make(UNICODE_ICONS, 40);
     narrow.ui.start();
     expect(narrow.ui.introPlaying).toBe(false);
     await narrow.ui.shutdown();

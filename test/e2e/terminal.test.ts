@@ -751,7 +751,7 @@ test("the logo comes in with an effect in the banner while the prompt is already
   try {
     const mark = (): string[] => {
       const lines = h.screen();
-      const at = lines.findIndex((l) => /\bv\d+\.\d+\.\d+/.test(l) && /[█▀▄░▒▓╷│╎·]/.test(l.slice(0, 30)));
+      const at = lines.findIndex((l) => /\bv\d+\.\d+\.\d+/.test(l) && /[┏┓┣┗┛┫┳╻╹┃━╸█▀▄░▒▓╷│╎·●◉]/.test(l.slice(0, 30)));
       return at < 0 ? [] : lines.slice(at, at + 3).map((l) => l.trim().slice(0, LOGO[0].length));
     };
     const plain = [...LOGO].map((l) => l.trimEnd());

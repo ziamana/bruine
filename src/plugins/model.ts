@@ -1,3 +1,5 @@
+import { SPACE_BUNNY, SPACE_BUNNY_NOTICE } from "../setup/spacebunny.js";
+import { addSpaceBunnyToHome } from "../setup/zen-route.js";
 import { runtimeHome, configReadPath, configWritePath } from "../compat.js";
 /**
  * T37 — `/model` and `/provider`: the route, chosen without leaving the session.
@@ -408,6 +410,56 @@ export class ModelPicker {
     return this.envKeys().has(row.apiKeyEnv);
   }
 
+  /** True when a route to the free model is already declared or mounted. */
+  hasSpaceBunny(rows: readonly ProviderRow[]): boolean {
+    return rows.some((row) => row.id === SPACE_BUNNY.routeName || row.baseUrl === SPACE_BUNNY.baseUrl);
+  }
+
+  /**
+   * Adds Space Bunny Free to this home after an explicit yes, then switches to it. Nothing is
+   * written before the answer: the user is told where their code goes and that the offer can end.
+   */
+  async addSpaceBunny(): Promise<string> {
+    if (this.ui?.askChoice === undefined) {
+      return "Space Bunny Free needs a yes or no: run bruine in a terminal, or run bruine setup.";
+    }
+    const answer = await this.ui.askChoice(
+      SPACE_BUNNY_NOTICE.replace(/\n/g, " "),
+      [
+        { value: "no", label: "No, keep my models" },
+        { value: "yes", label: "Yes, add Space Bunny Free and switch to it" },
+      ],
+      { initial: 0 },
+    );
+    if (answer !== 1) return "Space Bunny Free: not added.";
+    const home = this.dshHome ?? runtimeHome();
+    try {
+      await addSpaceBunnyToHome(home);
+    } catch (err) {
+      const text = `Could not add Space Bunny Free: ${(err as Error).message}`;
+      this.ui.showNotice?.(text, { red: true });
+      return text;
+    }
+    // The route is read from the key's variable, and dsh reads the process environment.
+    process.env[SPACE_BUNNY.keyEnv] ??= SPACE_BUNNY.keyValue;
+    // settings.yaml is hot-reloaded: give the runtime a moment to mount the route before using it.
+    for (let i = 0; i < 40; i += 1) {
+      let live: Array<{ id: string }> = [];
+      try {
+        live = this.llm?.listProviders?.() ?? [];
+      } catch {
+        live = [];
+      }
+      if (live.some((p) => p.id === SPACE_BUNNY.routeName)) {
+        return this.apply({ provider: SPACE_BUNNY.routeName, model: SPACE_BUNNY.model }, { notice: true, remember: true });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const text = "Space Bunny Free is added to settings.yaml. Run /reload, then /model space-bunny to switch to it.";
+    this.ui.showNotice?.(text);
+    return text;
+  }
+
   /** What the picker offers. `all` adds dsh's dormant directory. */
   providerRows(all = false): ProviderRow[] {
     return buildProviderRows(this.llm, this.settings(), all);
@@ -566,6 +618,9 @@ export class ModelPicker {
   private async setDirect(arg: string): Promise<string> {
     this.#envKeys = undefined;
     const known = this.providerRows().map((r) => r.id);
+    // "/model space-bunny" is the free model by its name; it is added first if need be.
+    if (/^(space-bunny(-free)?|opencode-zen)$/i.test(arg.trim()) && !this.hasSpaceBunny(this.providerRows())) return this.addSpaceBunny();
+    if (/^space-bunny(-free)?$/i.test(arg.trim())) return this.apply({ provider: SPACE_BUNNY.routeName, model: SPACE_BUNNY.model }, { notice: true, remember: true });
     const parsed = parseRouteArg(arg, known);
     if (parsed === undefined) return `Unknown route "${arg}". Use "/model" to pick one.`;
     if (known.length > 0 && !known.includes(parsed.provider)) {
@@ -590,11 +645,17 @@ export class ModelPicker {
         "Providers:",
         ...rows.map((row) => `  ${providerLine(row, current, this.keyIsSet(row))}`),
         'Use "/model <provider>/<model>" to switch.',
+        ...(this.hasSpaceBunny(rows) ? [] : ['Not added yet: "/model space-bunny" adds Space Bunny Free (free for now, via OpenCode Zen).']),
       ].join("\n");
     }
     const items = rows.map((row) => ({ value: row.id, label: providerLine(row, current, this.keyIsSet(row)) }));
+    // The free model is one pick away for anyone who has not added it: setup only asks about it
+    // once, and a home that chose its own models then never saw it again.
+    const offerFree = !this.hasSpaceBunny(rows);
+    if (offerFree) items.push({ value: "+space-bunny", label: "+ Space Bunny Free (OpenCode Zen, free for now, no key)" });
     const at = current === undefined ? -1 : rows.findIndex((row) => row.id === current.provider);
     const picked = await this.ui.askChoice("Model · provider", items, at >= 0 ? { initial: at } : {});
+    if (offerFree && picked === rows.length) return this.addSpaceBunny();
     const provider = rows[picked];
     if (provider === undefined) return "Model: unchanged.";
     if (!provider.live) {

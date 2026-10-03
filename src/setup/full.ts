@@ -1225,6 +1225,7 @@ export async function runFullSetup(
     discoveries.forEach((d, i) =>
       items.push({ value: `s${String(i)}`, label: `${discoveredLabel(d)}  ·  ${d.baseUrl}` }),
     );
+    items.push({ value: "spacebunny", label: "Space Bunny Free  (OpenCode Zen, free for now; your prompts go to OpenCode's provider)" });
     items.push({ value: "cloud", label: "Cloud provider…  (DeepSeek, Anthropic, OpenAI, Google, OpenRouter, Groq, and more; needs an API key)" });
     // T35: Skip (keep current) on the main pick skips the whole Roles step.
     // Preselect the current role so `bruine setup` shows what is there.
@@ -1266,6 +1267,7 @@ export async function runFullSetup(
     if (item.value === "skip") return SKIP;
     if (item.value === "none") return undefined;
     if (item.value === "main") return opts.useMainDefault;
+    if (item.value === "spacebunny") return spaceBunnyPick();
     if (item.value === "cloud") return askCloud(label, opts.required === true ? flow.answers.roles.main : flow.answers.roles.fast);
     const d = discoveries[Number(item.value.slice(1))] as Discovered;
     const modelItems: SelectItem[] = d.models.map((m) => {

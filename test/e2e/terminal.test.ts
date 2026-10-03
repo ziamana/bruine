@@ -800,6 +800,36 @@ test("a key in the middle of the entrance stops it and is not lost", async () =>
   }
 });
 
+test("/model offers Space Bunny Free to a home that never added it, asks first, and then adds and switches to it", async () => {
+  const h = await Harness.start([textScript("UNUSED")]);
+  try {
+    await h.waitFor("e2e-model", 30_000);
+    await h.waitStable(150, 2000);
+    await h.prompt("/model");
+    await h.waitFor("Model · provider");
+    await h.waitFor("Space Bunny Free (OpenCode Zen, free for now, no key)");
+    // It is the last row; ask for it.
+    h.press("down"); await delay(80);
+    h.press("enter");
+    // Nothing is written until the user has said yes, and the question says where the code goes.
+    await h.waitFor("sent to");
+    await h.waitFor("end without notice");
+    expect(readFileSync(join(h.home, "settings.yaml"), "utf8")).not.toContain("opencode-zen");
+    h.press("down"); await delay(80);
+    h.press("enter");
+    // The route is written, the runtime mounts it, and the session is on it.
+    await h.waitFor("space-bunny-free", 20_000);
+    const settings = readFileSync(join(h.home, "settings.yaml"), "utf8");
+    expect(settings).toContain("opencode-zen");
+    expect(settings).toContain("https://opencode.ai/zen/v1");
+    expect(readFileSync(join(h.home, ".env"), "utf8")).toContain("BRUINE_ZEN_API_KEY=public");
+    expect(h.server.errors).toEqual([]);
+  } finally {
+    await h.dump("zen-model-failure");
+    await h.close();
+  }
+});
+
 test("/tasks with nothing running says so", async () => {
   await scenario("tasks-empty", [], async (h) => {
     h.type("/tasks");

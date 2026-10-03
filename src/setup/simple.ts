@@ -265,7 +265,7 @@ export function renderSettingsYaml(doc: SettingsDoc): string {
   return header + emitLines(doc, 0).join("\n") + "\n";
 }
 
-async function writeAtomic(path: string, content: string, mode?: number): Promise<void> {
+export async function writeAtomic(path: string, content: string, mode?: number): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const tmp = `${path}.tmp`;
   await writeFile(tmp, content, { encoding: "utf8", ...(mode !== undefined ? { mode } : {}) });

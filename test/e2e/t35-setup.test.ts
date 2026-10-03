@@ -491,6 +491,8 @@ test("first install with a cloud model: no Skip trap on the main model, and the 
     // Nothing is kept on a first install, so there is no Skip row to fall into.
     expect(h.text()).not.toContain("Skip (keep");
     expect(h.text()).not.toContain("(s skips)");
+    // The list is: Space Bunny Free, then Cloud provider…
+    await h.pressN("down", 1);
     h.press("enter"); // Cloud provider…
     await h.waitFor("Cloud provider for main");
     // Not two providers any more: the engine's catalog, DeepSeek first.
@@ -535,6 +537,8 @@ test("first install → Groq from the catalog → model, key, saved as a catalog
     await h.waitFor("Free model");
     h.press("enter"); // No
     await h.until(() => h.text().includes("Role: main"), 20_000, "roles step");
+    // The list is: Space Bunny Free, then Cloud provider…
+    await h.pressN("down", 1);
     h.press("enter"); // Cloud provider…
     await h.waitFor("Cloud provider for main");
     h.type("groq");

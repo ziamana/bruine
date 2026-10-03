@@ -42,3 +42,47 @@ export class SetupFrame implements Component {
   handleInput(data: string): void { this.content.handleInput?.(data); }
   invalidate(): void { this.content.invalidate(); }
 }
+
+export interface CenteredPanelOptions {
+  /** The widest the panel gets; a wider terminal gains margins instead of a longer panel. */
+  maxWidth: number;
+  /** True while a screen owns the whole terminal (the welcome mark), which is never framed. */
+  fullscreen: () => boolean;
+}
+
+/**
+ * Puts the setup panel in the middle of the console.
+ *
+ * The frame used to take the whole width and sit on the first row, so on a big terminal it
+ * hugged the top-left corner with the rest of the screen empty. The panel is now capped in
+ * width and centered across; down, it is centered on the tallest it has been during the
+ * current step, so choosing among rows or filtering a list does not make it jump.
+ */
+export class CenteredPanel implements Component {
+  #tallest = 0;
+
+  constructor(
+    private readonly inner: Component,
+    private readonly rows: () => number,
+    private readonly options: CenteredPanelOptions,
+  ) {}
+
+  /** A new step starts from its own height. */
+  reset(): void {
+    this.#tallest = 0;
+  }
+
+  render(width: number): string[] {
+    if (this.options.fullscreen() || width <= 0) return this.inner.render(width);
+    const panelWidth = Math.max(1, Math.min(width, this.options.maxWidth));
+    const left = " ".repeat(Math.max(0, Math.floor((width - panelWidth) / 2)));
+    const lines = this.inner.render(panelWidth).map((line) => (line === "" ? line : `${left}${line}`));
+    this.#tallest = Math.max(this.#tallest, lines.length);
+    const top = Math.max(0, Math.floor((this.rows() - this.#tallest) / 2));
+    return [...Array<string>(top).fill(""), ...lines];
+  }
+
+  invalidate(): void {
+    this.inner.invalidate();
+  }
+}

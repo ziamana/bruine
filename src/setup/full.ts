@@ -63,7 +63,7 @@ import {
 } from "./simple.js";
 import { readKumoJsonDoc, readUpdateCheckChoice, setUpdateCheck } from "../update.js";
 import { parse as parseYaml } from "yaml";
-import { SetupFrame } from "./frame.js";
+import { CenteredPanel, SetupFrame } from "./frame.js";
 import { SetupCardPicker, SetupThemePicker, SetupWelcome, type SetupCardOption } from "./welcome.js";
 import { CheckList, LineInput, SetupFilterList, SetupSummary, fitPlain, type CheckItem } from "./widgets.js";
 
@@ -503,7 +503,8 @@ export async function runFullSetup(
       ],
     invalidate: () => {},
   };
-  tui.addChild(root);
+  const panel = new CenteredPanel(root, () => terminal.rows, { maxWidth: 108, fullscreen: () => welcomeShowing });
+  tui.addChild(panel);
   tui.addChild(statusWidget);
 
   let activeFocus: (Component & { clearFilter?: () => boolean }) | undefined;
@@ -547,6 +548,7 @@ export async function runFullSetup(
   ): Promise<Outcome<T>> =>
     new Promise((resolveP) => {
       root.clear();
+      panel.reset();
       const box = new Container();
 
       const built = build((v) => {

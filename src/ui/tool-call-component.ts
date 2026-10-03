@@ -9,6 +9,7 @@ import { kumoIcons, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 import { diffCounter, diffForCall, renderDiff, type FileDiff } from "./diff-view.js";
 import { parsePartialJson } from "./partial-json.js";
+import { readableToolSummary, toolSummariesEnabled } from "./tool-summary.js";
 
 const SUMMARY_KEYS = ["command", "cmd", "path", "file_path", "url", "query", "pattern", "name"];
 /** T59: the tools whose call is a change to the workspace. */
@@ -67,8 +68,10 @@ export class ToolCallComponent implements ChatToolCall {
   #done: { ok: boolean; seconds: number; lines: string[]; rest: number } | undefined;
   /** What a successful edit/write changed, shown instead of "file updated". */
   #diff: FileDiff | undefined;
-  constructor(readonly tool: string, private now: () => number = Date.now, private icons: KumoIcons = kumoIcons()) {
+  #readableSummaries: boolean;
+  constructor(readonly tool: string, private now: () => number = Date.now, private icons: KumoIcons = kumoIcons(), opts: { readableSummaries?: boolean } = {}) {
     this.#startTime = now();
+    this.#readableSummaries = opts.readableSummaries ?? toolSummariesEnabled();
   }
   get active(): boolean { return this.#done === undefined; }
   /** T55 P1c: a tool still in flight owns the rail, so the live edge is findable. */
@@ -196,6 +199,13 @@ export class ToolCallComponent implements ChatToolCall {
     return link && (key === "path" || key === "file_path") ? fileLink(shown, String(obj[key])) : shown;
   }
 
+  /** The chat can show a description; approval still reads the actual command/path. */
+  #displaySummary(width: number, link = false): string {
+    const text = this.#readableSummaries ? readableToolSummary(this.tool, this.#partialArgs()) : undefined;
+    if (text === undefined) return this.summary(width, link);
+    return clipCells(sanitize(text).replace(/\s+/g, " "), Math.max(1, width), this.icons.think === "*" ? "..." : "…");
+  }
+
   /** A command being written keeps its later lines visible while the call is in flight. */
   #commandTail(width: number): string[] {
     const obj = this.#partialArgs();
@@ -216,7 +226,7 @@ export class ToolCallComponent implements ChatToolCall {
     if (!this.#done) {
       const fr = spinnerFrame(this.now() - this.#startTime, this.icons);
       const room = Math.max(1, width - stringWidth(`${fr} ${toolPad}  `));
-      const summary = this.summary(room);
+      const summary = this.#displaySummary(room);
       const detail = summary ? `  ${summary}` : "";
       const plainLine = clipCells(`${fr} ${toolPad}${detail}`, width);
       const head = stringWidth(plainLine) === stringWidth(`${fr} ${toolPad}${detail}`)
@@ -235,8 +245,8 @@ export class ToolCallComponent implements ChatToolCall {
     // Two renderings of the same summary: the linked one when the line fits, and
     // the plain one for the narrow fallback, because clipCells walks graphemes
     // and must never be handed an escape sequence to cut through.
-    const plainSummary = this.summary(budget);
-    const linkedPadded = padCells(this.summary(budget, true), avail);
+    const plainSummary = this.#displaySummary(budget);
+    const linkedPadded = padCells(this.#displaySummary(budget, true), avail);
     const plainPadded = padCells(plainSummary, avail);
     const plainHead = ` ${toolPad}  ${plainPadded}${durPart}`;
     const fits = stringWidth(plainHead) <= Math.max(0, width - 1);

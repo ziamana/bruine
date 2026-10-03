@@ -61,6 +61,7 @@ reasoning effort, `ctrl+v` pastes an image.
 | `KUMO_HOME` | Where kumo keeps its config (default `~/.kumo`) |
 | `KUMO_ASCII=1` | Plain-ASCII glyphs instead of symbols |
 | `KUMO_NO_ANIMATION=1` | No header or spinner animation |
+| `KUMO_TOOL_SUMMARIES=0` | Disable readable tool descriptions (also `"toolSummaries": false` in `kumo.json`). Summaries reuse existing arguments and make no model calls. |
 | `KUMO_BG=0` | Never paint a background, whatever the terminal reports |
 | `KUMO_NO_UPDATE_CHECK=1` | Never contact the npm registry to check for a version |
 

@@ -1,41 +1,60 @@
 import React from "react";
-import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 import { COLORS, FONTS, VIDEO, type Copy } from "../config";
-import { Scene } from "../components/Scene";
+import { KeyCap, Scene, Words } from "../components/Scene";
 import { GlowGradient } from "../components/Glow";
 import { ease, hash01, sec, typed } from "../lib/motion";
+import { CAPTION_AT, DEMO as T } from "../timeline.ts";
 
-const FONT = 20;
-const ROW = 29;
-const CELL = 12.05; // one monospace cell at 20px
-const WIN = { x: 76, y: 92, width: 1230, height: 900 };
-const PAD_X = 22;
+const FONT = 21;
+const ROW = 31;
+const CELL = FONT * 0.602; // one monospace cell
+const WIN = { x: 210, y: 64, width: 1500, height: 952 };
+const PAD_X = 26;
+const BAR = 44;
+const TOP_PAD = 14;
 
-/** The script of the session, in frames from the scene's start. */
-const T = {
-  typeStart: sec(0.45),
-  submit: sec(1.75),
-  thinking: sec(1.9),
-  reasonStart: sec(2.05),
-  collapse: sec(4.7),
-  readPending: sec(5.0),
-  readDone: sec(5.35),
-  editPending: sec(5.65),
-  editDone: sec(5.95),
-  diffStart: sec(6.0),
-  bashPending: sec(7.0),
-  approval: sec(7.15),
-  approve: sec(8.55),
-  bashDone: sec(9.6),
-  answerStart: sec(9.85),
-} as const;
+/** The centre of a terminal row on the unzoomed frame, for the camera to aim at. */
+const rowY = (row: number): number => WIN.y + BAR + TOP_PAD + row * ROW + ROW / 2;
 
-const CALLOUT_AT = [T.thinking, T.readPending, T.editPending + 6, T.bashPending + 4, T.answerStart] as const;
+/**
+ * The camera's shots: from `at`, it moves (over MOVE frames) to look at (fx, fy) with zoom `s`,
+ * and puts that point at (tx, ty) on screen, above the captions. The zoom stays under 1.26 so the
+ * window's whole width is always in frame: the camera moves along the session, it never cuts a
+ * line.
+ */
+const SHOTS = [
+  { at: 0, s: 1, fx: 960, fy: 540, tx: 960, ty: 540 },
+  { at: T.typeStart - sec(0.35), s: 1.25, fx: 960, fy: rowY(4), tx: 960, ty: 430 },
+  { at: T.thinking, s: 1.25, fx: 960, fy: rowY(6.5), tx: 960, ty: 400 },
+  { at: T.readPending, s: 1.18, fx: 960, fy: rowY(10.5), tx: 960, ty: 410 },
+  { at: T.approval - 4, s: 1.22, fx: 960, fy: rowY(19.5), tx: 960, ty: 400 },
+  { at: T.bashDone, s: 1.2, fx: 960, fy: rowY(17.5), tx: 960, ty: 400 },
+  { at: T.answerStart + sec(1.4), s: 1.12, fx: 960, fy: rowY(19.5), tx: 960, ty: 430 },
+  { at: sec(12.3), s: 1.02, fx: 960, fy: 540, tx: 960, ty: 520 },
+] as const;
+const MOVE = sec(0.8);
+
+function camera(frame: number): { s: number; x: number; y: number } {
+  let i = 0;
+  while (i + 1 < SHOTS.length && frame >= SHOTS[i + 1]!.at) i += 1;
+  const to = SHOTS[i]!;
+  const from = SHOTS[Math.max(0, i - 1)]!;
+  const k = i === 0 ? 1 : interpolate(frame, [to.at, to.at + MOVE], [0, 1], { extrapolateRight: "clamp", easing: Easing.bezier(0.65, 0, 0.35, 1) });
+  const lerp = (a: number, b: number): number => a + (b - a) * k;
+  // Interpolate zoom geometrically, so the move feels even at every scale.
+  const s = Math.exp(lerp(Math.log(from.s), Math.log(to.s)));
+  const fx = lerp(from.fx, to.fx);
+  const fy = lerp(from.fy, to.fy);
+  const tx = lerp(from.tx, to.tx);
+  const ty = lerp(from.ty, to.ty);
+  return { s, x: tx - fx * s, y: ty - fy * s };
+}
 
 const DOTS = ["⠁", "⠂", "⠄", "⡀"] as const;
 /** Three cells of rain for a waiting label (src/ui/rain.ts dropSpinner), from frames. */
 function dropSpinner(frame: number): string {
-  const step = Math.floor((frame / VIDEO.fps) * 1000 / 120);
+  const step = Math.floor(((frame / VIDEO.fps) * 1000) / 120);
   let out = "";
   for (let cell = 0; cell < 3; cell += 1) {
     const at = (step + cell * 3) % 7;
@@ -45,17 +64,7 @@ function dropSpinner(frame: number): string {
 }
 
 const Row: React.FC<{ children?: React.ReactNode; bg?: string; style?: React.CSSProperties; rail?: string }> = ({ children, bg, style, rail }) => (
-  <div
-    style={{
-      height: ROW,
-      lineHeight: `${ROW}px`,
-      whiteSpace: "pre",
-      background: bg,
-      position: "relative",
-      paddingLeft: rail === undefined ? 0 : 0,
-      ...style,
-    }}
-  >
+  <div style={{ height: ROW, lineHeight: `${ROW}px`, whiteSpace: "pre", background: bg, position: "relative", ...style }}>
     {rail === undefined ? null : <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: rail }} />}
     {children}
   </div>
@@ -68,29 +77,36 @@ const C: React.FC<{ c: string; children: React.ReactNode; b?: boolean; i?: boole
 /** The `⎿` branch a tool's output hangs from, drawn so it does not depend on the font. */
 const Branch: React.FC = () => (
   <span style={{ display: "inline-block", width: CELL * 2, height: ROW, position: "relative", verticalAlign: "top" }}>
-    <span style={{ position: "absolute", left: 3, top: 4, width: 8, height: 11, borderLeft: `2px solid ${COLORS.faint}`, borderBottom: `2px solid ${COLORS.faint}` }} />
+    <span style={{ position: "absolute", left: 3, top: 5, width: 8, height: 12, borderLeft: `2px solid ${COLORS.faint}`, borderBottom: `2px solid ${COLORS.faint}` }} />
   </span>
 );
 
 type ToolState = "pending" | "ok";
-const ToolRow: React.FC<{ state: ToolState; verb: string; target: string; tail: React.ReactNode; frame: number }> = ({ state, verb, target, tail, frame }) => (
-  <Row bg={state === "ok" ? COLORS.toolOk : "#252830"} rail={state === "ok" ? COLORS.mint : "#afe3ff"} style={{ marginLeft: CELL * 2 - 6, paddingLeft: 6 + CELL }}>
-    {state === "ok" ? <C c={COLORS.mint}>✓</C> : <C c={COLORS.sky}>·</C>}
-    {"  "}
-    <C c={COLORS.text} b>
-      {verb}
-    </C>
-    {"  "}
-    <C c={COLORS.sky}>{target}</C>
-    {"  "}
-    {state === "ok" ? tail : <C c={COLORS.lavender}>{dropSpinner(frame)}</C>}
-  </Row>
-);
+const ToolRow: React.FC<{ state: ToolState; verb: string; target: string; tail: React.ReactNode; frame: number; doneAt: number }> = ({ state, verb, target, tail, frame, doneAt }) => {
+  const flash = state === "ok" ? Math.max(0, 1 - (frame - doneAt) / 14) : 0;
+  return (
+    <Row
+      bg={state === "ok" ? COLORS.toolOk : "#252830"}
+      rail={state === "ok" ? COLORS.mint : "#afe3ff"}
+      style={{ marginLeft: CELL * 2 - 6, paddingLeft: 6 + CELL, boxShadow: flash > 0 ? `inset 0 0 0 999px rgba(143,227,163,${0.16 * flash})` : undefined }}
+    >
+      {state === "ok" ? <C c={COLORS.mint}>✓</C> : <C c={COLORS.sky}>·</C>}
+      {"  "}
+      <C c={COLORS.text} b>
+        {verb}
+      </C>
+      {"  "}
+      <C c={COLORS.sky}>{target}</C>
+      {"  "}
+      {state === "ok" ? tail : <C c={COLORS.lavender}>{dropSpinner(frame)}</C>}
+    </Row>
+  );
+};
 
 const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame }) => {
-  const promptTyped = frame < T.submit ? typed(copy.prompt, frame, T.typeStart, 48) : "";
+  const promptTyped = frame < T.submit ? typed(copy.prompt, frame, T.typeStart, T.typeCps) : "";
   const submitted = frame >= T.submit;
-  const reasoningChars = Math.floor(((frame - T.reasonStart) / VIDEO.fps) * 68);
+  const reasoningChars = Math.floor(((frame - T.reasonStart) / VIDEO.fps) * T.reasonCps);
   const collapsed = frame >= T.collapse;
   const rows: React.ReactNode[] = [];
   const blank = (key: string): void => {
@@ -98,8 +114,9 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
   };
   blank("b0");
   if (submitted) {
+    const k = ease(frame, T.submit, 8);
     rows.push(
-      <Row key="user" bg="#152a36" style={{ paddingLeft: CELL * 2 }}>
+      <Row key="user" bg="#152a36" style={{ paddingLeft: CELL * 2, opacity: k }}>
         <C c={COLORS.sky}>›</C> <C c={COLORS.text}>{copy.prompt}</C>
       </Row>,
     );
@@ -115,12 +132,14 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
       let left = reasoningChars;
       copy.reasoning.forEach((line, i) => {
         const shown = line.slice(0, Math.max(0, left));
+        const writing = left >= 0 && left < line.length;
         left -= line.length;
         rows.push(
           <Row key={`r${i}`} style={{ paddingLeft: CELL * 4 }}>
             <C c={COLORS.muted} i>
               {shown}
             </C>
+            {writing ? <span style={{ color: COLORS.lavender }}>▍</span> : null}
           </Row>,
         );
       });
@@ -142,11 +161,12 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
         target={copy.read.target}
         tail={<C c={COLORS.faint}>{copy.read.time}</C>}
         frame={frame}
+        doneAt={T.readDone}
       />,
     );
   }
   if (frame >= T.editPending) {
-    const plus = copy.edit.stat.split(" ");
+    const stat = copy.edit.stat.split(" ");
     rows.push(
       <ToolRow
         key="edit"
@@ -155,19 +175,21 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
         target={copy.edit.target}
         tail={
           <>
-            <C c={COLORS.mint}>{plus[0]}</C> <C c={COLORS.rose}>{plus[1]}</C>
+            <C c={COLORS.mint}>{stat[0]}</C> <C c={COLORS.rose}>{stat[1]}</C>
           </>
         }
         frame={frame}
+        doneAt={T.editDone}
       />,
     );
     copy.diff.forEach((line, i) => {
-      const at = T.diffStart + i * 5;
+      const at = T.diffStart + i * T.diffStep;
       if (frame < at) return;
       const add = line.kind === "add";
       const del = line.kind === "del";
+      const k = ease(frame, at, 7);
       rows.push(
-        <Row key={`d${i}`} style={{ paddingLeft: CELL * 4, opacity: ease(frame, at, 6) }}>
+        <Row key={`d${i}`} style={{ paddingLeft: CELL * 4 }}>
           {i === 0 ? <Branch /> : <span style={{ display: "inline-block", width: CELL * 2 }} />}
           <span
             style={{
@@ -175,6 +197,7 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
               width: WIN.width - 2 - PAD_X * 2 - CELL * 6,
               background: add ? COLORS.addBg : del ? COLORS.delBg : "transparent",
               color: add ? COLORS.addFg : del ? COLORS.delFg : COLORS.muted,
+              clipPath: `inset(0 ${(1 - k) * 100}% 0 0)`,
             }}
           >
             {add ? " + " : del ? " - " : "   "}
@@ -187,18 +210,11 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
   if (frame >= T.bashPending) {
     const done = frame >= T.bashDone;
     rows.push(
-      <ToolRow
-        key="bash"
-        state={done ? "ok" : "pending"}
-        verb={copy.bash.verb}
-        target={copy.bash.target}
-        tail={<C c={COLORS.faint}>{copy.bash.time}</C>}
-        frame={frame}
-      />,
+      <ToolRow key="bash" state={done ? "ok" : "pending"} verb={copy.bash.verb} target={copy.bash.target} tail={<C c={COLORS.faint}>{copy.bash.time}</C>} frame={frame} doneAt={T.bashDone} />,
     );
     if (done) {
       rows.push(
-        <Row key="bash-out" style={{ paddingLeft: CELL * 4 }}>
+        <Row key="bash-out" style={{ paddingLeft: CELL * 4, opacity: ease(frame, T.bashDone, 8) }}>
           <Branch />
           <C c={COLORS.mint}>{copy.bash.output}</C>
         </Row>,
@@ -207,7 +223,7 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
     blank("b3");
   }
   if (frame >= T.answerStart) {
-    let left = Math.floor(((frame - T.answerStart) / VIDEO.fps) * 80);
+    let left = Math.floor(((frame - T.answerStart) / VIDEO.fps) * T.answerCps);
     copy.answer.forEach((line, i) => {
       const shown = line.slice(0, Math.max(0, left));
       left -= line.length;
@@ -224,9 +240,10 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
   const writing = (frame >= T.reasonStart && frame < T.collapse) || (frame >= T.answerStart && frame < T.answerStart + sec(1.4));
   const tps = frame < T.reasonStart ? "  -  " : writing ? (57 + hash01(Math.floor(frame / 6), 3) * 3.4).toFixed(1) : "58.6";
   const ruleWidth = WIN.width - PAD_X * 2;
-  const approvalOn = frame >= T.approval && frame < T.approve + 8;
+  const approvalOn = frame >= T.approval && frame < T.approve + 10;
   const pressed = frame >= T.approve;
-  const footerGlow = ease(frame, CALLOUT_AT[4], 12);
+  const footerGlow = ease(frame, CAPTION_AT[4], 12);
+  const approvalIn = ease(frame, T.approval, 10, Easing.out(Easing.back(1.4)));
 
   return (
     <div
@@ -237,24 +254,22 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
         width: WIN.width,
         height: WIN.height,
         background: COLORS.window,
-        borderRadius: 16,
+        borderRadius: 18,
         border: `1px solid ${COLORS.windowEdge}`,
-        boxShadow: "0 40px 120px rgba(0,0,0,0.55), 0 0 0 1px rgba(180,167,255,0.05)",
+        boxShadow: "0 50px 140px rgba(0,0,0,0.6), 0 0 0 1px rgba(180,167,255,0.06), 0 0 120px rgba(180,167,255,0.06)",
         overflow: "hidden",
         fontFamily: FONTS.mono,
         fontSize: FONT,
         color: COLORS.text,
       }}
     >
-      <div style={{ height: 44, display: "flex", alignItems: "center", padding: "0 18px", borderBottom: `1px solid ${COLORS.windowEdge}`, background: "#0e1119" }}>
-        {[0, 1, 2].map((i) => (
-          <div key={i} style={{ width: 13, height: 13, borderRadius: 7, background: COLORS.chip, marginRight: 9 }} />
+      <div style={{ height: BAR, display: "flex", alignItems: "center", padding: "0 18px", borderBottom: `1px solid ${COLORS.windowEdge}`, background: "#0e1119" }}>
+        {["#ff7a90", "#f2cf73", "#8fe3a3"].map((c) => (
+          <div key={c} style={{ width: 13, height: 13, borderRadius: 7, background: c, opacity: 0.55, marginRight: 9 }} />
         ))}
-        <div style={{ flex: 1, textAlign: "center", fontFamily: FONTS.sans, fontSize: 17, color: COLORS.faint, marginRight: 66 }}>
-          bruine · {copy.project}
-        </div>
+        <div style={{ flex: 1, textAlign: "center", fontFamily: FONTS.sans, fontSize: 17, color: COLORS.faint, marginRight: 66 }}>bruine · {copy.project}</div>
       </div>
-      <div style={{ padding: `14px ${PAD_X}px` }}>
+      <div style={{ padding: `${TOP_PAD}px ${PAD_X}px` }}>
         <Row>
           {" "}
           <C c={COLORS.lavender} b>
@@ -297,7 +312,7 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
             margin: "0 -10px",
             padding: "0 10px",
             borderRadius: 6,
-            boxShadow: `0 0 0 ${2 * footerGlow}px rgba(180,167,255,${0.55 * footerGlow}), 0 0 ${24 * footerGlow}px rgba(180,167,255,${0.25 * footerGlow})`,
+            boxShadow: `0 0 0 ${2 * footerGlow}px rgba(180,167,255,${0.6 * footerGlow}), 0 0 ${28 * footerGlow}px rgba(180,167,255,${0.3 * footerGlow})`,
           }}
         >
           <span>
@@ -309,12 +324,28 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
           </span>
         </Row>
         {approvalOn ? (
-          <div style={{ marginTop: ROW, marginLeft: CELL * 4, opacity: frame >= T.approve ? 1 - ease(frame, T.approve + 2, 6) : ease(frame, T.approval, 6) }}>
+          <div
+            style={{
+              marginTop: ROW,
+              marginLeft: CELL * 2,
+              width: 560,
+              padding: "6px 0 6px 14px",
+              borderRadius: 10,
+              border: `1.5px solid rgba(242,207,115,${0.5 * approvalIn})`,
+              boxShadow: `0 0 40px rgba(242,207,115,${0.12 * approvalIn})`,
+              opacity: pressed ? 1 - ease(frame, T.approve + 3, 7) : Math.min(1, approvalIn),
+              transform: `scale(${0.96 + 0.04 * approvalIn})`,
+              transformOrigin: "left top",
+            }}
+          >
             <Row>
-              <C c={COLORS.amber}>?</C> <C c={COLORS.text} b>{copy.approval.question}</C>
+              <C c={COLORS.amber}>?</C>{" "}
+              <C c={COLORS.text} b>
+                {copy.approval.question}
+              </C>
             </Row>
             {copy.approval.options.map((option, i) => (
-              <Row key={option} bg={i === 0 && pressed ? "rgba(125,207,255,0.16)" : undefined} style={{ marginLeft: -CELL * 2 }}>
+              <Row key={option} bg={i === 0 && pressed ? "rgba(125,207,255,0.2)" : undefined}>
                 {i === 0 ? <C c={COLORS.sky}>→ </C> : "  "}
                 {i === 0 ? (
                   <C c={COLORS.text} b>
@@ -332,37 +363,46 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
   );
 };
 
-const Callouts: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame }) => {
-  const active = CALLOUT_AT.reduce((acc, at, i) => (frame >= at ? i : acc), -1);
+/** The caption under the shot: what the viewer is looking at, in a few words. */
+const Caption: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame }) => {
+  const active = CAPTION_AT.reduce((acc, at, i) => (frame >= at ? i : acc), -1);
+  if (active < 0) return null;
+  const callout = copy.callouts[active]!;
+  const at = CAPTION_AT[active]!;
+  const next = CAPTION_AT[active + 1];
+  const out = next === undefined ? 0 : ease(frame, next - 8, 8);
+  const bar = ease(frame, at, 14);
   return (
-    <div style={{ position: "absolute", left: 1360, top: WIN.y + 40, width: 456, display: "flex", flexDirection: "column", gap: 34 }}>
-      {copy.callouts.map((callout, i) => {
-        const shown = ease(frame, CALLOUT_AT[i]!, 16);
-        const dim = i < active ? 1 - 0.55 * ease(frame, CALLOUT_AT[i + 1]!, 14) : 1;
-        return (
-          <div key={callout.title} style={{ opacity: shown * dim, transform: `translateX(${(1 - shown) * 18}px)`, display: "flex", gap: 20 }}>
-            <div style={{ fontFamily: FONTS.mono, fontSize: 20, color: COLORS.lavender, paddingTop: 7, width: 30 }}>{String(i + 1).padStart(2, "0")}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 31, fontWeight: 600, color: COLORS.text, lineHeight: 1.2 }}>{callout.title}</div>
-              <div style={{ fontSize: 22, color: COLORS.muted, lineHeight: 1.4, marginTop: 6 }}>{callout.body}</div>
-            </div>
-          </div>
-        );
-      })}
+    <div style={{ position: "absolute", left: 120, bottom: 86, width: 1100, opacity: 1 - out, filter: out > 0 ? `blur(${out * 8}px)` : undefined }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 14 }}>
+        <span style={{ fontFamily: FONTS.mono, fontSize: 20, color: COLORS.lavender, letterSpacing: 2 }}>
+          {String(active + 1).padStart(2, "0")} / {String(copy.callouts.length).padStart(2, "0")}
+        </span>
+        <span style={{ height: 2, width: 120 * bar, background: `linear-gradient(90deg, ${COLORS.lavender}, transparent)` }} />
+      </div>
+      <Words key={`t${active}`} text={callout.title} at={at} stagger={3} style={{ fontSize: 58, fontWeight: 650, letterSpacing: -1, color: COLORS.text, textShadow: "0 4px 30px rgba(0,0,0,0.8)" }} />
+      <Words key={`b${active}`} text={callout.body} at={at + 8} stagger={1} style={{ fontSize: 28, color: COLORS.muted, marginTop: 10, textShadow: "0 2px 16px rgba(0,0,0,0.9)" }} />
     </div>
   );
 };
 
-/** A real session, start to finish: think, read, edit, ask, test, answer. */
+/** A real session, start to finish, filmed: think, read, edit, ask, test, answer. */
 export const Demo: React.FC<{ copy: Copy["demo"] }> = ({ copy }) => {
   const frame = useCurrentFrame();
-  const push = interpolate(frame, [0, sec(12.6)], [1, 1.025]);
+  const cam = camera(frame);
   return (
     <Scene>
-      <AbsoluteFill style={{ transform: `scale(${push})`, transformOrigin: "35% 50%" }}>
+      <AbsoluteFill style={{ transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`, transformOrigin: "0 0" }}>
         <Terminal copy={copy} frame={frame} />
       </AbsoluteFill>
-      <Callouts copy={copy} frame={frame} />
+      <AbsoluteFill style={{ background: "linear-gradient(to top, rgba(11,13,20,0.96) 0%, rgba(11,13,20,0.82) 20%, rgba(11,13,20,0) 42%)" }} />
+      <Caption copy={copy} frame={frame} />
+      <div style={{ position: "absolute", right: 130, bottom: 110 }}>
+        <KeyCap label={`⏎ ${copy.enterKey}`} at={T.submit} />
+      </div>
+      <div style={{ position: "absolute", right: 130, bottom: 110 }}>
+        <KeyCap label={`⏎ ${copy.enterKey}`} at={T.approve} />
+      </div>
     </Scene>
   );
 };

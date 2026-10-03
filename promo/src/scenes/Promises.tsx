@@ -1,16 +1,20 @@
 import React from "react";
-import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 import { COLORS, FONTS, type Copy } from "../config";
-import { Reveal, Scene, Title } from "../components/Scene";
+import { Scene, Words } from "../components/Scene";
 import { ease, sec } from "../lib/motion";
+import { PROMISES } from "../timeline.ts";
 
-const CARD_AT = [sec(0.55), sec(1.5), sec(2.45)] as const;
+const CARD_AT = PROMISES.cards;
 const VISUAL = 230;
 
 const Speed: React.FC<{ copy: Copy["promises"]["speed"]; at: number }> = ({ copy, at }) => {
   const frame = useCurrentFrame();
-  const strike = ease(frame, at + sec(0.7), 14);
-  const count = Math.round(interpolate(frame, [at + sec(0.5), at + sec(1.3)], [0, Number(copy.measured)], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }));
+  const strike = ease(frame, at + PROMISES.strike, 10);
+  const count = Math.round(
+    interpolate(frame, [at + PROMISES.countFrom, at + PROMISES.countTo], [0, Number(copy.measured)], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) }),
+  );
+  const settled = Math.max(0, 1 - Math.abs(frame - at - PROMISES.countTo) / 12);
   return (
     <div style={{ height: VISUAL, display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 56, paddingBottom: 18 }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -21,7 +25,7 @@ const Speed: React.FC<{ copy: Copy["promises"]["speed"]; at: number }> = ({ copy
         <div style={{ fontSize: 20, color: COLORS.faint, marginTop: 6 }}>{copy.quotedLabel}</div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <div style={{ fontFamily: FONTS.mono, fontSize: 104, color: COLORS.mint, lineHeight: 1 }}>{count}</div>
+        <div style={{ fontFamily: FONTS.mono, fontSize: 104, color: COLORS.mint, lineHeight: 1, textShadow: `0 0 ${30 * settled + 10}px rgba(143,227,163,${0.25 + 0.5 * settled})` }}>{count}</div>
         <div style={{ fontSize: 20, color: COLORS.muted, marginTop: 10 }}>
           {copy.measuredLabel} · <span style={{ fontFamily: FONTS.mono }}>{copy.unit}</span>
         </div>
@@ -37,7 +41,7 @@ const Rules: React.FC<{ rules: Copy["promises"]["rules"]; at: number }> = ({ rul
     <div style={{ height: VISUAL, display: "flex", flexDirection: "column", justifyContent: "center", gap: 14, padding: "0 6px" }}>
       {rules.map((rule, i) => {
         const k = ease(frame, at + sec(0.45) + i * 8, 12);
-        const verdict = ease(frame, at + sec(0.45) + i * 8 + 10, 10);
+        const verdict = ease(frame, at + sec(0.45) + i * 8 + 10, 10, Easing.out(Easing.back(2)));
         return (
           <div
             key={rule.command}
@@ -67,7 +71,9 @@ const Rules: React.FC<{ rules: Copy["promises"]["rules"]; at: number }> = ({ rul
                 borderRadius: 999,
                 padding: "2px 14px",
                 fontSize: 19,
-                opacity: verdict,
+                opacity: Math.min(1, verdict),
+                transform: `scale(${0.6 + 0.4 * verdict})`,
+                display: "inline-block",
               }}
             >
               {rule.label}
@@ -104,7 +110,7 @@ const Cache: React.FC<{ copy: Copy["promises"]["cache"]; at: number }> = ({ copy
   return (
     <div style={{ height: VISUAL, display: "flex", flexDirection: "column", justifyContent: "center", gap: 12, padding: "0 6px" }}>
       {[1, 2, 3].map((turn, i) => {
-        const k = ease(frame, at + sec(0.45) + i * 9, 12);
+        const k = ease(frame, at + sec(0.45) + i * 8, 12);
         return (
           <div key={turn} style={{ display: "flex", alignItems: "center", gap: 6, opacity: k }}>
             <div style={{ width: 60, fontFamily: FONTS.mono, fontSize: 17, color: COLORS.faint, whiteSpace: "nowrap" }}>
@@ -118,7 +124,7 @@ const Cache: React.FC<{ copy: Copy["promises"]["cache"]; at: number }> = ({ copy
           </div>
         );
       })}
-      <div style={{ marginLeft: 66, width: 200, opacity: ease(frame, at + sec(1.2), 12) }}>
+      <div style={{ marginLeft: 66, width: 200, opacity: ease(frame, at + sec(1.2), 12), transform: `scaleX(${0.3 + 0.7 * ease(frame, at + sec(1.2), 12)})`, transformOrigin: "left" }}>
         <div style={{ height: 10, borderLeft: `1.5px solid ${COLORS.lavender}`, borderRight: `1.5px solid ${COLORS.lavender}`, borderBottom: `1.5px solid ${COLORS.lavender}` }} />
         <div style={{ fontSize: 18, color: COLORS.lavender, textAlign: "center", marginTop: 8, whiteSpace: "nowrap" }}>{copy.same}</div>
       </div>
@@ -135,13 +141,13 @@ export const Promises: React.FC<{ copy: Copy["promises"] }> = ({ copy }) => {
   ];
   return (
     <Scene>
-      <AbsoluteFill style={{ alignItems: "center", paddingTop: 215 }}>
-        <Reveal at={sec(0.15)}>
-          <Title size={66}>{copy.title}</Title>
-        </Reveal>
-        <div style={{ display: "flex", gap: 40, marginTop: 72 }}>
+      <AbsoluteFill style={{ alignItems: "center", paddingTop: 225 }}>
+        <Words text={copy.title} at={PROMISES.title} stagger={4} style={{ fontSize: 72, fontWeight: 650, letterSpacing: -1 }} />
+        <div style={{ display: "flex", gap: 40, marginTop: 72, perspective: 1400 }}>
           {copy.cards.map((card, i) => {
-            const k = ease(frame, CARD_AT[i]!, 20);
+            const k = ease(frame, CARD_AT[i]!, 22, Easing.out(Easing.cubic));
+            const edge = interpolate(frame, [CARD_AT[i]! + 6, CARD_AT[i]! + 40], [-0.3, 1.3], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+            const land = Math.max(0, 1 - Math.abs(frame - CARD_AT[i]! - 14) / 18);
             return (
               <div
                 key={card.title}
@@ -153,9 +159,23 @@ export const Promises: React.FC<{ copy: Copy["promises"] }> = ({ copy }) => {
                   padding: "34px 36px 40px",
                   boxSizing: "border-box",
                   opacity: k,
-                  transform: `translateY(${(1 - k) * 26}px)`,
+                  transform: `translateY(${(1 - k) * 60}px) rotateX(${(1 - k) * 28}deg)`,
+                  transformOrigin: "50% 100%",
+                  position: "relative",
+                  overflow: "hidden",
+                  boxShadow: `0 30px 80px rgba(0,0,0,0.45), 0 0 ${50 * land}px rgba(180,167,255,${0.3 * land})`,
                 }}
               >
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    width: "100%",
+                    height: 2,
+                    background: `linear-gradient(90deg, transparent ${edge * 100 - 30}%, ${COLORS.violetLight} ${edge * 100}%, transparent ${edge * 100 + 30}%)`,
+                  }}
+                />
                 <div style={{ fontFamily: FONTS.mono, fontSize: 20, color: COLORS.lavender }}>{String(i + 1).padStart(2, "0")}</div>
                 {visuals[i]}
                 <div style={{ height: 1, background: COLORS.windowEdge, margin: "10px 0 28px" }} />

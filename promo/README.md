@@ -1,40 +1,52 @@
 # Bruine presentation video
 
 A Remotion project that renders Bruine's presentation video for YouTube: 1920x1080, 45 fps,
-about 41 seconds. Everything on screen is drawn in code (React, SVG, CSS): no image, font, audio
-or other asset is loaded, and fonts come from the system stack.
+about 42 seconds, with a synthesized soundtrack. Everything is made in code: the picture in
+React, SVG and CSS, the sound in `scripts/soundtrack.ts`. No image, font, sample or recording is
+loaded; fonts come from the system stack.
 
 ```
 cd promo
 npm install
 npm run studio        # preview and scrub in Remotion Studio
-npm run render        # out/bruine-promo.mp4 (H.264, CRF 16, yuv420p)
+npm run render        # out/bruine-promo.mp4 (H.264 CRF 16 + AAC 320k)
+npm run render:fr     # out/bruine-promo-fr.mp4
 npm run check         # typecheck, and no em dash in any text shown on screen
 ```
 
-A single frame: `npx remotion still BruinePromo out/frame.png --frame=600`.
-The French cut: add `--props='{"lang":"fr"}'` to `render` or `still`.
+`studio`, `still` and `render` first run `npm run audio`, which writes `public/soundtrack-en.wav`
+and `public/soundtrack-fr.wav` (Node 22.18+ runs the TypeScript directly). A single frame:
+`npm run still -- out/frame.png --frame=600`.
 
 ## Where things are
 
 | | |
 |---|---|
-| `src/config.ts` | Every text (English and French), scene lengths, palette and fonts |
-| `src/BruinePromo.tsx` | The film: one rain under six scenes |
+| `src/config.ts` | Every text (English and French), scene lengths, ripple origins, palette, fonts, loudness |
+| `src/timeline.ts` | Every cue in frames, the rain curve and the logo's fill law: shared by the picture and the sound |
+| `src/BruinePromo.tsx` | The film: backdrop, mist, rain, six scenes, transitions, grain, soundtrack |
 | `src/scenes/` | `Intro`, `Models`, `Demo`, `Effort`, `Promises`, `Outro` |
-| `src/components/Rain.tsx` | The weather, a pure function of the frame (after `src/ui/rain.ts`) |
-| `src/components/Wordmark.tsx` | The BRUINE mark drawn from its box-drawing cells, filling in under the rain (after `src/ui/logo-motion.ts`) |
+| `src/components/Rain.tsx` | The rain (after `src/ui/rain.ts`), with rings where drops land, and blurred drops in front of the lens |
+| `src/components/Wordmark.tsx` | The BRUINE mark drawn from its box-drawing cells, filling in under the rain (after `src/ui/logo-motion.ts`), with a light sweep and a reflection on wet ground |
+| `src/components/Atmosphere.tsx` | Mist, distant lightning, grain, vignette, and the ripple that carries one scene into the next |
 | `src/components/Glow.tsx` | The prompt frame's effort glow (after `src/ui/border-glow.ts`) |
-| `src/lib/motion.ts` | Easing helpers, the seeded hash, and the rain level over the whole film |
+| `scripts/soundtrack.ts` | The synthesizer and the score |
 
 ## The script
 
-1. **Intro** (6 s). *bruine*, as a dictionary gives it: a fine, steady rain. The rain collects into the mark.
-2. **Models** (6.4 s). Local llama.cpp, the cloud providers, or any OpenAI compatible `/v1` API. Each lands like a drop.
-3. **Demo** (12.6 s). A session in the real interface: live reasoning that folds to `Thought for 4.2s`, tool calls, a diff, the permission prompt, the tests, the answer, the measured tok/s.
-4. **Effort** (5.6 s). The harder it thinks, the harder it rains: the effort steps from `low` to `max`, the frame glows as in the terminal, and the film's rain follows.
-5. **Promises** (7.6 s). Measured not quoted, one permission gate, a prompt cache that survives.
-6. **Outro** (6.2 s). The mark, `npm install -g bruine`, `bruine`, and the rain stops.
+1. **Intro** (6.6 s). One drop falls in the dark and rings out; *bruine*, as a dictionary gives it. The rain collects into the mark, light crosses it.
+2. **Models** (6.2 s). Bruine in the middle, llama.cpp on one side, the cloud providers around it, each landing like a drop.
+3. **Demo** (13.2 s). A session in the real interface, filmed by a camera that follows it: reasoning, tools, diff, the permission prompt, the tests, the measured speed.
+4. **Effort** (5.8 s). The harder it thinks, the harder it rains: `ctrl+e` from `low` to `max`, the frame glows as in the terminal, the storm comes.
+5. **Promises** (7.2 s). Measured not quoted, one permission gate, a prompt cache that survives.
+6. **Outro** (6.8 s). The mark on wet ground, `npm install -g bruine`, `bruine`, and the rain stops.
 
-Scenes overlap by 0.6 s: the old one fades out, the rain is alone for a breath, the new one fades in.
-Change a length in `TIMING` and every scene, the rain and the total follow.
+A drop opens every scene: the next one spreads out from where it lands.
+
+## The sound
+
+Rain whose density follows the rain on screen, droplets, a chord pad that changes with each
+scene, a falling drop for every scene change, a tick for every letter of the logo as it fills,
+keystrokes on the frames the characters appear, tool and test chimes, the permission bell, the
+`ctrl+e` steps, thunder at `max`, and a resolving chord at the end. The master is compressed and
+levelled to about -16 LUFS with peaks under -1 dBFS, which suits YouTube.

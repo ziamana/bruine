@@ -1,3 +1,5 @@
+export type SceneName = "intro" | "models" | "demo" | "effort" | "promises" | "outro";
+
 /**
  * Everything the video says and every number it is timed by, in one place.
  *
@@ -13,18 +15,39 @@ export const VIDEO = {
 
 /** Scene lengths in seconds, in playing order. Consecutive scenes overlap by `overlap`. */
 export const TIMING = {
-  overlap: 0.6,
+  overlap: 0.7,
   scenes: {
-    intro: 6,
-    models: 6.4,
-    demo: 12.6,
-    effort: 5.6,
-    promises: 7.6,
-    outro: 6.2,
+    intro: 6.6,
+    models: 6.2,
+    demo: 13.2,
+    effort: 5.8,
+    promises: 7.2,
+    outro: 6.8,
   },
 } as const;
 
-export type SceneName = keyof typeof TIMING.scenes;
+/**
+ * Where the drop lands that opens each scene: the next scene spreads out from that point in a
+ * ripple. In pixels on the 1920x1080 frame.
+ */
+export const RIPPLE_ORIGIN: Record<SceneName, [number, number]> = {
+  intro: [960, 540],
+  models: [960, 540],
+  demo: [1180, 300],
+  effort: [960, 560],
+  promises: [960, 470],
+  outro: [960, 400],
+};
+
+/** The soundtrack: synthesized by scripts/soundtrack.ts from the same timeline as the picture. */
+export const AUDIO = {
+  sampleRate: 48000,
+  /** Peak of the final mix, in dBFS. */
+  peakDb: -2,
+  /** Where the loud end of the film sits (400 ms RMS, 90th percentile), in dBFS. */
+  loudDb: -15,
+} as const;
+
 export const SCENE_ORDER: SceneName[] = ["intro", "models", "demo", "effort", "promises", "outro"];
 
 /** Bruine's "Nuage" palette (src/ui/palette.ts), plus the video's own backdrop. */
@@ -102,6 +125,7 @@ export interface Copy {
     answer: string[];
     footerLeft: string;
     footerRight: string;
+    enterKey: string;
     callouts: Array<{ title: string; body: string }>;
   };
   effort: {
@@ -110,6 +134,7 @@ export interface Copy {
     prompt: string;
     label: string;
     levels: string[];
+    keys: string[];
     weather: string;
   };
   promises: {
@@ -181,6 +206,7 @@ const en: Copy = {
     ],
     footerLeft: "ask  12%/262k (auto)  (local) qwen3-coder · high",
     footerRight: "tok/s  ·  cache 94%",
+    enterKey: "Enter",
     callouts: [
       { title: "Thinking, live", body: "The reasoning streams word by word, then folds into one line." },
       { title: "Tool calls you can read", body: "Each call reads as a sentence, with its duration and a coloured rail." },
@@ -195,6 +221,7 @@ const en: Copy = {
     prompt: "Refactor the session store",
     label: "effort",
     levels: ["low", "medium", "high", "xhigh", "max"],
+    keys: ["ctrl", "e"],
     weather: "Or pick the weather yourself:  /effect bruine · pluie · foudre",
   },
   promises: {
@@ -267,6 +294,7 @@ const fr: Copy = {
     ],
     footerLeft: "ask  12%/262k (auto)  (local) qwen3-coder · high",
     footerRight: "tok/s  ·  cache 94%",
+    enterKey: "Entrée",
     callouts: [
       { title: "La réflexion, en direct", body: "Le raisonnement s'écrit mot à mot, puis se replie en une ligne." },
       { title: "Des appels lisibles", body: "Chaque outil se lit comme une phrase, avec sa durée et un rail coloré." },
@@ -281,6 +309,7 @@ const fr: Copy = {
     prompt: "Refactor the session store",
     label: "effort",
     levels: ["low", "medium", "high", "xhigh", "max"],
+    keys: ["ctrl", "e"],
     weather: "Ou choisissez la météo :  /effect bruine · pluie · foudre",
   },
   promises: {

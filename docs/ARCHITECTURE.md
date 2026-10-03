@@ -1,52 +1,52 @@
-# kumo — Architecture
+# bruine — Architecture
 
-`kumo` is an interactive terminal agent built on top of **DeepSeek Harness (dsh)**.
+`bruine` is an interactive terminal agent built on top of **DeepSeek Harness (dsh)**.
 It is NOT a fork: it is a dsh **profile** plus a **bundle of plugins**, so dsh updates flow in for free.
 
 All user-facing text is **English**. (A French locale may come later; never hardcode French.)
 
 ## 0. Product constraints (read first)
-kumo is a **public product** for **Windows, macOS and Linux**, not a personal tool.
+bruine is a **public product** for **Windows, macOS and Linux**, not a personal tool.
 
 | Rule | Consequence for every ticket |
 |---|---|
 | Cross-platform | `node:path` / `os.homedir()` only, never `/home/...` or `~` strings. No bash-only scripts in the product. Test paths with backslashes. |
 | UI library | **`@earendil-works/pi-tui`** (MIT, pure TS, no native deps, synchronized output, used by pi on all 3 OS). Ink rejected (flicker history in Gemini CLI / Qwen Code), OpenTUI rejected (native Zig; on Node only experimental, Windows tested with Bun only). |
 | dsh is a developer preview | **Pin an exact dsh version** in `package.json`. Upgrades are a deliberate ticket, never automatic. |
-| Privacy | dsh telemetry is ON by default: kumo sets `DSH_TELEMETRY_DISABLED=1` unless the user opts in during setup. Network discovery is **opt-in**, private ranges only (10/8, 172.16/12, 192.168/16, 100.64/10 Tailscale). |
+| Privacy | dsh telemetry is ON by default: bruine sets `DSH_TELEMETRY_DISABLED=1` unless the user opts in during setup. Network discovery is **opt-in**, private ranges only (10/8, 172.16/12, 192.168/16, 100.64/10 Tailscale). |
 | Secrets | OS keyring (`@napi-rs/keyring`: Windows Credential Manager, macOS Keychain, Linux Secret Service). Fallback file chmod 600 (Linux/macOS) with a warning. Never echo a key. |
-| Terminals | Must work in Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal. Provide an ASCII fallback (`*` for `💭`, `>` for `›`) when `KUMO_ASCII=1` or the terminal is not UTF-8. |
+| Terminals | Must work in Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal. Provide an ASCII fallback (`*` for `💭`, `>` for `›`) when `BRUINE_ASCII=1` or the terminal is not UTF-8. |
 | CI | GitHub Actions matrix: ubuntu, windows, macos × Node 22 and 24. A ticket is done only when CI is green on all 3. |
 | **Prompt cache (critical for local models)** | The request prefix must stay byte-identical across a session. **Never** change the system prompt or the tools array mid-session (modes, skills, MCP, settings). New information (new skill, AGENTS.md change, mode switch) is **appended as a message at the end**. Compaction keeps the same system prompt and tools. No timestamps / token counts / mode badges in the prompt. Source: youtu.be/AkwItxJ9AbA (Cache Hunter test, 2026-09): dsh itself keeps the cache perfectly; Pi lost it by swapping tools on plan→build. |
-| **Thinking effort (T34)** | `chat_template_kwargs.preserve_thinking: true` is kumo's default when the local template supports it: it keeps the prefix stable across turns (a template that strips old thinking would rewrite it; the cost is more context, and compaction handles it). Switching effort (`/effort`, ctrl+e) changes ONLY request parameters, never the system prompt or the tools; it applies to the next message. |
-| **Route switch (T37)** | `/model` replaces `.current` on dsh's selection ref — the same seam as the effort — so kumo itself rewrites nothing: the persona is composed at boot (T36) and still names the first model. dsh appends its own durable `[model changed: …]` notice at the end of the history, which is the cache-safe mechanism. What does change is the wire role label (`developer` vs `system`), because that is pi-ai's per-model convention, so a route switch costs one cache rebuild, exactly like `/new` would. Only a model the route DECLARES in settings.yaml may be chosen: `dsh-llm-pi-ai` throws `UNKNOWN_MODEL` otherwise, so an unrecorded model is refused at the command, not at the next turn. |
-| Honest numbers | The footer's tok/s is computed by kumo from its own timestamps, never copied from dsh (the same test found dsh's figure overstated: 79 shown vs 60 real). |
+| **Thinking effort (T34)** | `chat_template_kwargs.preserve_thinking: true` is bruine's default when the local template supports it: it keeps the prefix stable across turns (a template that strips old thinking would rewrite it; the cost is more context, and compaction handles it). Switching effort (`/effort`, ctrl+e) changes ONLY request parameters, never the system prompt or the tools; it applies to the next message. |
+| **Route switch (T37)** | `/model` replaces `.current` on dsh's selection ref — the same seam as the effort — so bruine itself rewrites nothing: the persona is composed at boot (T36) and still names the first model. dsh appends its own durable `[model changed: …]` notice at the end of the history, which is the cache-safe mechanism. What does change is the wire role label (`developer` vs `system`), because that is pi-ai's per-model convention, so a route switch costs one cache rebuild, exactly like `/new` would. Only a model the route DECLARES in settings.yaml may be chosen: `dsh-llm-pi-ai` throws `UNKNOWN_MODEL` otherwise, so an unrecorded model is refused at the command, not at the next turn. |
+| Honest numbers | The footer's tok/s is computed by bruine from its own timestamps, never copied from dsh (the same test found dsh's figure overstated: 79 shown vs 60 real). |
 | Business model (Aron, 2026-09-25) | **Open source first (MIT), paid features later.** Everything that runs locally stays free and MIT forever. Future paid features must be hosted services (sync, team, cloud), never a lock on a local feature. Dependencies must stay MIT/BSD/Apache (checked 2026-09-25: dsh MIT, pi-tui MIT, all 147 deps MIT or BSD-3). |
-| Names | npm package **`kumo-code`** (T20), command `kumo`. |
+| Names | npm package **`bruine`** (T20), commands `bruine` and the compatibility alias `kumo`. |
 
 ---
 
 ## 1. How it runs
 
 ```
-$ kumo [args]
+$ bruine [args]
    │
    ├─ first run? ──► setup wizard (plain Node, before dsh boots)
-   │                  writes ~/.kumo/kumo.json, ~/.kumo/settings.yaml,
-   │                  ~/.kumo/profiles/kumo/{package.json,cordis.patch.yml}
+   │                  writes ~/.bruine/bruine.json, ~/.bruine/settings.yaml,
+   │                  ~/.bruine/profiles/bruine/{package.json,cordis.patch.yml}
    │
-   └─ spawn: DSH_HOME=~/.kumo  dsh --profile kumo [args]
+   └─ spawn: DSH_HOME=~/.bruine  dsh --profile bruine [args]
                 │
-                profile "kumo" = bundles [@deepseek-ai/dsh-base, kumo-code]
+                profile "bruine" = bundles [@deepseek-ai/dsh-base, bruine]
                 │
-                kumo-code bundle patch inserts 4 Cordis plugins:
-                  kumo-startup   parse argv, provide ctx.kumoStartup
-                  kumo-repl      create ONE Agent, readline loop, followup(), whenIdle()
-                  kumo-render    draw reasoning / text / tool calls from live events
-                  kumo-approval  answer approval requests with a y/n prompt
+                bruine bundle patch inserts 4 Cordis plugins:
+                  bruine-startup   parse argv, provide ctx.bruineStartup
+                  bruine-repl      create ONE Agent, readline loop, followup(), whenIdle()
+                  bruine-render    draw reasoning / text / tool calls from live events
+                  bruine-approval  answer approval requests with a y/n prompt
 ```
 
-`DSH_HOME=~/.kumo` isolates kumo from the user's own `~/.dsh`.
+`DSH_HOME=~/.bruine` isolates bruine from the user's own `~/.dsh`.
 
 ---
 
@@ -57,7 +57,7 @@ and its `cordis.patch.yml` / `lib/startup.js`.
 
 ### 2.1 Plugin shape
 ```js
-export const name = "kumo-repl";          // stable Cordis plugin name
+export const name = "bruine-repl";          // stable Cordis plugin name
 export const inject = ["agentDefaultModel", "agents", "sessions"];
 export const Config = z.object({ ... });  // z = @deepseek-ai/schemastery
 export function apply(ctx, config) { ... }
@@ -84,7 +84,7 @@ agent.followup(createUserMessage({                        // @deepseek-ai/dsh-ll
 await agent.whenIdle();                                   // turn finished
 await ctx.get("sessions").flush(agent.session);           // persist
 ```
-**kumo keeps the SAME agent for the whole conversation** (headless creates one per task).
+**bruine keeps the SAME agent for the whole conversation** (headless creates one per task).
 
 ### 2.3 Live stream (drives the UI)
 ```js
@@ -121,7 +121,7 @@ Reference: `@deepseek-ai/dsh-acp/lib/index.js` line ~1115.
 
 ---
 
-## 3. Display spec (the kumo look)
+## 3. Display spec (the bruine look)
 
 | Stream | Rendering |
 |---|---|
@@ -136,8 +136,8 @@ Renderers are **pure classes** (input: deltas, output: strings / terminal ops) s
 
 ## 4. Repo layout
 ```
-kumo/
-  package.json          name "kumo-code", bin { "kumo": "dist/bin.js" }, type module
+bruine/
+  package.json          name "bruine", bin { "bruine": "dist/bin.js" }, type module
   src/
     bin.ts              launcher (T02)
     profile.ts          profile generator (T03)
@@ -149,11 +149,11 @@ kumo/
 ```
 Stack: TypeScript, ESM, `tsup` build, `vitest`, `pnpm`. Node ≥ 22.
 
-⚠️ The repo lives in `~/projets/kumo` (btrfs). Never on the exFAT drive: pnpm needs symlinks.
+⚠️ The repo lives in `~/projets/bruine` (btrfs). Never on the exFAT drive: pnpm needs symlinks.
 
 ---
 
-## 5. Settings (kumo.json)
+## 5. Settings (bruine.json)
 ```json
 { "mode": "simple",
   "models": { "main": {...}, "fast": {...}, "vision": {...} },
@@ -165,16 +165,24 @@ Stack: TypeScript, ESM, `tsup` build, `vitest`, `pnpm`. Node ≥ 22.
   "locale": "en",
   "reasoningEffort": { "qwen3.8*": "low" } }
 ```
-API keys: system keyring (`secret-tool` on Linux), fallback `~/.kumo/.env` chmod 600. Never in kumo.json.
+API keys: system keyring (`secret-tool` on Linux), fallback `~/.bruine/.env` chmod 600. Never in bruine.json.
 
 ---
 
 ## 6. Roadmap
 | Version | Scope |
 |---|---|
-| **0.1** | `kumo` command, simple setup, interactive chat, live reasoning/text/tool rendering, approvals |
+| **0.1** | `bruine` command, simple setup, interactive chat, live reasoning/text/tool rendering, approvals |
 | 0.2 | full setup: network model discovery (LAN + Tailscale, ports 8080-8090, 11434, 1234, 8000, `GET /v1/models`), API keys, roles, access, theme, skills picker, memory on/off |
 | 0.3 | **local voice input** (hold Space = push-to-talk like Claude Code `/voice`, configurable; STT on the user's machine: small Whisper, or any OpenAI-compatible `/v1/audio/transcriptions` server; offline). Spike first: cross-platform mic capture from a terminal. Decided by Aron 2026-09-25, after the first public release |
 | 0.3 | browser control via Playwright MCP (dsh already has `dsh-mcp-client`) |
-| 0.4 | `kumo doctor`, persistent memory, proof mode |
-| later | mouse as *control* (click to act), OFF by default. Mouse *reading* is on since T56: drag to select, release to copy, notice in the corner. It takes the wheel with it (kumo has no scroll of its own), so `/mouse` and `KUMO_MOUSE_SELECT=0` give it back, and a form does it by itself |
+| 0.4 | `bruine doctor`, persistent memory, proof mode |
+| later | mouse as *control* (click to act), OFF by default. Mouse *reading* is on since T56: drag to select, release to copy, notice in the corner. It takes the wheel with it (bruine has no scroll of its own), so `/mouse` and `BRUINE_MOUSE_SELECT=0` give it back, and a form does it by itself |
+
+## Naming compatibility
+
+`src/compat.ts` is the single owner of environment, home and on-disk read fallbacks.
+New `BRUINE_*` values override `KUMO_*`; the launcher forwards their effective values under the new names to the dsh bundle.
+Config and skills-manifest reads prefer the canonical Bruine file, then the legacy Kumo file only if absent. Writes target only the new file.
+The launcher creates the Bruine profile without deleting the old profile or modifying user sessions, settings, secrets or legacy files.
+The compatibility command and old npm installation-path detection remain supported; update checks and install commands use `bruine`.

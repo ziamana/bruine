@@ -1,3 +1,3 @@
 # Notes
 
-TODO(kumo): move this page
+TODO(bruine): move this page

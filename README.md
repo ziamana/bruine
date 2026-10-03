@@ -1,19 +1,19 @@
-# kumo
+# bruine
 
 An interactive terminal coding agent that runs **your** models.
 
-Point kumo at a local llama.cpp server, any cloud provider (DeepSeek, Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI and about twenty more), or anything that speaks the
+Point bruine at a local llama.cpp server, any cloud provider (DeepSeek, Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI and about twenty more), or anything that speaks the
 OpenAI-compatible `/v1` API. It edits files, runs commands, and asks before anything risky. It is a
 profile plus a bundle of plugins on top of [DeepSeek Harness](https://github.com/deepseek-ai) (dsh),
 not a fork, so harness updates arrive without a merge.
 
 ```
-npm install -g kumo-code
-kumo
+npm install -g bruine
+bruine
 ```
 
 The first launch opens the setup wizard: it scans for a local model server, asks for API keys if you
-want a cloud route, lets you pick skills, and writes `~/.kumo/`. There is no account and nothing is
+want a cloud route, lets you pick skills, and writes `~/.bruine/`. There is no account and nothing is
 sent anywhere you did not point it at.
 
 A first setup also asks, as a plain yes or no, whether to use Space Bunny Free: a model OpenCode serves
@@ -34,20 +34,20 @@ training), and the offer can end without notice, so keep another model in reach.
 | Images | `ctrl+v` pastes a screenshot straight to a vision model |
 | Context and speed | A footer that shows context used, tok/s, prefill and cache hit rate |
 | Works on | Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal |
-| herdr | Works with herdr: shows up as `kumo` in `herdr agent list`. |
+| herdr | Works with herdr: shows up as `bruine` in `herdr agent list`. |
 
 ## Commands
 
 ```
-kumo                Start kumo. Extra args are passed through to dsh.
-kumo --continue     Resume the latest conversation in this project.
-kumo -p "task"      Run a task without the terminal UI and print its answer.
-kumo -p -           Read a task from stdin.
-kumo setup          (Re)run the setup wizard, pre-filled with your current values.
-kumo skills         List the skills kumo has enabled.
-kumo update         Update kumo through its installer.
-kumo --version      Print the version.
-kumo --help         Print the help.
+bruine                Start bruine. Extra args are passed through to dsh.
+bruine --continue     Resume the latest conversation in this project.
+bruine -p "task"      Run a task without the terminal UI and print its answer.
+bruine -p -           Read a task from stdin.
+bruine setup          (Re)run the setup wizard, pre-filled with your current values.
+bruine skills         List the skills bruine has enabled.
+bruine update         Update bruine through its installer.
+bruine --version      Print the version.
+bruine --help         Print the help.
 ```
 
 Use `--output-format json` or `--output-format stream-json` with `-p` for scripts. A headless
@@ -63,22 +63,22 @@ reasoning effort, `ctrl+v` pastes an image.
 
 | Variable | Effect |
 |---|---|
-| `KUMO_HOME` | Where kumo keeps its config (default `~/.kumo`) |
-| `KUMO_ASCII=1` | Plain-ASCII glyphs instead of symbols |
-| `KUMO_NO_ANIMATION=1` | No rain, header or spinner animation |
-| `KUMO_NO_RIPPLE=1` | Only the ring a finished turn leaves on the prompt rule; the rest of the motion stays |
-| `KUMO_TOOL_SUMMARIES=0` | Disable readable tool descriptions (also `"toolSummaries": false` in `kumo.json`). Summaries reuse existing arguments and make no model calls. |
-| `KUMO_BG=0` | Never paint a background, whatever the terminal reports |
-| `KUMO_NO_UPDATE_CHECK=1` | Never contact the npm registry to check for a version |
+| `BRUINE_HOME` | Where bruine keeps its config (default `~/.bruine`) |
+| `BRUINE_ASCII=1` | Plain-ASCII glyphs instead of symbols |
+| `BRUINE_NO_ANIMATION=1` | No rain, header or spinner animation |
+| `BRUINE_NO_RIPPLE=1` | Only the ring a finished turn leaves on the prompt rule; the rest of the motion stays |
+| `BRUINE_TOOL_SUMMARIES=0` | Disable readable tool descriptions (also `"toolSummaries": false` in `bruine.json`). Summaries reuse existing arguments and make no model calls. |
+| `BRUINE_BG=0` | Never paint a background, whatever the terminal reports |
+| `BRUINE_NO_UPDATE_CHECK=1` | Never contact the npm registry to check for a version |
 
 ## Three promises
 
-**The numbers are measured, not quoted.** The tok/s in the footer is computed by kumo from its own
+**The numbers are measured, not quoted.** The tok/s in the footer is computed by bruine from its own
 timestamps. The same measurement found the harness reporting 79 tok/s where the truth was 60, so
-kumo does not copy it.
+bruine does not copy it.
 
 **The permission gate is the only one.** The harness sandbox is deliberately left fully open and
-kumo's own rule table is what asks. One layer, readable, testable: a plain command is allowed, a
+bruine's own rule table is what asks. One layer, readable, testable: a plain command is allowed, a
 path outside the workspace is not, and a dangerous one is never guessed about.
 
 **Your prompt cache survives.** The system prompt and the tool list stay byte-identical for the whole
@@ -99,6 +99,18 @@ MIT. Everything that runs locally stays MIT.
 ## More
 
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) - the design, the product constraints, and the
-  dsh APIs kumo depends on
+  dsh APIs bruine depends on
 - [`docs/tickets/`](./docs/tickets) - the work, one ticket at a time
 - [`bench/`](./bench) - the benchmark: a system-prompt change only ships when a number says it helps
+
+## Existing Kumo installations
+
+The `bruine` and `kumo` commands use the same launcher. Existing installs keep working without moving or deleting their home.
+
+The home is selected in this order: `BRUINE_HOME`, `KUMO_HOME`, an existing `~/.bruine`, an existing `~/.kumo`, then `~/.bruine` for a fresh install.
+Every `BRUINE_*` setting takes precedence over its matching `KUMO_*` fallback, including an explicitly empty value.
+Bruine reads `bruine.json` first and falls back to `kumo.json` only when the new file is absent. Saves write `bruine.json` and leave `kumo.json` untouched.
+The installed-skills manifest follows the same rule: `.bruine-installed.json`, falling back to `.kumo-installed.json`.
+Bruine creates `profiles/bruine` when needed and leaves `profiles/kumo` in place. Updates install the `bruine` npm package.
+
+The GitHub repository URLs still point to `ziamana/kumo-code` until the repository itself is renamed.

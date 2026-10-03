@@ -101,7 +101,7 @@ describe("the header", () => {
   test("under the mark's minimum width, or in ASCII, it is two plain lines", async () => {
     const narrow = new BruineUi("0.2.0", handlers, new FakeTerminal(), UNICODE_ICONS);
     const rows = narrow.headerText(LOGO_MIN_WIDTH - 1).split("\n").map(strip);
-    expect(rows[0]).toMatch(/^▌ v0\.2\.0/);
+    expect(rows[0]).toMatch(/^▌ bruine v0\.2\.0/);
     expect(rows.join("")).not.toMatch(/[█▄▀]/);
     const ascii = new BruineUi("0.2.0", handlers, new FakeTerminal(), ASCII_ICONS);
     expect(ascii.headerText(100)).not.toMatch(/\x1b\[|[█▄▀▌]/);

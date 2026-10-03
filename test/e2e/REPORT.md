@@ -17,7 +17,7 @@ Local run: Linux, branch t22-e2e. All eight tests execute independently; no bail
 
 No tests were skipped. Windows and macOS remain unverified locally; CI is configured for all three OS on Node 22 and 24.
 
-## Kumo bugs found
+## Bruine bugs found
 
 - **Known T23 issue — Ask label absent.** The product decision is to always show ask dim, auto yellow, or FULL ACCESS red. Only the Ask-label test is marked as expected failure.
 - **Modes — PLAN does not appear after Tab.** The second Tab was still sent. The no-PLAN check after the second Tab passes, but because PLAN never appeared, that alone cannot prove the Build transition worked. [Failure dump](__screens__/modes-plan-failure.txt).
@@ -51,7 +51,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/reasoning.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
  │ Think through the problem
 💭 thought for 4.1s
@@ -67,7 +67,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/escape.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
  │ Start a long answer
  word0 word1 word2 word3 word4 word5 word6 word7 word8 word9
@@ -83,7 +83,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/escape-second-turn.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
  │ Start a long answer
  word0 word1 word2 word3 word4 word5 word6 word7 word8 word9
@@ -101,7 +101,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/tool-call-streaming.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
  │ Read note.txt
 ● read
@@ -116,11 +116,11 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/tool-call.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
  │ Read note.txt
 ✓ read  …  0.6s
-    <path>/tmp/kumo-e2e-project-JAgtam/note.txt</path>
+    <path>/tmp/bruine-e2e-project-JAgtam/note.txt</path>
     <type>file</type>
     <content>
     1: E2E_READ_SENTINEL
@@ -138,7 +138,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/ask-label.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -151,7 +151,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/modes-plan-failure.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -164,7 +164,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/modes-build.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -177,7 +177,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/modes-auto-failure.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -190,7 +190,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/modes-confirmation.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -203,7 +203,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 
 
 
-           Switch to FULL ACCESS? kumo will stop asking before commands run.
+           Switch to FULL ACCESS? bruine will stop asking before commands run.
           → Stay in current mode
             Yes, grant full access
 ```
@@ -213,7 +213,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/modes-full-failure.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -226,7 +226,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/modes-failure.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -239,7 +239,7 @@ The dumps below show visible xterm content (100×30, or 60×20 for resize). Trai
 [Raw dump](__screens__/keys-clear-failure.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 PROMPT_TO_CLEAR
@@ -252,7 +252,7 @@ PROMPT_TO_CLEAR
 [Raw dump](__screens__/keys-failure.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 PROMPT_TO_CLEAR
@@ -265,7 +265,7 @@ PROMPT_TO_CLEAR
 [Raw dump](__screens__/resize.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
  │ Think while the terminal resizes
 💭 thought for 4.1s
@@ -281,7 +281,7 @@ PROMPT_TO_CLEAR
 [Raw dump](__screens__/approval-select.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
  │ Write rejected.txt
 ● write  …
@@ -305,7 +305,7 @@ PROMPT_TO_CLEAR
 [Raw dump](__screens__/approval.txt)
 
 ```text
- kumo v0.0.1
+ bruine v0.0.1
  escape interrupt · ctrl+c clear · ctrl+d exit · / commands
  │ Write rejected.txt
 ✗ write  …  0.7s
@@ -365,7 +365,7 @@ ask  ctx ██████░░░ 9.2% (37%)  ·  (local) e2e-model Pretty  �
 Bar after (three rows; the badges moved to the place row, the effort is the last cell of the route):
 
 ```text
-  /tmp/kumo-e2e-project-bCLPvk                                                       ask  plan
+  /tmp/bruine-e2e-project-bCLPvk                                                       ask  plan
   CH98.9% 9.2%/100k                                        (local) e2e-model Pretty • auto
   ↯ TPS: 5.0 tok/s
 ```

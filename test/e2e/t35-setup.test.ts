@@ -64,7 +64,7 @@ class SetupPty {
     const h = new SetupPty(home);
     const env: Record<string, string> = {};
     for (const [k, v] of Object.entries(process.env)) {
-      if (v !== undefined && !/(API_KEY|TOKEN|SECRET|^DSH_|^BRUINE_)/i.test(k)) env[k] = v;
+      if (v !== undefined && !/(API_KEY|TOKEN|SECRET|^DSH_|^BRUINE_|^KUMO_)/i.test(k)) env[k] = v;
     }
     Object.assign(env, {
       BRUINE_HOME: home,

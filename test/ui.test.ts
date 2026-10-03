@@ -441,6 +441,7 @@ describe("BruineUi shell (T13a, fake terminal)", () => {
     const { ui } = makeUi();
     const lines = ui.tui.render(60).map(strip);
     const text = lines.join("\n");
+    expect(text).toContain("bruine");
     expect(text).toContain("v0.2.0");
     expect(text).toContain("escape interrupt");
     // D3: the footer's three rows are the place, the turn and the route — a session
@@ -836,7 +837,7 @@ describe("BruineUi shell (T13a, fake terminal)", () => {
     const a = new BruineUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), ASCII_ICONS);
     a.setResources({ plugins: ["repl"] });
     const rows = a.headerText(100).split("\n").map(strip);
-    expect(rows[0]).toBe("| v0.2.0");
+    expect(rows[0]).toBe("| bruine v0.2.0");
     expect(rows[1]).toBe("escape interrupt - ctrl+c clear - ctrl+d exit - / commands");
     expect(a.headerText(100)).not.toMatch(/\x1b\[/);
     for (const width of [100, 60, 30]) {

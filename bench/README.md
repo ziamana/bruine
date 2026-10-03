@@ -1,7 +1,7 @@
-# kumo-bench (T36)
+# bruine-bench (T36)
 
 Measures **agent quality** on twenty tiny task repos, so a system-prompt change
-is only made when a number says it helps. kumo already sends DeepSeek Harness's
+is only made when a number says it helps. bruine already sends DeepSeek Harness's
 prompt word for word (only the identity line differs), so this bench exists to
 answer one question per variant: *does it pass more tasks, for less time and
 fewer tokens?*
@@ -45,15 +45,15 @@ is reported as **not checkable**, never as a failure.
 
 1. `bench/tasks/<id>/` is copied to a scratch directory and `git init`-ed (a
    baseline commit, so the agent can diff and the traps can be pinned).
-2. A disposable `KUMO_HOME` is written: the route read out of your
+2. A disposable `BRUINE_HOME` is written: the route read out of your
    `settings.yaml`, `permissionMode: full` (the copy is disposable), no search,
-   an empty `HOME` (no user skills, no user settings), the dsh and kumo bundles
+   an empty `HOME` (no user skills, no user settings), the dsh and bruine bundles
    **symlinked from this checkout** — no npm install, no network — and the
    variant's persona in the profile patch.
-3. `kumo` is launched headless (piped, no TTY) with `task.md` as its first
+3. `bruine` is launched headless (piped, no TTY) with `task.md` as its first
    prompt, under a wall-clock limit (default 10 minutes).
 4. `check.sh` runs in the copy: exit 0 = pass. It may also print
-   `kumo-bench-check-mode: node-test` (or `unittest`, `go-test`, `file-report`,
+   `bruine-bench-check-mode: node-test` (or `unittest`, `go-test`, `file-report`,
    `expected-answer`), which is recorded so two checks are never compared
    silently.
 5. One JSONL row is appended. Every row is flushed as it is written, so
@@ -100,7 +100,7 @@ persona section (the profile patch), never by editing dsh:
 
 | variant | adds |
 |---|---|
-| `dsh` | nothing — byte-for-byte what a plain `kumo` session sends |
+| `dsh` | nothing — byte-for-byte what a plain `bruine` session sends |
 | `verify` | "Before saying a task is done, run the project's tests or the closest check, and report the result." |
 | `plan` | "For work with 3+ steps, keep a todo_write list and update it as you go." |
 | `style` | "Match the existing code style and structure; change only what the task needs." |
@@ -138,16 +138,16 @@ bench/
   lib/tasks.ts        task discovery and the run plan (pure)
   lib/route.ts        the route under test, and the server's /props
   lib/variant.ts      variant files and persona composition
-  lib/home.ts         the bench home: settings, kumo.json, profile, bundles
-  lib/exec.ts         run kumo (wall clock, signals), run check.sh
+  lib/home.ts         the bench home: settings, bruine.json, profile, bundles
+  lib/exec.ts         run bruine (wall clock, signals), run check.sh
   lib/session.ts      tokens, tool calls and errors from dsh's session log
   lib/results.ts      the JSONL: header guard, rows, resume
   lib/summary.ts      pass rate, spread, medians, the table
   tasks/              the twenty task repos
-  tools/              test helpers, the fake kumo, the task self-check
+  tools/              test helpers, the fake bruine, the task self-check
   variants/           dsh, verify, plan, style, all
   results/            run output (git-ignored: it is data, not source)
 ```
 
-`pnpm test` covers the runner with `bench/tools/fake-kumo.mjs`, a fake kumo that
+`pnpm test` covers the runner with `bench/tools/fake-bruine.mjs`, a fake bruine that
 writes the session log dsh would have written — no model server, no network.

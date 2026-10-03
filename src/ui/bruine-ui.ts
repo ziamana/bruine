@@ -1073,7 +1073,7 @@ export class BruineUi {
       }
     } else {
       const mark = ascii ? "|" : "\u258c";
-      rows.push(`${this.#ink("sky")(mark)} ${this.#ink("muted")(`v${this.version}`)}${this.#hostCell(sep)}`, keys(width));
+      rows.push(`${this.#ink("sky")(mark)} ${this.#ink("text")("bruine")} ${this.#ink("muted")(`v${this.version}`)}${this.#hostCell(sep)}`, keys(width));
     }
     const lineSep = ascii ? " - " : " \u00b7 ";
     const ellipsis = ascii ? "..." : "\u2026";

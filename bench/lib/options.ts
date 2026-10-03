@@ -194,6 +194,7 @@ export function parseOptions(argv: string[], ctx: ParseContext): BenchOptions {
       case "--no-summary":
         out.summary = false;
         break;
+      case "--kumo":
       case "--bruine": {
         const first = needValue(argv, i, arg);
         i++;

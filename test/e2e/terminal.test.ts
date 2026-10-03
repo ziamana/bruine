@@ -640,6 +640,44 @@ test("lean catalog: a background sub-agent is a plain job the model can read, no
   });
 });
 
+test("cache: the main requests only append, and the one request beside them is the known suggestion", async () => {
+  await scenario("cache-audit", [textScript("CA_ONE"), textScript("CA_TWO"), textScript("CA_THREE")], async (h) => {
+    for (const [i, word] of ["CA_ONE", "CA_TWO", "CA_THREE"].entries()) {
+      await h.prompt(`question ${String(i + 1)}`);
+      await h.waitFor(word);
+      await delay(2500); // long enough for the suggestion to be sent
+    }
+    type Body = { messages: Array<{ role: string; content?: unknown }>; tools?: unknown[] };
+    const all = h.server.requests;
+    const mains = all.filter((r) => r.main).map((r) => r.body as unknown as Body);
+    const sides = all.filter((r) => !r.main).map((r) => r.body as unknown as Body);
+    const history = (b: Body) => b.messages.filter((m) => m.role !== "system" && m.role !== "developer");
+    const system = (b: Body) => JSON.stringify(b.messages.find((m) => m.role === "system" || m.role === "developer"));
+
+    // The prefix a server caches is the system prompt, the tools and the history so far:
+    // each main request keeps all three and adds to the end.
+    expect(mains.length).toBe(3);
+    for (let i = 1; i < mains.length; i += 1) {
+      expect(system(mains[i]!), `request ${String(i)}: system prompt`).toBe(system(mains[0]!));
+      expect(JSON.stringify(mains[i]!.tools), `request ${String(i)}: tools`).toBe(JSON.stringify(mains[0]!.tools));
+      const before = history(mains[i - 1]!);
+      before.forEach((m, k) => expect(JSON.stringify(history(mains[i]!)[k]), `request ${String(i)}: message ${String(k)}`).toBe(JSON.stringify(m)));
+      expect(history(mains[i]!).length).toBeGreaterThan(before.length);
+    }
+
+    // The only other request kumo sends is the next-message suggestion: one per turn, a single
+    // short message with no system prompt and no tools. It starts differently from the
+    // conversation, which is why it is audited here: a server with one slot would not keep the
+    // conversation's cache across it. A new kind of request must show up as a failure.
+    expect(sides.length).toBeLessThanOrEqual(mains.length);
+    for (const side of sides) {
+      expect(side.messages).toHaveLength(1);
+      expect(JSON.stringify(side.messages)).toContain("Suggest the user's most likely next message");
+      expect(side.tools ?? []).toHaveLength(0);
+    }
+  });
+});
+
 test("/tasks with nothing running says so", async () => {
   await scenario("tasks-empty", [], async (h) => {
     h.type("/tasks");

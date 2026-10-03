@@ -48,6 +48,12 @@ const scripts: ScriptedResponse[] = [
   { text: "Plan: I will add note.md once you switch to Build." },
   // Turn 3 (Build again, after on-disk skill + AGENTS.md changes).
   { text: "Added note.md." },
+  // The compaction request is a main-session request too (it carries the same
+  // system prompt and tools); its answer is the summary.
+  { text: "Summary: explored the project, planned, then added note.md." },
+  // After compaction: a tool round trip, to prove the new context is append-only too.
+  { toolCalls: [{ id: "call_read_1", name: "read", args: JSON.stringify({ file_path: "a.ts" }) }] },
+  { text: "a.ts exports a." },
 ];
 
 beforeAll(async () => {
@@ -152,6 +158,16 @@ describe("Cache Hunter (T17)", () => {
       // The last answer is a text-only stream; let the turn settle before
       // quitting, otherwise /exit lands mid-turn and is ignored by design.
       await new Promise((r) => setTimeout(r, 3000));
+
+      // Compaction, the step that costs the most when it gets the cache wrong: the
+      // request must be the conversation so far plus one appended instruction.
+      child.stdin!.write("/compact\n");
+      await waitFor(() => mainRequests().length >= 4, 60_000, "compaction request");
+      await new Promise((r) => setTimeout(r, 2500));
+      // Then a turn with a tool call in the new, compacted context.
+      child.stdin!.write("read a.ts please\n");
+      await waitFor(() => mainRequests().length >= 6, 60_000, "tool round trip after compaction");
+      await new Promise((r) => setTimeout(r, 2500));
       child.stdin!.write("/exit\n");
       await waitFor(() => childExited, 20_000, "kumo exit");
       if (!childExited) {
@@ -174,8 +190,33 @@ describe("Cache Hunter (T17)", () => {
         expect(names, `lean catalog contains ${dropped}`).not.toContain(dropped);
       }
 
-      const failures = checkCacheInvariants(mains);
+      // The three turns of the original protocol: plan on, plan off, skill and AGENTS.md changed.
+      const failures = checkCacheInvariants(mains.slice(0, 3));
       expect(failures, failures.join("\n")).toEqual([]);
+
+      // Compaction: same system prompt, same tools, the whole earlier history as its
+      // prefix, and nothing new but the instruction at the end.
+      expect(mains.length, "compaction and the tool round trip reached the server").toBeGreaterThanOrEqual(6);
+      const body = (m: OpenAiRequestLike) => (m.messages ?? []).filter((x) => x.role !== "system" && x.role !== "developer");
+      const sysOf = (m: OpenAiRequestLike) => JSON.stringify((m.messages ?? []).find((x) => x.role === "system" || x.role === "developer"));
+      const before = mains[2]!;
+      const compaction = mains[3]!;
+      expect(sysOf(compaction), "compaction keeps the system prompt").toBe(sysOf(before));
+      expect(JSON.stringify(compaction.tools ?? null), "compaction keeps the tools").toBe(JSON.stringify(before.tools ?? null));
+      const earlier = body(before);
+      const asked = body(compaction);
+      expect(asked.length, "compaction only appends").toBeGreaterThan(earlier.length);
+      earlier.forEach((message, i) => expect(JSON.stringify(asked[i]), `compaction message ${String(i)} is untouched`).toBe(JSON.stringify(message)));
+      expect(JSON.stringify(asked.slice(earlier.length)), "what was appended is the compaction instruction").toMatch(/compaction/i);
+
+      // After it: the context is new and short, but the prefix that is cached is the same,
+      // and the tool round trip inside it is append-only again.
+      const afterCompaction = mains[4]!;
+      expect(sysOf(afterCompaction), "the system prompt survives compaction").toBe(sysOf(before));
+      expect(JSON.stringify(afterCompaction.tools ?? null), "the tools survive compaction").toBe(JSON.stringify(before.tools ?? null));
+      expect(body(afterCompaction).length, "the compacted context is shorter than what it replaced").toBeLessThan(asked.length);
+      const roundTrip = checkCacheInvariants(mains.slice(4, 6));
+      expect(roundTrip, roundTrip.join("\n")).toEqual([]);
 
       // The plan-mode announcements traveled as APPENDED messages — prove they
       // are present in the third request's history, and the system prompt of

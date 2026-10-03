@@ -1,4 +1,5 @@
 import { colorDepth, paint } from "../ui/palette.js";
+import { dropSpinner, rainLevel } from "../ui/rain.js";
 import stringWidth from "string-width";
 import { kumoIcons, withoutEmoji, type KumoIcons } from "./chars.js";
 
@@ -81,7 +82,7 @@ export function spinnerFrame(elapsed: number, icons: KumoIcons): string {
   return frames[Math.floor(Math.max(0, elapsed) / 100) % frames.length]!;
 }
 export function thinkingText(sentence: string, columns: number, elapsed: number, icons: KumoIcons): string {
-  return clipCells(`${spinnerFrame(elapsed, icons)} Thinking${sentence ? `  ${sentence}` : ""}`, columns, icons.think === "*" ? "..." : "…");
+  return clipCells(`${dropSpinner(elapsed, rainLevel(), icons.think === "*")} Thinking${sentence ? `  ${sentence}` : ""}`, columns, icons.think === "*" ? "..." : "…");
 }
 
 /** Complete words in the current sentence buffer (T25.3). */
@@ -95,7 +96,7 @@ export function completeWords(current: string): string[] {
 
 /** Subtitle style (T25.3): longest fitting suffix, never leading ellipsis. */
 export function thinkingWords(words: string[], columns: number, elapsed: number, icons: KumoIcons): string {
-  const prefix = `${spinnerFrame(elapsed, icons)} Thinking`;
+  const prefix = `${dropSpinner(elapsed, rainLevel(), icons.think === "*")} Thinking`;
   const ellipsis = icons.think === "*" ? "..." : "…";
   if (words.length === 0) return clipCells(prefix, columns, ellipsis);
   for (let i = 0; i < words.length; i++) {

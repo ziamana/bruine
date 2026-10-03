@@ -3,12 +3,25 @@ import { Box } from "../ui/box.js";
 import { isAscii } from "../render/chars.js";
 import { fillLine, gradientStops } from "../ui/palette.js";
 import { ansi } from "../ui/theme.js";
-import { LOGO_STOPS, terminalMotionAllowed, wordmarkFrame } from "../ui/logo-motion.js";
+import { LOGO, LOGO_STOPS, terminalMotionAllowed, wordmarkFrame } from "../ui/logo-motion.js";
+import { paintRainRow, rainGrid, type RainCell, type RainInk } from "../ui/rain.js";
 import { typedText } from "../ui/keys.js";
 
-const MOTION_MS = 900;
+const MOTION_MS = 1600;
 const HOLD_MS = 400;
 const FRAME_MS = 45;
+
+const WORD = "BRUINE";
+
+/** The drops in three depths of the palette: the far ones are barely there. */
+const RAIN_INK: RainInk = { far: (t) => ansi.faint(t), mid: (t) => ansi.gray(t), near: (t) => ansi.cyan(t) };
+
+/** The rain thickens as it starts, holds, and thins out as the mark is finished. */
+function rainDensity(phase: number): number {
+  if (phase < 0.18) return (phase / 0.18) * 0.22;
+  if (phase < 0.7) return 0.22;
+  return Math.max(0, 0.22 * (1 - (phase - 0.7) / 0.3));
+}
 
 /** Full-screen, centered brand animation before the first setup choice. */
 export class SetupWelcome implements Component {
@@ -38,20 +51,50 @@ export class SetupWelcome implements Component {
   }
 
   render(width: number): string[] {
-    const phase = this.#animated ? Math.min(1, (Date.now() - this.#startedAt) / MOTION_MS) : 1;
+    const elapsed = Date.now() - this.#startedAt;
+    const phase = this.#animated ? Math.min(1, elapsed / MOTION_MS) : 1;
     const ascii = isAscii();
-    const narrow = width < 18;
-    const frame = ascii || narrow ? ["KUMO"] : wordmarkFrame(phase);
-    const art = frame.map((line) => center(ascii || narrow ? ansi.cyan(line) : gradientStops(line, [...LOGO_STOPS]), line, width));
-    // Keep a four-row canvas after the mark folds into its permanent two-row
+    const markWidth = LOGO[0].length;
+    const narrow = width < markWidth + 4;
+    const frame = ascii || narrow ? [WORD] : wordmarkFrame(phase);
+    // Keep a four-row canvas after the mark settles into its permanent two-row
     // form, so it remains still and centered for the brief final hold.
     const canvasHeight = ascii || narrow ? 1 : 4;
     const canvas = Array<string>(canvasHeight).fill("");
-    const frameTop = Math.floor((canvasHeight - art.length) / 2);
-    art.forEach((line, index) => { canvas[frameTop + index] = line; });
+    const frameTop = Math.floor((canvasHeight - frame.length) / 2);
+    frame.forEach((line, index) => { canvas[frameTop + index] = line; });
     const rows = Math.max(1, this.rows());
     const top = Math.max(0, Math.floor((rows - canvasHeight) / 2));
-    const screen = [...Array<string>(top).fill(""), ...canvas, ...Array<string>(Math.max(0, rows - top - canvasHeight)).fill("")];
+
+    // The rain falls over the whole screen while the mark forms, and stops as it is done. It is
+    // left out where there is no motion, in ASCII and on a narrow screen: the word is enough.
+    const raining = this.#animated && !ascii && !narrow && phase < 1;
+    const grid: Array<Array<RainCell | undefined>> | undefined = raining
+      ? rainGrid({ width, height: rows, time: elapsed, density: rainDensity(phase), seed: 7 })
+      : undefined;
+    const left = Math.max(0, Math.floor((width - (frame[0] === undefined ? 0 : visibleWidth(frame[0]))) / 2));
+    if (grid !== undefined) {
+      // Nothing falls on the mark's own cells or one row and a few columns around them: the
+      // drops reach it through the streaks drawn above its letters.
+      for (let y = Math.max(0, top - 1); y < Math.min(rows, top + canvasHeight + 1); y += 1) {
+        for (let x = Math.max(0, left - 3); x < Math.min(width, left + markWidth + 3); x += 1) grid[y]![x] = undefined;
+      }
+    }
+
+    const screen: string[] = [];
+    for (let y = 0; y < rows; y += 1) {
+      const row = grid?.[y];
+      const mark = y >= top && y < top + canvasHeight ? canvas[y - top] : undefined;
+      if (mark !== undefined && mark !== "") {
+        const styled = ascii || narrow ? ansi.cyan(mark) : gradientStops(mark, [...LOGO_STOPS]);
+        const at = Math.max(0, Math.floor((width - visibleWidth(mark)) / 2));
+        const before = row === undefined ? " ".repeat(at) : paintRainRow(row.slice(0, at), RAIN_INK);
+        const after = row === undefined ? "" : paintRainRow(row.slice(at + visibleWidth(mark)), RAIN_INK);
+        screen.push(`${before}${styled}${after}`);
+      } else {
+        screen.push(row === undefined ? "" : paintRainRow(row, RAIN_INK));
+      }
+    }
     return screen.slice(0, rows).map((line) => fillLine("surface", line));
   }
 

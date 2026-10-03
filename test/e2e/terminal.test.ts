@@ -88,7 +88,8 @@ const barCell = (h: Harness, which: BarRow, label: string) => {
  * on 6. Written out here because that translation is the easy mistake.
  */
 const CELL = { muted: 8, sky: 6, lavender: 5, rose: 1 };
-const runningThought = (line: string) => /^\s*[·✢✺✶✻✽] Thinking/.test(line);
+// The waiting label opens with three cells of rain (a braille dot falling, or blank).
+const runningThought = (line: string) => /^\s*[⠁⠂⠄⡀⠀]{3} Thinking/.test(line);
 
 test("headless -p writes only the answer and exits; json has a completed result", async () => {
   const h = await Harness.start([
@@ -169,7 +170,7 @@ test("reasoning: word by word, whole words only, at least 10 changes (T25.3)", a
       expect(lines.length, h.screen().join("\n")).toBeLessThanOrEqual(1);
       if (lines.length) {
         const line = lines[0]!.trim();
-        const text = line.replace(/^[·✢✺✶✻✽] Thinking(?:  )?/, "");
+        const text = line.replace(/^[⠁⠂⠄⡀⠀]{3} Thinking(?:  )?/, "");
         seen.add(text);
         if (text !== "") {
           const ok = wordSentences.some((s) => {
@@ -813,7 +814,7 @@ test.each(["reasoning", "tool"] as const)("Escape stops the %s spinner and leave
     await h.until(() => h.server.mainRequests()[0]!.disconnected, 1000, "stream cancelled");
     await h.waitFor("cancelled");
     await h.waitStable(350, 1000);
-    expect(h.screen().some(line => /[·✢✺✶✻✽]/.test(line) && /Thinking|read/.test(line))).toBe(false);
+    expect(h.screen().some(line => runningThought(line) || (/[·✢✺✶✻✽]/.test(line) && line.includes("read")))).toBe(false);
     await h.dump(`t23-after-cancel-${kind}`);
   });
 });
@@ -848,7 +849,7 @@ test("strict no-emoji check covers streamed reasoning, assistant text and user e
   });
 });
 
-test("ASCII fallback animates with - backslash bar slash and finishes without Unicode icons", async () => {
+test("ASCII fallback animates with ASCII rain and finishes without Unicode icons", async () => {
   await scenario("ascii", [{ chunks: [
     { delta: { reasoning_content: "Finished sentence. partial" }, delayMs: 100 },
     { delta: { content: "ASCII_DONE" }, delayMs: 1000 },
@@ -860,12 +861,14 @@ test("ASCII fallback animates with - backslash bar slash and finishes without Un
     while (!h.screen().join("\n").includes("ASCII_DONE")) {
       await h.flush();
       // The activity is the label in the prompt's top rule: `-- | Thinking 1s ---`.
-      const spin = h.screen().map(line => /^\s*\+?-{2} (\S) Thinking/.exec(line)).find(Boolean);
+      const spin = h.screen().map(line => /^\s*\+?-{2} (['`,.]{3}) Thinking/.exec(line)).find(Boolean);
       if (spin) frames.add(spin[1]!);
       expect(Date.now()).toBeLessThan(deadline);
       await delay(50);
     }
-    expect([...frames].sort()).toEqual(["-", "\\", "|", "/"].sort());
+    // Rain, in ASCII: three cells that keep changing.
+    expect(frames.size).toBeGreaterThanOrEqual(3);
+    expect([...frames].every((f) => /^['`,.]{3}$/.test(f))).toBe(true);
     expect(h.screen().join("\n")).toContain("* Thought for");
     await h.prompt("Read note.txt");
     await h.waitFor("ASCII_READ_DONE");

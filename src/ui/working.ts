@@ -1,6 +1,7 @@
 import { visibleWidth, type Component } from "@earendil-works/pi-tui";
 import { formatElapsed } from "../render/elapsed.js";
-import { clipCells, spinnerFrame } from "../render/reasoning.js";
+import { clipCells } from "../render/reasoning.js";
+import { dropSpinner, rainLevel } from "./rain.js";
 import { kumoIcons, isAscii, type KumoIcons } from "../render/chars.js";
 import { ansi } from "./theme.js";
 import { terminalMotionAllowed } from "./logo-motion.js";
@@ -27,7 +28,8 @@ export class WorkingComponent implements Component {
   get active(): boolean { return this.#animate; }
   private status(): { label: string; elapsed: string } {
     const elapsed = this.activity.elapsed;
-    const frame = this.#animate ? spinnerFrame(elapsed, this.icons) : isAscii(this.icons) ? "|" : "⋮";
+    // Rain while the model works: how hard it falls is the effort it was asked to think at.
+    const frame = this.#animate ? dropSpinner(elapsed, rainLevel(), isAscii(this.icons)) : isAscii(this.icons) ? "|" : "⋮";
     return { label: `${frame} ${this.state}`, elapsed: formatElapsed(elapsed) };
   }
   /** Compact label for the composer rule; time has its own muted color. */

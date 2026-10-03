@@ -143,8 +143,8 @@ test("a separately bundled reasoning component arms ASCII repaints and drives Th
   const ruleFrames = new Set<string>();
   const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, "");
   const repaint = vi.spyOn(ui.tui, "requestRender").mockImplementation(() => {
-    const transcript = /^([\S]) Thinking/.exec(plain(reasoning.render(60)[0] ?? ""));
-    const rule = /^\+-- (\S) Thinking/.exec(plain(ui.promptFrame.render(60)[0] ?? ""));
+    const transcript = /^(['`,.]{3}) Thinking/.exec(plain(reasoning.render(60)[0] ?? ""));
+    const rule = /^\+-- (['`,.]{3}) Thinking/.exec(plain(ui.promptFrame.render(60)[0] ?? ""));
     if (transcript) transcriptFrames.add(transcript[1]!);
     if (rule) ruleFrames.add(rule[1]!);
   });
@@ -154,8 +154,9 @@ test("a separately bundled reasoning component arms ASCII repaints and drives Th
     reasoning.push("Finished sentence. partial");
     expect(ui.activity.state).toBe("Thinking");
     vi.advanceTimersByTime(700);
-    expect([...transcriptFrames].sort()).toEqual(["-", "\\", "|", "/"].sort());
-    expect([...ruleFrames].sort()).toEqual(["-", "\\", "|", "/"].sort());
+    // Rain: three cells that keep changing while the model thinks.
+    expect(transcriptFrames.size).toBeGreaterThanOrEqual(3);
+    expect(ruleFrames.size).toBeGreaterThanOrEqual(3);
     reasoning.end();
     expect(ui.activity.state).toBe("Working");
     expect(plain(ui.promptFrame.render(60)[0]!)).toContain("Working");
@@ -172,7 +173,7 @@ test("reasoning alone starts and stops repaints when the prompt activity is inac
   const reasoning = new ReasoningComponent(Date.now, ASCII_ICONS);
   const frames = new Set<string>();
   const repaint = vi.spyOn(ui.tui, "requestRender").mockImplementation(() => {
-    const spin = /^([\S]) Thinking/.exec((reasoning.render(60)[0] ?? "").replace(/\x1b\[[0-9;]*m/g, ""));
+    const spin = /^(['`,.]{3}) Thinking/.exec((reasoning.render(60)[0] ?? "").replace(/\x1b\[[0-9;]*m/g, ""));
     if (spin) frames.add(spin[1]!);
   });
   try {
@@ -180,7 +181,7 @@ test("reasoning alone starts and stops repaints when the prompt activity is inac
     ui.addChat(reasoning);
     reasoning.push("Inspect the stream. ");
     vi.advanceTimersByTime(700);
-    expect([...frames].sort()).toEqual(["-", "\\", "|", "/"].sort());
+    expect(frames.size).toBeGreaterThanOrEqual(3);
     reasoning.end();
     const ended = repaint.mock.calls.length;
     vi.advanceTimersByTime(500);

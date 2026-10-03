@@ -8,6 +8,7 @@ import { ansi } from "./theme.js";
 import { bgEnabled, onBg, paint, type PaletteRole } from "./palette.js";
 import { displayPlace } from "./place.js";
 import { terminalMotionAllowed } from "./logo-motion.js";
+import { setRainLevel } from "./rain.js";
 
 /** The breathing room between the two ends of a row, in cells. */
 const GAP = 2;
@@ -217,6 +218,8 @@ export class FooterComponent implements Component {
     }
     if (Object.hasOwn(next, "pp") && next.pp !== this.state.pp) this.#prefillMotion = undefined;
     this.state = { ...this.state, ...next };
+    // The waiting labels rain as hard as the effort the model thinks at.
+    if (Object.hasOwn(next, "effort")) setRainLevel(this.state.effort);
     if (moved) this.#branch = readGitBranch(this.state.cwd ?? this.#cwd);
   }
 

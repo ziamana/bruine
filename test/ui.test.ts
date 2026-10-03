@@ -72,21 +72,24 @@ test("ctrl+t expands and collapses the task list", async () => {
   await ui.shutdown();
 });
 
+/** The waiting label opens with three cells of rain; the tests read what follows it. */
+const rainless = (text: string): string => text.replace(/^[⠁⠂⠄⡀⠀'`,.]{3} /, "· ");
+
 describe("ReasoningComponent (T25.3 word by word)", () => {
   test("shows Thinking alone before the first complete word", () => {
     const r = new ReasoningComponent(() => 0, UNICODE_ICONS);
     r.push("Hel");
-    expect(strip(r.render(40)[0])).toBe("· Thinking");
+    expect(rainless(strip(r.render(40)[0]))).toBe("· Thinking");
     r.push("lo ");
-    expect(strip(r.render(40)[0])).toBe("· Thinking  Hello");
+    expect(rainless(strip(r.render(40)[0]))).toBe("· Thinking  Hello");
   });
 
   test("grows one complete word at a time, clears on sentence end", () => {
     const r = new ReasoningComponent(() => 0, UNICODE_ICONS);
     r.push("Hello wor");
-    expect(strip(r.render(40)[0])).toBe("· Thinking  Hello");
+    expect(rainless(strip(r.render(40)[0]))).toBe("· Thinking  Hello");
     r.push("ld. Next ");
-    expect(strip(r.render(40)[0])).toBe("· Thinking  Next");
+    expect(rainless(strip(r.render(40)[0]))).toBe("· Thinking  Next");
   });
 
   test("collapses to 'thought for Xs' after end()", () => {
@@ -111,7 +114,7 @@ describe("ReasoningComponent (T25.3 word by word)", () => {
     const r = new ReasoningComponent(() => 0, UNICODE_ICONS);
     r.push("aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo pp ");
     const line = strip(r.render(20)[0]);
-    expect(line.startsWith("· Thinking  ")).toBe(true);
+    expect(rainless(line).startsWith("· Thinking  ")).toBe(true);
     expect(line).not.toContain("aa");
     expect(line).toContain("pp");
   });
@@ -1273,7 +1276,7 @@ describe("attachTui wiring", () => {
     const { chats, stream } = setup();
     stream({ type: "reasoning-delta", text: "one two " });
     expect(chats).toHaveLength(1);
-    expect(rendered(chats[0])).toBe("· Thinking  one two");
+    expect(rainless(rendered(chats[0]))).toBe("· Thinking  one two");
     stream({ type: "block-end", block: { type: "reasoning", text: "x" } });
     expect(rendered(chats[0])).toMatch(/∴ Thought for/);
   });
@@ -1671,12 +1674,15 @@ describe("T23 regressions", () => {
     let time = 0;
     const r = new ReasoningComponent(() => time, UNICODE_ICONS);
     r.push("Alpha Bet");
-    expect(strip(r.render(80)[0])).toBe("· Thinking  Alpha");
+    expect(rainless(strip(r.render(80)[0]))).toBe("· Thinking  Alpha");
     r.push("a ");
     const first = strip(r.render(80)[0]);
-    time = 100;
-    expect(strip(r.render(80)[0])).toBe("✢ Thinking  Alpha Beta");
-    expect(first).toBe("· Thinking  Alpha Beta");
+    time = 150;
+    const second = strip(r.render(80)[0]);
+    // The drops moved between the two frames; the words did not.
+    expect(second).not.toBe(first);
+    expect(rainless(second)).toBe("· Thinking  Alpha Beta");
+    expect(rainless(first)).toBe("· Thinking  Alpha Beta");
     r.end();
     const done = r.render(80);
     time = 2000;

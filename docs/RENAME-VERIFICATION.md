@@ -26,12 +26,12 @@ The name audit leaves old spelling only for compatibility or explicitly preserve
 - The command alias, legacy benchmark flag, old home/config/manifest names, env aliases, managed-persona marker and old npm install-path detection.
 - Compatibility tests and documentation, both-prefix isolation in test/benchmark environments, and the old scratch-directory ignore pattern.
 - Ticket history, the dated comparison, third-party notices and skills, and the lockfile, all unchanged as requested.
-- The three package metadata URLs listed below, unchanged until the repository owner renames the GitHub repository.
+- The three package metadata URLs below were left on the old repository name until the owner renamed the repository; they now name `ziamana/bruine`.
 
 ```text
-git+https://github.com/ziamana/kumo-code.git
-https://github.com/ziamana/kumo-code#readme
-https://github.com/ziamana/kumo-code/issues
+git+https://github.com/ziamana/bruine.git
+https://github.com/ziamana/bruine#readme
+https://github.com/ziamana/bruine/issues
 ```
 
 `npm view bruine name version` returned E404 during the availability check. This does not reserve the name or publish the package. Global command installation and publishing were deliberately not exercised; the two bin entries both target `dist/bin.js`.

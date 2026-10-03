@@ -115,4 +115,4 @@ Bruine reads `bruine.json` first and falls back to `kumo.json` only when the new
 The installed-skills manifest follows the same rule: `.bruine-installed.json`, falling back to `.kumo-installed.json`.
 Bruine creates `profiles/bruine` when needed and leaves `profiles/kumo` in place. Updates install the `bruine` npm package.
 
-The GitHub repository URLs still point to `ziamana/kumo-code` until the repository itself is renamed.
+The GitHub repository is `ziamana/bruine`; the old `ziamana/kumo-code` address redirects to it.

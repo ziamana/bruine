@@ -6,11 +6,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ziamana/kumo-code.git"
+    "url": "git+https://github.com/ziamana/bruine.git"
   },
-  "homepage": "https://github.com/ziamana/kumo-code#readme",
+  "homepage": "https://github.com/ziamana/bruine#readme",
   "bugs": {
-    "url": "https://github.com/ziamana/kumo-code/issues"
+    "url": "https://github.com/ziamana/bruine/issues"
   },
   "keywords": [
     "ai",

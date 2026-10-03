@@ -17,7 +17,7 @@ a user can leave any of them out.
 derives from `ehmo/platform-design-skills` (MIT).
 
 The Bruine skills in the same folder (`code-review`, `git-workflow`, `systematic-debugging`,
-`write-tests`) are Bruine's own and fall under Bruine's license.
+`write-tests`, `remotion`) are Bruine's own and fall under Bruine's license.
 
 `youtube-transcript` installs its npm dependency (`youtube-transcript-plus`, MIT) the first
 time it is used; nothing of it is shipped. `impeccable`'s launcher may download its helper

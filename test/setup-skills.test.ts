@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { parseSkillFrontmatter, readBundledSkills, syncSkills } from "../src/setup/skills.js";
+import { initialSkillChecks } from "../src/setup/full.js";
 
 async function fakeBundled(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "bruine-skills-"));
@@ -26,6 +27,23 @@ describe("parseSkillFrontmatter", () => {
 });
 
 describe("readBundledSkills", () => {
+  test("Remotion is available, unchecked by default, and installed only when selected", async () => {
+    const root = join(__dirname, "..", "skills");
+    const bundled = await readBundledSkills(root);
+    const skill = bundled.find((entry) => entry.name === "remotion");
+    expect(skill?.description).toContain("motion design");
+    const items = [{ value: "remotion", label: "remotion" }, { value: "remotion-best-practices", label: "remotion-best-practices" }];
+    const found = items.map((item) => ({ name: item.value, description: "", dir: "source", source: "agents", alsoIn: [] }));
+    expect(initialSkillChecks(items, undefined, [])).toEqual(new Set());
+    expect(initialSkillChecks(items, undefined, found)).toEqual(new Set());
+    expect(initialSkillChecks(items, ["remotion"], found)).toEqual(new Set([0]));
+    const home = await mkdtemp(join(tmpdir(), "bruine-remotion-test-"));
+    const homeSkillsDir = join(home, "skills");
+    await syncSkills({ bundledRoot: root, homeSkillsDir, chosen: [], home });
+    expect(existsSync(join(homeSkillsDir, "remotion"))).toBe(false);
+    await syncSkills({ bundledRoot: root, homeSkillsDir, chosen: ["remotion"], home });
+    expect(await readFile(join(homeSkillsDir, "remotion", "SKILL.md"), "utf8")).toBe(await readFile(join(root, "remotion", "SKILL.md"), "utf8"));
+  });
   test("lists only dirs with SKILL.md, sorted by name", async () => {
     const root = await fakeBundled();
     await mkdir(join(root, "not-a-skill"), { recursive: true });

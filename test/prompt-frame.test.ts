@@ -266,6 +266,7 @@ test("finishing a turn keeps repaints alive until the footer counters settle", a
   delete process.env.CI; delete process.env.BRUINE_ASCII; delete process.env.BRUINE_NO_ANIMATION;
   process.env.TERM = "xterm-256color";
   const ui = new BruineUi("test", { onSubmit() {}, onEscape() {}, onQuit() {} }, new FakeTerminal(), UNICODE_ICONS);
+  ui.setEffect("off"); // ambient weather repaints on its own; this is about the footer alone
   const readings = new Set<string>();
   const repaint = vi.spyOn(ui.tui, "requestRender").mockImplementation(() => {
     readings.add(stripTerminalSequences(ui.footer.render(100)[1]!));

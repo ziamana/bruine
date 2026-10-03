@@ -732,7 +732,8 @@ describe("Space Bunny Free in /model", () => {
       let reply: string | undefined;
       const pending = h.picker.runCommand("/model").then((r: string) => { reply = r; });
       // The poll starts after the file writes finish, which is real I/O: turn the clock until it ends.
-      for (let i = 0; i < 200 && reply === undefined; i += 1) {
+      const deadline = Date.now() + 20_000;
+      while (reply === undefined && Date.now() < deadline) {
         await vi.advanceTimersByTimeAsync(100);
         await new Promise((resolve) => setImmediate(resolve));
       }

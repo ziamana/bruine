@@ -23,7 +23,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { bruineIcons, type BruineIcons } from "../render/chars.js";
 import { ansi, editorTheme, selectListTheme } from "./theme.js";
-import { bgEnabled, paint, setTerminalBackdrop, type PaletteRole } from "./palette.js";
+import { bgEnabled, colorDepth, paint, setTerminalBackdrop, type PaletteRole } from "./palette.js";
 import { ChatTranscript, Gap, Margin, PlainGlyphEditor } from "./chat-layout.js";
 import { FooterComponent } from "./footer.js";
 import { displayModel } from "./footer.js";
@@ -39,6 +39,7 @@ import { besideLogo, LOGO_BESIDE_GAP, LOGO_MIN_WIDTH, logoRows, paintResourceLin
 import { terminalMotionAllowed } from "./logo-motion.js";
 import { IntroPlayer, introSetting, planIntro, readLastIntro, rememberIntro } from "./intro.js";
 import { TurnActivity } from "./turn-activity.js";
+import { WeatherBackdrop, readWeatherEffect, type WeatherEffect } from "./weather-effect.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
 import { createAutocomplete } from "./file-complete.js";
 import {
@@ -390,6 +391,7 @@ export class BruineUi {
   readonly taskPanel: TaskPanel;
   readonly promptFrame: PromptFrame;
   readonly activity = new TurnActivity();
+  readonly weather: WeatherBackdrop;
   #animatedComponents = new Set<Component>();
   readonly header: Text;
   readonly version: string;
@@ -530,7 +532,14 @@ export class BruineUi {
       () => this.terminal.rows,
       this.jumpLatest,
     );
-    this.#layer.addChild(this.shell);
+    this.weather = new WeatherBackdrop(this.shell, readWeatherEffect(runtimeHome()), {
+      busy: () => this.activity.active,
+      rows: () => this.terminal.rows,
+      decorateRows: () => this.shell.weatherRows,
+      paused: () => this.mouse.span !== undefined,
+      allowed: () => this.terminal.columns >= 12 && terminalMotionAllowed({ ascii: this.icons.think === "*" }) && colorDepth() !== "none" && appEnv("NO_RAIN") !== "1",
+    });
+    this.#layer.addChild(this.weather);
     this.tui.addChild(this.#layer);
 
     // T30: the launcher ran the 24 h registry check in the background; the
@@ -697,7 +706,7 @@ export class BruineUi {
 
   /** T56: the visible text of a selection, read out of the frame we compose. */
   #readSelection(span: SelectionSpan): string {
-    const lines = this.tui.render(this.terminal.columns);
+    const lines = this.weather.withoutWeather(() => this.tui.render(this.terminal.columns));
     return selectedText(lines, viewportTop(lines.length, this.terminal.rows), span);
   }
 
@@ -841,7 +850,7 @@ export class BruineUi {
     for (const component of this.#animatedComponents) {
       if (!("active" in component) || !component.active) this.#animatedComponents.delete(component);
     }
-    const active = this.promptFrame.active || this.taskPanel.active || this.footer.active || this.#animatedComponents.size > 0;
+    const active = this.weather.active || this.promptFrame.active || this.taskPanel.active || this.footer.active || this.#animatedComponents.size > 0;
     if (active && this.#animation === undefined) {
       this.#animation = setInterval(() => this.requestRender(), 100);
       this.#animation.unref();
@@ -1467,7 +1476,14 @@ export class BruineUi {
    * T37: `initial` starts the cursor on a row (the current route), so Enter
    * without moving keeps what is already in use.
    */
-  askChoice(title: string, items: SelectItem[], opts: { initial?: number } = {}): Promise<number> {
+  get effect(): WeatherEffect { return this.weather.effect; }
+
+  setEffect(effect: WeatherEffect): void {
+    this.weather.effect = effect;
+    this.requestRender();
+  }
+
+  askChoice(title: string, items: SelectItem[], opts: { initial?: number; preview?: (index: number) => void } = {}): Promise<number> {
     if (this.#closed) return Promise.resolve(-1);
     this.clearNoticeBox();
     this.#setConfirming(true);
@@ -1476,6 +1492,7 @@ export class BruineUi {
     if (opts.initial !== undefined && opts.initial >= 0 && opts.initial < items.length) {
       list.setSelectedIndex(opts.initial);
     }
+    list.onSelectionChange = (item) => opts.preview?.(items.indexOf(item));
     this.noticeBox.addChild(titleText);
     this.noticeBox.addChild(list);
     this.requestRender();

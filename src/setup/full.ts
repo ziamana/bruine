@@ -484,7 +484,8 @@ export function initialSkillChecks(
     if (item.disabled === true) return;
     if (saved !== undefined) {
       if (saved.includes(item.value)) checked.add(i);
-    } else if (RECOMMENDED_SKILLS.includes(item.value) || found.some((f) => f.name === item.value && f.source === "agents")) {
+    } else if (item.value !== "remotion" && item.value !== "remotion-best-practices" &&
+      (RECOMMENDED_SKILLS.includes(item.value) || found.some((f) => f.name === item.value && f.source === "agents"))) {
       checked.add(i);
     }
   });

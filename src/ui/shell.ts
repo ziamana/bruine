@@ -187,6 +187,9 @@ export class Shell extends Container {
     return frameRow - this.#transcriptOffset;
   }
 
+  /** End of the reading area; decorative weather must leave the pinned controls alone. */
+  get weatherRows(): number { return this.#transcriptTo; }
+
   #placed(from: number, to: number, offset: number): void {
     this.#transcriptFrom = from;
     this.#transcriptTo = to;

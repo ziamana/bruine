@@ -99,6 +99,8 @@ export class Harness {
         join(home, "bruine.json"),
         JSON.stringify({
           permissionMode,
+          // Existing scenarios wait for a still screen; weather is exercised explicitly.
+          effect: "off",
           search: { provider: "none" },
           models: {
             main: {

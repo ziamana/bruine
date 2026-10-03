@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { configReadPath, configWritePath } from "../compat.js";
@@ -43,8 +43,10 @@ export async function saveWeatherEffect(home: string, effect: WeatherEffect): Pr
   await mkdir(home, { recursive: true });
   const target = configWritePath(home);
   const temp = `${target}.${randomUUID()}.tmp`;
-  await writeFile(temp, `${JSON.stringify({ ...doc, effect }, null, 2)}\n`, { mode: 0o600 });
-  await rename(temp, target);
+  try {
+    await writeFile(temp, `${JSON.stringify({ ...doc, effect }, null, 2)}\n`, { mode: 0o600 });
+    await rename(temp, target);
+  } finally { await rm(temp, { force: true }); }
 }
 
 export function weatherLevel(effect: WeatherEffect, busy: boolean): number {
@@ -53,6 +55,18 @@ export function weatherLevel(effect: WeatherEffect, busy: boolean): number {
 
 const QUIET_INK: RainInk = { far: ansi.faint, mid: ansi.faint, near: ansi.gray };
 const STORM_INK: RainInk = { far: ansi.faint, mid: ansi.gray, near: ansi.violet };
+
+function hasBackground(line: string): boolean {
+  for (const match of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
+    const codes = match[1]!.split(";").map(Number);
+    for (let i = 0; i < codes.length; i += 1) {
+      const code = codes[i]!;
+      if (code === 48 || (code >= 40 && code <= 47) || (code >= 100 && code <= 107)) return true;
+      if (code === 38) i += codes[i + 1] === 2 ? 4 : codes[i + 1] === 5 ? 2 : 0;
+    }
+  }
+  return false;
+}
 
 /** Decorate the composed frame, after scrolling/history layout and before selection. */
 export class WeatherBackdrop implements Component {
@@ -83,13 +97,17 @@ export class WeatherBackdrop implements Component {
     try { return read(); } finally { this.#clean = false; }
   }
   render(width: number): string[] {
-    const lines = this.content.render(width);
-    if (!this.active || width < 12) return lines;
+    const content = this.content.render(width);
+    if (!this.active || width < 12) return content;
+    // Keep controls where the shell placed them, but fill the unused screen below them.
+    const rows = Math.max(0, Math.floor(this.options.rows()));
+    const lines = [...content, ...Array<string>(Math.max(0, rows - content.length)).fill("")];
     this.#weather.set(weatherLevel(this.effect, this.options.busy()));
     const time = this.#weather.phase;
     // Only the visible portion moves, so a long transcript costs no more than a short one.
-    const from = Math.max(0, lines.length - this.options.rows());
-    const height = Math.max(0, Math.min(lines.length, this.options.decorateRows()) - from);
+    const from = Math.max(0, lines.length - rows);
+    const height = Math.min(rows, lines.length);
+    const controlsFrom = this.options.decorateRows();
     const storm = this.effect === "foudre";
     const grid = rainGrid({ width, height, time, density: 0.06 + 0.42 * this.#weather.level, seed: 31 });
     if (storm) {
@@ -110,9 +128,11 @@ export class WeatherBackdrop implements Component {
     }
     const out = [...lines];
     for (let y = 0; y < height; y += 1) {
+      const row = from + y;
+      if (row >= controlsFrom && row < content.length) continue;
       const line = lines[from + y]!;
-      // Cards and code surfaces are opaque; composer, menus and footer are below decorateRows.
-      if (/\x1b\[[0-9;]*(?:48|4[0-7]|10[0-7])(?:;|m)/.test(line)) continue;
+      // Cards are opaque, and the original control band stays clear of the weather.
+      if (hasBackground(line)) continue;
       const padded = line + " ".repeat(Math.max(0, width - visibleWidth(line)));
       out[from + y] = rainIntoBlanks(padded, grid[y]!, storm ? STORM_INK : QUIET_INK, "\x1b[7m");
     }

@@ -1,6 +1,7 @@
 import { appEnv, runtimeHome } from "../compat.js";
 import { createRequire } from "node:module";
 import { TASKS_HELP } from "../ui/task-panel.js";
+import { runEffectCommand } from "./effect-command.js";
 import { formatShell, isShellLine, runShell } from "./shell.js";
 import { randomUUID } from "node:crypto";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
@@ -66,6 +67,7 @@ export const BRUINE_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/tasks", description: "List background tasks (commands and sub-agents); /tasks kill <id> stops one" },
   { name: "/reload", description: "Re-read settings.yaml and the terminal background" },
   { name: "/mouse", description: "Turn mouse selection on or off (the wheel scrolls while off)" },
+  { name: "/effect", description: "Choose bruine, pluie, foudre, auto (on), or off" },
   { name: "/help", description: "Show commands and keys" },
   { name: "/exit", description: "Quit bruine (also ctrl+d)" },
 ];
@@ -607,6 +609,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/config  Open settings.yaml and bruine.json in your editor (/config path lists them)",
           "/tasks  List background tasks; /tasks kill <id> stops one",
           "/reload  Re-read settings.yaml and the terminal background",
+          "/effect  Weather: bruine, pluie, foudre, auto (also on), off",
           "/help  Show commands and keys",
           "!cmd  Run a shell command yourself (output not sent to the model)",
           "@file  Attach a file (a list opens as you type)",
@@ -614,6 +617,12 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           `Esc interrupt, ctrl+c clear (quits when empty), ctrl+d exit, Shift+Tab Plan/Build, → accept suggestion, ctrl+o expand tools, f2 next model, PageUp/PageDown read back (the input bar stays), ${TASKS_HELP}`,
         ].join("\n"),
       );
+      return;
+    }
+    if (cmd === "/effect") {
+      const message = await runEffectCommand(clean.slice(cmd.length), ui, runtimeHome());
+      if (ui === undefined) reply(message);
+      else ui.showNotice(message);
       return;
     }
     if (cmd === "/skills") {

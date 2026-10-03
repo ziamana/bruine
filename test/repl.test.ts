@@ -208,13 +208,13 @@ describe("Repl", () => {
 });
 
 describe("slash palette source of truth (T31.1)", () => {
-  test("bruine commands: 16 items incl. new/compact/config/tasks/reload/mouse/help/exit", async () => {
+  test("bruine commands: 17 items incl. new/compact/config/tasks/reload/mouse/effect/help/exit", async () => {
     const { BRUINE_COMMANDS, mergeCommands } = await import("../src/plugins/repl.js");
     // T56 added /mouse: taking the mouse costs the wheel, so the choice has to
     // be reachable without restarting.
-    expect(BRUINE_COMMANDS).toHaveLength(16);
+    expect(BRUINE_COMMANDS).toHaveLength(17);
     const names = BRUINE_COMMANDS.map((c) => c.name);
-    for (const n of ["/new", "/compact", "/plan", "/permissions", "/auto", "/ask", "/full", "/skills", "/config", "/tasks", "/reload", "/mouse", "/help", "/exit"]) {
+    for (const n of ["/new", "/compact", "/plan", "/permissions", "/auto", "/ask", "/full", "/skills", "/config", "/tasks", "/reload", "/mouse", "/effect", "/help", "/exit"]) {
       expect(names).toContain(n);
     }
     const merged = mergeCommands([

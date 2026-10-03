@@ -14,6 +14,7 @@ import { TpsMeter } from "../src/ui/tps.js";
 import { attachTui } from "../src/plugins/render.js";
 import { LineEmitter, Repl } from "../src/plugins/repl.js";
 import { ASCII_ICONS, UNICODE_ICONS } from "../src/render/chars.js";
+import { resetColorDepth } from "../src/ui/palette.js";
 
 // Never read the developer's real ~/.bruine (this test used to pass only because the
 // old hand-written YAML reader failed on the real settings.yaml).
@@ -50,6 +51,40 @@ class FakeTerminal implements Terminal {
   setTitle(): void {}
   setProgress(): void {}
 }
+
+test.each(["BRUINE_NO_ANIMATION", "BRUINE_ASCII", "BRUINE_NO_RAIN", "CI", "BRUINE_COLOR"])("ambient weather respects %s and can be turned off", async (gate) => {
+  const keys = ["BRUINE_NO_ANIMATION", "BRUINE_ASCII", "BRUINE_NO_RAIN", "CI", "BRUINE_COLOR", "NO_COLOR"];
+  const saved = keys.map((key) => process.env[key]);
+  const tty = process.stdout.isTTY;
+  let ui: BruineUi | undefined;
+  try {
+    for (const key of keys) delete process.env[key];
+    process.env.BRUINE_COLOR = "basic";
+    resetColorDepth();
+    process.stdout.isTTY = true;
+    ui = new BruineUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), UNICODE_ICONS);
+    ui.setEffect("auto");
+    expect(ui.weather.active).toBe(true);
+    ui.chat.addChild(new Text(Array.from({ length: 40 }, (_, index) => `History line ${index}`).join("\n")));
+    ui.shell.render(60);
+    ui.shell.scrollBy(5);
+    expect(ui.shell.scrolled).toBe(true);
+    expect(ui.weather.active).toBe(true);
+    process.env[gate] = gate === "BRUINE_COLOR" ? "none" : "1";
+    resetColorDepth();
+    expect(ui.weather.active).toBe(false);
+    process.env[gate] = gate === "BRUINE_COLOR" ? "basic" : "0";
+    resetColorDepth();
+    expect(ui.weather.active).toBe(true);
+    ui.setEffect("off");
+    expect(ui.weather.active).toBe(false);
+  } finally {
+    await ui?.shutdown();
+    process.stdout.isTTY = tty;
+    keys.forEach((key, index) => { const value = saved[index]; if (value === undefined) delete process.env[key]; else process.env[key] = value; });
+    resetColorDepth();
+  }
+});
 
 test("BruineUi.clearTasks clears the panel for future /new wiring", () => {
   const ui = new BruineUi("test", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} }, new FakeTerminal(), UNICODE_ICONS);
@@ -922,6 +957,8 @@ describe("BruineUi shell (T13a, fake terminal)", () => {
     process.stdout.isTTY = true;
     delete process.env.BRUINE_NO_ANIMATION;
     const ui = new BruineUi("0.2.0", { onSubmit: () => {}, onEscape: () => {}, onQuit: () => {} });
+    // This checks the boot animation, independently of optional ambient weather.
+    ui.setEffect("off");
     const phases: string[] = [];
     const realSetText = ui.header.setText.bind(ui.header);
     ui.header.setText = (t: string) => {

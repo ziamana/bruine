@@ -612,6 +612,28 @@ test("the rain behind the setup follows the option under the cursor: heavy on Qu
   }
 });
 
+test("one tap of Escape from Models is one step back to the menu, even when the terminal reports the release too", async () => {
+  const home = await mkdtemp(join(tmpdir(), "bruine-t35-esc-"));
+  await writeFile(join(home, "settings.yaml"), "agent-default-model:\n  provider: deepseek-official\n  model: deepseek-chat\n");
+  const h = await SetupPty.start(home);
+  try {
+    await h.waitMenu("existing setup menu");
+    h.press("enter"); // Models
+    await h.waitFor("AI servers: found, add, or remove");
+    // What a kitty-protocol terminal sends for one tap: the press, then the release.
+    h.child.write("\x1b[27u\x1b[27;1:3u");
+    await h.waitFor("Choose a setting to edit.");
+    await delay(700);
+    // Still on the menu: the release was not a second Escape.
+    expect(h.text()).toContain("Choose a setting to edit.");
+    expect(h.text()).not.toContain("Review your setup");
+    expect(h.exit).toBeUndefined();
+  } finally {
+    await h.dump("t35-esc-release-failure");
+    await h.close();
+  }
+});
+
 test("fresh setup offers Set up later and exits without writing configuration", async () => {
   const home = await mkdtemp(join(tmpdir(), "bruine-setup-later-"));
   const h = await SetupPty.start(home);

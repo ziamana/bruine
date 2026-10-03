@@ -83,7 +83,8 @@ export function isEscapePress(data: string): boolean {
 }
 
 /**
- * A terminal whose Escape is filtered before any screen sees it.
+ * A terminal whose Escape is filtered before any screen sees it, and whose key releases are never
+ * seen at all.
  *
  * Wrapping the terminal, rather than listening on the screen, is what lets a held key be
  * dropped and a tap be delivered a moment late: the screens only ever see what comes out.
@@ -94,7 +95,15 @@ export function withEscapeFilter(inner: Terminal, timers?: EscapeTimers): Termin
     start(onInput, onResize) {
       filter?.dispose();
       filter = new EscapeFilter(onInput, timers);
-      inner.start((data) => (isEscapePress(data) ? filter!.press(data) : onInput(data)), onResize);
+      inner.start((data) => {
+        // A terminal that speaks the kitty keyboard protocol reports the key coming back up as
+        // an event of its own, and the key matchers read that event as the same key. One tap of
+        // Escape was therefore two Escapes (the press, then the release), which walked back two
+        // screens of the setup. Nothing acts on a release, so none is let through.
+        if (isKeyRelease(data)) return;
+        if (isEscapePress(data)) filter!.press(data);
+        else onInput(data);
+      }, onResize);
     },
     stop() {
       filter?.dispose();

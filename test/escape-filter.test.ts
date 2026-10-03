@@ -137,6 +137,36 @@ describe("withEscapeFilter: the screens see only what comes out", () => {
     expect(seen).toEqual([ESC, "x"]);
   });
 
+  test("one tap of Escape on a kitty-protocol terminal is one Escape: the release is not a second one", () => {
+    const c = clock();
+    const inner = fakeTerminal();
+    const seen: string[] = [];
+    withEscapeFilter(inner, c.api).start((d) => seen.push(d), () => {});
+    // Press, then the key coming back up, as the terminal reports them.
+    inner.onInput!("\x1b[27u");
+    inner.onInput!("\x1b[27;1:3u");
+    c.advance(500);
+    expect(seen).toEqual(["\x1b[27u"]);
+  });
+
+  test("no key release reaches a screen, whichever key: Escape, Ctrl+C, a letter, an arrow", () => {
+    const c = clock();
+    const inner = fakeTerminal();
+    const seen: string[] = [];
+    withEscapeFilter(inner, c.api).start((d) => seen.push(d), () => {});
+    for (const release of ["\x1b[27;1:3u", "\x1b[99;5:3u", "\x1b[97;1:3u", "\x1b[1;1:3A", "\x1b[13;1:3u"]) inner.onInput!(release);
+    expect(seen).toEqual([]);
+  });
+
+  test("presses and repeats of other keys still go through, so typing is unharmed", () => {
+    const c = clock();
+    const inner = fakeTerminal();
+    const seen: string[] = [];
+    withEscapeFilter(inner, c.api).start((d) => seen.push(d), () => {});
+    for (const key of ["\x1b[97u", "\x1b[97;1:2u", "\x1b[99;5u", "\x1b[1;1:1A"]) inner.onInput!(key);
+    expect(seen).toEqual(["\x1b[97u", "\x1b[97;1:2u", "\x1b[99;5u", "\x1b[1;1:1A"]);
+  });
+
   test("it looks like the terminal it wraps", () => {
     const inner = fakeTerminal();
     const t = withEscapeFilter(inner);

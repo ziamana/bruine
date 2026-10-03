@@ -551,6 +551,9 @@ export async function runFullSetup(
   let suggestionsLoaded = false;
   let welcome: SetupWelcome | undefined;
   tui.addInputListener((data: string) => {
+    // The key coming back up is not a key: the matchers read a release as the same key, so an
+    // Escape tap on a terminal that reports releases was two Escapes (see the escape filter).
+    if (isKeyRelease(data)) return {};
     if (matchesKey(data, "ctrl+c")) {
       activeResolve?.(CANCEL);
       return { consume: true };

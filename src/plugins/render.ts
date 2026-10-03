@@ -326,7 +326,7 @@ export function attachTui(
       // process — a new one at nothing, a resumed one at what its log recorded.
       if (spend.follow(liveAgent().session)) ui.footer.set(spend.readings);
       else spend.beginCall();
-      ui.footer.set({ tps: 0, pp: undefined });
+      ui.footer.set({ tps: 0, tpsEstimated: false, pp: undefined });
       closeLive();
       // T59: the workspace is read now so the end of the turn can be diffed
       // against it. Fire and forget: a slow repository must never delay the
@@ -343,7 +343,7 @@ export function attachTui(
     }
     if (f.type === "end") {
       tps.endCall();
-      ui.footer.set({ tps: tps.measuredTps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
+      ui.footer.set({ tps: tps.measuredTps || tps.estimatedTps, tpsEstimated: tps.measuredTps === 0 && tps.estimatedTps > 0, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
       hideWorking();
       closeLive();
       ui.requestRender();
@@ -353,8 +353,8 @@ export function attachTui(
     if (chunk === undefined) return;
     const trackDelta = (content: unknown): void => {
       if (typeof content !== "string" || content.length === 0) return;
-      tps.delta(now);
-      ui.footer.set({ tps: tps.measuredTps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
+      tps.delta(now, content);
+      ui.footer.set({ tps: tps.measuredTps || tps.estimatedTps, tpsEstimated: tps.measuredTps === 0 && tps.estimatedTps > 0, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
     };
     switch (chunk.type) {
       case "reasoning-delta":
@@ -425,13 +425,13 @@ export function attachTui(
         // has sent that count at least once, and until then the row says nothing
         // about it rather than claiming the session spent nothing.
         spend.add({ input: reported(u.inputTokens), output: reported(u.outputTokens), cacheRead: reported(cached) });
-        ui.footer.set({ ...spend.readings, tps: tps.measuredTps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
+        ui.footer.set({ ...spend.readings, tps: tps.measuredTps || tps.estimatedTps, tpsEstimated: tps.measuredTps === 0 && tps.estimatedTps > 0, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
         ui.requestRender();
         return;
       }
       case "finish":
         tps.endCall();
-        ui.footer.set({ tps: tps.measuredTps, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
+        ui.footer.set({ tps: tps.measuredTps || tps.estimatedTps, tpsEstimated: tps.measuredTps === 0 && tps.estimatedTps > 0, pp: tps.pp, cachePct: tps.cachePct, cacheFirst: tps.cacheFirst });
         closeLive();
         ui.requestRender();
         return;
@@ -461,7 +461,7 @@ export function attachTui(
       case "turn/start":
         refreshSubagents();
         tps.reset();
-        ui.footer.set({ tps: 0, pp: undefined, cachePct: undefined, cacheFirst: false });
+        ui.footer.set({ tps: 0, tpsEstimated: false, pp: undefined, cachePct: undefined, cacheFirst: false });
         turnStartWall = Date.now();
         turnOutput = 0;
         turnToolIds = [];

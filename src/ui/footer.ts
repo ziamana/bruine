@@ -22,6 +22,8 @@ export interface FooterState {
   provider?: string;
   effort?: string;
   tps?: number;
+  /** A live text-volume estimate, explicitly marked with ~. */
+  tpsEstimated?: boolean;
   pp?: number;
   cachePct?: number;
   cacheFirst?: boolean;
@@ -191,6 +193,7 @@ export class FooterComponent implements Component {
   #home: string;
   #branch: string | undefined;
   #heldTokens: TokenReadings | undefined;
+  #prefillMotion: { target: number; startedAt: number } | undefined;
   #tokenMotion: { from: TokenReadings; to: TokenReadings; startedAt: number } | undefined;
 
   constructor(icons: KumoIcons = kumoIcons(), opts: { cwd?: string; home?: string } = {}) {
@@ -212,6 +215,7 @@ export class FooterComponent implements Component {
       if (countKeys.some(key => Object.hasOwn(next, key) && this.state[key] !== undefined &&
         (next[key] === undefined || next[key]! < this.state[key]!))) this.#heldTokens = undefined;
     }
+    if (Object.hasOwn(next, "pp") && next.pp !== this.state.pp) this.#prefillMotion = undefined;
     this.state = { ...this.state, ...next };
     if (moved) this.#branch = readGitBranch(this.state.cwd ?? this.#cwd);
   }
@@ -221,6 +225,7 @@ export class FooterComponent implements Component {
     if (this.#heldTokens) return;
     this.#heldTokens = { ...this.#displayTokens() };
     this.#tokenMotion = undefined;
+    this.#prefillMotion = undefined;
   }
 
   /** Settle the two displayed counters without changing the reported totals. */
@@ -230,12 +235,17 @@ export class FooterComponent implements Component {
     if (!from) return;
     const to = { inputTokens: this.state.inputTokens, outputTokens: this.state.outputTokens };
     const changed = from.inputTokens !== to.inputTokens || from.outputTokens !== to.outputTokens;
-    this.#tokenMotion = changed && terminalMotionAllowed({ ascii: this.#ascii })
+    const animate = terminalMotionAllowed({ ascii: this.#ascii });
+    const pp = this.state.pp;
+    this.#prefillMotion = animate && pp !== undefined && Number.isFinite(pp) && pp > 0
+      ? { target: pp, startedAt: Date.now() } : undefined;
+    this.#tokenMotion = changed && animate
       ? { from, to, startedAt: Date.now() } : undefined;
   }
 
   get active(): boolean {
-    return this.#tokenMotion !== undefined && Date.now() - this.#tokenMotion.startedAt < TOKEN_SETTLE_MS;
+    return [this.#tokenMotion, this.#prefillMotion].some(motion =>
+      motion !== undefined && Date.now() - motion.startedAt < TOKEN_SETTLE_MS);
   }
 
   #displayTokens(): TokenReadings {
@@ -252,6 +262,14 @@ export class FooterComponent implements Component {
       return Math.round(initial + (target - initial) * eased);
     };
     return { inputTokens: count("inputTokens"), outputTokens: count("outputTokens") };
+  }
+
+  #displayPrefill(): number | undefined {
+    if (this.#heldTokens) return undefined;
+    const motion = this.#prefillMotion;
+    if (!motion) return this.state.pp;
+    const progress = Math.min(1, Math.max(0, (Date.now() - motion.startedAt) / TOKEN_SETTLE_MS));
+    return progress === 1 ? this.state.pp : motion.target * (1 - (1 - progress) ** 3);
   }
 
   render(width: number): string[] {
@@ -457,10 +475,11 @@ export class FooterComponent implements Component {
     const bolt = this.#ascii ? "*" : "\u21af";
     const rates: string[] = [];
     if (s.tps !== undefined && Number.isFinite(s.tps) && s.tps > 0) {
-      rates.push(`${this.#ink("faint")(bolt)} ${this.#ink("muted")("TPS:")} ${this.#ink("sky")(s.tps.toFixed(1))} ${this.#ink("muted")("tok/s")}`);
+      rates.push(`${this.#ink("faint")(bolt)} ${this.#ink("muted")("TPS:")} ${this.#ink("sky")(`${s.tpsEstimated ? "~" : ""}${s.tps.toFixed(1)}`)} ${this.#ink("muted")("tok/s")}`);
     }
-    if (s.pp !== undefined && Number.isFinite(s.pp) && s.pp > 0) {
-      rates.push(this.#ink("muted")(`prefill ${formatK(Math.round(s.pp * 10) / 10)} tok/s`));
+    const pp = this.#displayPrefill();
+    if (pp !== undefined && Number.isFinite(pp) && pp > 0) {
+      rates.push(this.#ink("muted")(`prefill ${formatK(Math.round(pp * 10) / 10)} tok/s`));
     }
     if (rates.length === 0) return [];
     const together = rates.join("  ");

@@ -369,7 +369,7 @@ function parseKumoSettingsYaml(text: string): SettingsRoute | undefined {
 export class KumoUi {
   readonly tui: TUI;
   readonly terminal: Terminal;
-  readonly chat: Container;
+  readonly chat: ChatTranscript;
   readonly editor: PlainGlyphEditor;
   readonly footer: FooterComponent;
   readonly icons: KumoIcons;
@@ -488,14 +488,13 @@ export class KumoUi {
       copy: handlers.copyText,
       scroll: (rows) => this.scrollTranscript(rows),
       // D5: a press on the pill is a press on a control, not the start of a
-      // selection. The frame is composed here, so the hit test is asked here —
-      // the same reason the selection's text is read here.
+      // selection. D6: so is a press on a thought that has ended. The frame is
+      // composed here, so the hit test is asked here — the same reason the
+      // selection's text is read here — and the pressed point goes along with it,
+      // because one control now answers for two different things.
       control: {
-        hit: (row, col) => this.#hitJumpLatest(row, col),
-        activate: () => {
-          this.shell.toEnd();
-          this.requestRender();
-        },
+        hit: (row, col) => this.#hitControl(row, col),
+        activate: (row, col) => this.#activateControl(row, col),
       },
     });
     // C6: no cockpit. The readings live in the status bar under the editor, and a
@@ -705,6 +704,38 @@ export class KumoUi {
   #hitJumpLatest(row: number, col: number): boolean {
     const lines = this.tui.render(this.terminal.columns);
     return this.jumpLatest.hitTest(lines, viewportTop(lines.length, this.terminal.rows), row, col);
+  }
+
+  /**
+   * D6: the clickable transcript block under this point, if any.
+   *
+   * A screen row is not a transcript row: the header sits above the transcript and
+   * a held window replaces it with a slice of the document. So the row is mapped
+   * through the shell that composed the frame, and the transcript is asked which
+   * of its blocks owns the row that comes out.
+   */
+  #clickableAt(row: number): (Component & { click?: () => void }) | undefined {
+    const lines = this.tui.render(this.terminal.columns);
+    const at = this.shell.transcriptRowAt(row + viewportTop(lines.length, this.terminal.rows));
+    return at === undefined ? undefined : (this.chat.hitTest(at) as (Component & { click?: () => void }) | undefined);
+  }
+
+  /** Is this point a control? The pill first, then whatever in the transcript claims a press. */
+  #hitControl(row: number, col: number): boolean {
+    if (this.#hitJumpLatest(row, col)) return true;
+    return this.#clickableAt(row) !== undefined;
+  }
+
+  /** Run the control that owns the press, asked in the same order as the hit test. */
+  #activateControl(row: number, col: number): void {
+    const target = this.#clickableAt(row);
+    if (target?.click !== undefined) {
+      target.click();
+      this.requestRender();
+      return;
+    }
+    this.shell.toEnd();
+    this.requestRender();
   }
 
   /**

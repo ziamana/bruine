@@ -69,9 +69,29 @@ export class ChatTranscript extends Container {
   }
   /** What each block was laid out as, and from what, so a block that did not change is not laid out again. */
   #laid = new WeakMap<Component, { width: number; palette: string; rail: RailState | undefined; role: PaletteRole; showRail: boolean; block: string[]; piece: string[] }>();
+  /** The rows of the last render, per block: a press has to find the block it landed on (D6). */
+  #rows: Array<{ child: Component; from: number; to: number }> = [];
+
+  /**
+   * The clickable block on this transcript row, when there is one.
+   *
+   * The rows are this transcript's own, from the last render: the shell owns where
+   * the transcript sits inside the frame, so a screen row is mapped to one of these
+   * before it gets here. A press that lands on a block that does not claim clicks
+   * is a selection, and nothing is claimed.
+   */
+  hitTest(row: number): Component | undefined {
+    for (const block of this.#rows) {
+      if (row < block.from || row >= block.to) continue;
+      return typeof (block.child as { click?: unknown }).click === "function" ? block.child : undefined;
+    }
+    return undefined;
+  }
+
   render(width: number): string[] {
     const inner = Math.max(1, width - 4);
     const lines: string[] = [];
+    this.#rows = [];
     // The colours a card is painted with: when the terminal's background is probed, or the
     // theme changes, this string changes and every block is laid out again.
     const palette = [
@@ -115,7 +135,9 @@ export class ChatTranscript extends Container {
       // screen answered a keystroke a fifth of a second late. Only a block that changed pays.
       const hit = this.#laid.get(child);
       if (hit !== undefined && hit.width === width && hit.palette === palette && hit.rail === rail && hit.role === role && hit.showRail === showRail && sameLines(hit.block, block)) {
+        const from = lines.length;
         lines.push(...hit.piece);
+        this.#rows.push({ child, from, to: lines.length });
         continue;
       }
       const piece = ((): string[] => {
@@ -166,7 +188,9 @@ export class ChatTranscript extends Container {
         return piece;
       })();
       this.#laid.set(child, { width, palette, rail, role, showRail, block, piece });
+      const from = lines.length;
       lines.push(...piece);
+      this.#rows.push({ child, from, to: lines.length });
     }
     return lines;
   }

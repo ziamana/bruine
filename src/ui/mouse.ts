@@ -75,7 +75,8 @@ export interface MouseRead extends ParsedChunk {
  */
 export interface MouseControl {
   hit(row: number, col: number): boolean;
-  activate(): void;
+  /** The point that was pressed, so one control can serve several targets. */
+  activate(row: number, col: number): void;
 }
 
 export interface MouseFeatureOptions {
@@ -216,7 +217,7 @@ export class MouseFeature {
         // selection is painted, and a release that follows the press finds nothing
         // to copy — the press was a command, and it has already been run.
         if (this.#control?.hit(sample.row, sample.col) === true) {
-          this.#control.activate();
+          this.#control.activate(sample.row, sample.col);
           this.#repaint();
           continue;
         }

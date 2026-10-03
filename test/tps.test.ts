@@ -51,7 +51,7 @@ test("an unreported token count remains unknown even when chunks arrive regularl
   expect(meter.measuredTps).toBe(0);
 });
 
-test("the footer receives measured output usage, never chunk throughput or the previous request's speed", () => {
+test("the footer replaces a labelled text estimate with measured usage and clears the previous request's speed", () => {
   const fake = fakeCtx();
   const state: Record<string, unknown> = { tps: 999 };
   const ui = {
@@ -70,8 +70,11 @@ test("the footer receives measured output usage, never chunk throughput or the p
     frame("chunk", 1001, { type: "text-delta", text: "Another buffered chunk." });
     expect(state.tps).toBe(0);
     frame("chunk", 2000, { type: "text-delta", text: "Done." });
+    expect(state.tps).toBeGreaterThan(0);
+    expect(state.tpsEstimated).toBe(true);
     frame("chunk", 2100, { type: "usage", usage: { outputTokens: 60 } });
     expect(state.tps).toBe(60);
+    expect(state.tpsEstimated).toBe(false);
     frame("chunk", 2200, { type: "finish" });
     frame("end", 2300);
     expect(state.tps).toBe(60);

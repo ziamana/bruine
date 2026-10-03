@@ -193,6 +193,39 @@ test("reasoning: word by word, whole words only, at least 10 changes (T25.3)", a
   });
 });
 
+test("a click on the thought opens the whole reasoning, and a second click closes it (D6)", async () => {
+  await scenario("thoughtclick", [reasoning(), textScript("THOUGHT_CLICK_DONE")], async (h) => {
+    await h.prompt("Think through the problem");
+    await h.waitFor("REASONING_DONE");
+    await h.waitStable(400, 2000);
+    // Collapsed: the duration and nothing else. The reasoning is not on screen,
+    // and a user cannot get it back by asking again.
+    expect(h.screen().join("\n")).toContain("∴ Thought for");
+    expect(h.screen().join("\n")).not.toContain("Alpha Beta");
+    const row = h.screen().findIndex((line) => line.includes("Thought for"));
+    expect(row).toBeGreaterThan(0);
+    const click = async (): Promise<void> => {
+      const at = h.screen().findIndex((line) => line.includes("∴")) === row ? row : h.screen().findIndex((line) => line.includes("Thought for"));
+      h.type(`\x1b[<0;4;${at + 1}M`);
+      h.type(`\x1b[<0;4;${at + 1}m`);
+      await h.waitStable(300, 1500);
+    };
+    await click();
+    // Open: every sentence the model thought, wrapped under the line that opened it.
+    const open = h.screen().join("\n");
+    expect(open).toContain("Alpha Beta Gamma Delta");
+    expect(open).toContain("Epsilon Zeta Eta Theta");
+    expect(open).toContain("Iota Kappa");
+    expect(open).toContain("∴ Thought for");
+    await h.dump("thought-open");
+    await click();
+    // And closed again, from the same gesture, back to the duration alone.
+    const closed = h.screen().join("\n");
+    expect(closed).toContain("∴ Thought for");
+    expect(closed).not.toContain("Alpha Beta");
+  });
+});
+
 test("escape: abort stream within one second and accept another turn", async () => {
   const slow: Script = { chunks: Array.from({ length: 200 }, (_, i) => ({ delta: { content: `word${i} ` }, delayMs: 100 })) };
   await scenario("escape", [slow, textScript("SECOND_TURN_WORKS")], async (h) => {

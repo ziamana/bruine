@@ -4,7 +4,8 @@
  * t0 = first delta, t1 = last delta, n = usage.outputTokens (or delta count
  * estimate when no usage). Decode TPS = n / (t1 - t0), shown for the LAST
  * finished call. Delta counts are a legacy estimate, not a token measurement:
- * the UI uses measuredTps, which requires output usage and a usable interval.
+ * measuredTps requires output usage and a usable interval. During streaming,
+ * estimatedTps uses received text volume and is explicitly labelled approximate.
  * Prefill pp = new input tokens / (t0 - request start), shown only when > 0.
  */
 export interface TpsUsage {
@@ -34,6 +35,9 @@ export class TpsMeter {
   #deltas = 0;
   #tps = 0;
   #measuredTps = 0;
+  #estimatedTps = 0;
+  #textBytes = 0;
+  #firstTextBytes = 0;
   #pp: number | undefined;
   #cachePct: number | undefined;
   #cacheFirst = false;
@@ -51,12 +55,17 @@ export class TpsMeter {
     this.#t1 = undefined;
     this.#deltas = 0;
     this.#measuredTps = 0;
+    this.#estimatedTps = 0;
+    this.#textBytes = 0;
+    this.#firstTextBytes = 0;
     this.#pp = undefined;
   }
 
   /** One decode delta (reasoning/text/tool-call) at the given time. */
-  delta(timeMs: number): void {
+  delta(timeMs: number, text = ""): void {
+    this.#textBytes += Buffer.byteLength(text, "utf8");
     if (this.#t0 === undefined) {
+      this.#firstTextBytes = this.#textBytes;
       this.#t0 = timeMs;
       this.#t1 = timeMs;
       this.#deltas = 1;
@@ -67,6 +76,11 @@ export class TpsMeter {
     this.#deltas += 1;
     const dt = (timeMs - this.#t0) / 1000;
     this.#tps = dt > 0 ? (this.#deltas - 1) / dt : 0;
+    // Roughly four UTF-8 bytes per token. This estimates text, never SSE chunks.
+    // Exclude the first buffered payload, whose generation time is unknown.
+    const bytes = this.#textBytes - this.#firstTextBytes;
+    this.#estimatedTps = dt * 1000 >= MIN_DECODE_MS && Number.isFinite(dt) && bytes > 0
+      ? bytes / 4 / dt : 0;
   }
 
   /** Usage chunk at the end of a call: final decode rate + prefill rate. */
@@ -137,6 +151,9 @@ export class TpsMeter {
     this.#deltas = 0;
     this.#tps = 0;
     this.#measuredTps = 0;
+    this.#estimatedTps = 0;
+    this.#textBytes = 0;
+    this.#firstTextBytes = 0;
     this.#pp = undefined;
     this.#cachePct = undefined;
     this.#cacheFirst = false;
@@ -150,6 +167,11 @@ export class TpsMeter {
   /** Tokens/s backed by model usage; zero means there is no reliable reading. */
   get measuredTps(): number {
     return this.#measuredTps;
+  }
+
+  /** Local text-volume estimate for streams that report usage only at the end. */
+  get estimatedTps(): number {
+    return this.#estimatedTps;
   }
 
   get pp(): number | undefined {

@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { ChatTranscript } from "../src/ui/chat-layout.js";
 import { ToolCallComponent } from "../src/ui/tool-call-component.js";
@@ -75,4 +75,71 @@ test("a diff block at 30 columns and in ASCII: no band, and the sign still reads
   expect(strip(text)).toMatch(/-\sb/);
   expect(strip(text)).toMatch(/\+\sc/);
   for (const row of t.render(30)) expect(visibleWidth(row)).toBeLessThanOrEqual(30);
+});
+
+describe("a thought you can open and close (D6)", () => {
+  const thought = (): ReasoningComponent => {
+    const r = new ReasoningComponent(() => 0, UNICODE_ICONS);
+    r.push("Inspect the project first. ");
+    r.push("Then read the tests. ");
+    r.end();
+    return r;
+  };
+  const shown = (c: { render(w: number): string[] }, w = 60): string => c.render(w).map(strip).join("\n");
+
+  test("a click opens the whole thought and a second click closes it", () => {
+    const r = thought();
+    // Closed: the duration alone, and none of what the model actually thought.
+    expect(r.clickable).toBe(true);
+    expect(shown(r)).toContain("∴ Thought for");
+    expect(shown(r)).not.toContain("Inspect the project first");
+    r.click();
+    const open = shown(r);
+    // The whole thought, not the last complete sentence the live line was keeping.
+    expect(open).toContain("Inspect the project first.");
+    expect(open).toContain("Then read the tests.");
+    // The line that opened it is still the line that closes it.
+    expect(open).toContain("∴ Thought for");
+    r.click();
+    expect(shown(r)).not.toContain("Inspect the project first");
+    expect(shown(r)).toContain("∴ Thought for");
+  });
+
+  test("a thought that is still running cannot be clicked open", () => {
+    const r = new ReasoningComponent(() => 0, UNICODE_ICONS);
+    r.push("Working it out ");
+    expect(r.clickable).toBe(false);
+    r.click();
+    expect(shown(r)).toContain("Working it out");
+    expect(shown(r)).not.toContain("Thought for");
+  });
+
+  test.each([100, 60, 30])("the open thought fits %i columns", (width) => {
+    const r = thought();
+    r.push("A question long enough to need more than one line at this width, and then some. ");
+    r.click();
+    for (const line of r.render(width)) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+  });
+
+  test("a press finds the thought on its own row, and nothing else claims one", () => {
+    const t = new ChatTranscript(UNICODE_ICONS);
+    t.addChild(userMessageComponent("Read the project"));
+    const r = thought();
+    t.addChild(r);
+    const bash = new ToolCallComponent("bash", () => 0, UNICODE_ICONS);
+    bash.setArgs('{"command":"pnpm test"}');
+    bash.result(true, "All tests passed");
+    t.addChild(bash);
+    const rows = t.render(60).map(strip);
+    const at = rows.findIndex((line) => line.includes("∴ Thought for"));
+    expect(at).toBeGreaterThan(0);
+    // The row the thought is on resolves to the thought, so a press there is a
+    // command and not the first half of a selection.
+    expect(t.hitTest(at)).toBe(r);
+    // A row that belongs to a tool call claims nothing: that press selects.
+    const tool = rows.findIndex((line) => line.includes("pnpm test"));
+    expect(tool).toBeGreaterThan(at);
+    expect(t.hitTest(tool)).toBeUndefined();
+    expect(t.hitTest(rows.length + 5)).toBeUndefined();
+  });
 });

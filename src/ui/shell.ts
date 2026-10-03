@@ -55,6 +55,20 @@ export class Shell extends Container {
   #previous: string[] = [];
   /** Lines the window is held above the live end. 0 is the live edge. */
   #back = 0;
+  /**
+   * Where the transcript's own rows sit in the frame we last composed (D6).
+   *
+   * A press arrives as a screen row, and the transcript is only part of the frame,
+   * so something has to know the difference. The shell is what composed the frame,
+   * so the shell is what knows: the frame rows the transcript occupies, and the
+   * offset that turns one into the other. A windowed frame shows a slice of the
+   * history, which is the header and the transcript as one document, so the same
+   * arithmetic answers for both — and the band below the window is nobody's row,
+   * which is why the range is a range and not a count.
+   */
+  #transcriptFrom = 0;
+  #transcriptTo = 0;
+  #transcriptOffset = 0;
 
   constructor(
     head: readonly Component[],
@@ -117,7 +131,10 @@ export class Shell extends Container {
     this.#ingest([...top, ...live]);
     // At rest the transcript is printed whole and the terminal scrolls it, which is
     // what it has always done: the window is a mode, not the default frame.
-    if (this.#back === 0 && this.hint === undefined) return [...top, ...live, ...bottom];
+    if (this.#back === 0 && this.hint === undefined) {
+      this.#placed(top.length, top.length + live.length, top.length);
+      return [...top, ...live, ...bottom];
+    }
 
     // The hint is measured before the window, so it can never be the row that
     // pushes the composer off the bottom — and it draws nothing at the live edge.
@@ -126,7 +143,10 @@ export class Shell extends Container {
       this.hint.visible = this.#back > 0;
       hint.push(...this.hint.render(width));
     }
-    if (this.#back === 0) return [...top, ...live, ...bottom];
+    if (this.#back === 0) {
+      this.#placed(top.length, top.length + live.length, top.length);
+      return [...top, ...live, ...bottom];
+    }
 
     const rows = Math.max(MIN_ROWS, this.rows());
     const area = Math.max(1, rows - hint.length - bottom.length);
@@ -153,7 +173,24 @@ export class Shell extends Container {
     // window opens; the mark paints nothing, and every windowed frame carries it, so
     // moving inside the window is still a repaint of what moved.
     if (frame.length > 0) frame[0] = `${HELD_MARK}${frame[0]!}`;
+    // The window shows history rows `from..to`, and history row `top.length + r` is
+    // transcript row `r`, so a frame row maps back by one subtraction. The window is
+    // the only part of a held frame that is the transcript: the hint and the band
+    // below it belong to nobody.
+    this.#placed(gap, gap + window.length, gap + top.length - from);
     return frame;
+  }
+
+  /** The transcript row a frame row holds, or undefined when it holds something else. */
+  transcriptRowAt(frameRow: number): number | undefined {
+    if (frameRow < this.#transcriptFrom || frameRow >= this.#transcriptTo) return undefined;
+    return frameRow - this.#transcriptOffset;
+  }
+
+  #placed(from: number, to: number, offset: number): void {
+    this.#transcriptFrom = from;
+    this.#transcriptTo = to;
+    this.#transcriptOffset = offset;
   }
 
   /**

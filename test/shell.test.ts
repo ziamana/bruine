@@ -308,6 +308,41 @@ describe("the bar keeps a row of air under it", () => {
   });
 });
 
+describe("a frame row is mapped back to the transcript row it holds (D6)", () => {
+  /** A shell whose transcript is long enough to be windowed, with a 2-row header. */
+  function shellWith(rows: number): { shell: Shell; live: Component } {
+    const live = block(...Array.from({ length: rows }, (_, i) => `line ${String(i)}`));
+    return { shell: new Shell([block("head one"), block("head two")], live, [block("editor")], () => 20), live };
+  }
+
+  test("at rest, the transcript starts under the header", () => {
+    const { shell, live } = shellWith(30);
+    const frame = shell.render(40).map(strip);
+    // Two header rows, so transcript row 0 is frame row 2.
+    expect(shell.transcriptRowAt(2)).toBe(0);
+    expect(shell.transcriptRowAt(1)).toBeUndefined();
+    expect(shell.transcriptRowAt(2 + live.render(40).length - 1)).toBe(live.render(40).length - 1);
+    // Past the transcript is the band, which belongs to nobody.
+    expect(shell.transcriptRowAt(frame.length)).toBeUndefined();
+  });
+
+  test("a held window maps its own slice back to the same transcript rows", () => {
+    const { shell } = shellWith(30);
+    shell.render(40);
+    shell.scrollBy(6);
+    const frame = shell.render(40).map(strip);
+    // The window is the tail of the history less the 6 rows below it, so the line
+    // drawn on a frame row is the transcript line that row really holds.
+    for (const row of [0, 1, 5, frame.length - 3]) {
+      const at = shell.transcriptRowAt(row);
+      if (at === undefined) continue;
+      expect(strip(frame[row]!)).toBe(`line ${String(at)}`);
+    }
+    // The rows the gap and the band occupy are nobody's.
+    expect(shell.transcriptRowAt(frame.length - 1)).toBeUndefined();
+  });
+});
+
 describe("PageUp keeps the composer where the user left it", () => {
   /** The one test that has to be about the real shell: the claim is about the screen. */
   test("the band is on the last rows while the transcript is read from above", async () => {

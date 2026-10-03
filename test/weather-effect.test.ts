@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { WeatherBackdrop, WEATHER_EFFECTS, parseWeatherEffect, readWeatherEffect, saveWeatherEffect, weatherLevel, type WeatherEffect } from "../src/ui/weather-effect.js";
+import { WeatherBackdrop, WEATHER_EFFECTS, parseWeatherEffect, readWeatherEffect, saveWeatherEffect, weatherIsStorm, weatherLevel, type WeatherEffect } from "../src/ui/weather-effect.js";
+import { effortToRain, setRainLevel } from "../src/ui/rain.js";
 import { runEffectCommand, type EffectUi } from "../src/plugins/effect-command.js";
 import { BRUINE_COMMANDS } from "../src/plugins/repl.js";
 import { strip } from "./fakes.js";
@@ -24,6 +25,26 @@ test("auto follows activity; manual modes keep their level", () => {
   for (const effect of ["bruine", "pluie", "foudre", "off"] as const) expect(weatherLevel(effect, true)).toBe(weatherLevel(effect, false));
   expect(weatherLevel("foudre", false)).toBeGreaterThan(weatherLevel("pluie", false));
   expect(weatherLevel("off", true)).toBe(0);
+});
+
+test("auto rains as hard as the effort while working, each effort its own weather", () => {
+  const efforts = ["low", "medium", "high", "xhigh", "max"];
+  const levels = efforts.map((effort) => weatherLevel("auto", true, effortToRain(effort)));
+  for (let i = 1; i < levels.length; i += 1) expect(levels[i]!).toBeGreaterThan(levels[i - 1]!);
+  // At rest the effort does not matter: auto is a drizzle.
+  for (const effort of efforts) expect(weatherLevel("auto", false, effortToRain(effort))).toBe(weatherLevel("auto", false, 0));
+  // The level follows the footer's effort by default.
+  setRainLevel("xhigh");
+  expect(weatherLevel("auto", true)).toBe(weatherLevel("auto", true, effortToRain("xhigh")));
+  setRainLevel(undefined);
+});
+
+test("the storm is foudre, or auto at max while working", () => {
+  expect(weatherIsStorm("foudre", false, "low")).toBe(true);
+  expect(weatherIsStorm("auto", true, "max")).toBe(true);
+  expect(weatherIsStorm("auto", true, "xhigh")).toBe(false);
+  expect(weatherIsStorm("auto", false, "max")).toBe(false);
+  expect(weatherIsStorm("pluie", true, "max")).toBe(false);
 });
 
 test("persist canonical choice, keep unrelated and legacy config, reload on restart", async () => {

@@ -108,7 +108,7 @@ MIT. Everything that runs locally stays MIT.
 
 ## Chat weather
 
-Use `/effect` for a live preview picker, or choose directly: `/effect bruine` (quiet drizzle), `/effect pluie` (steady rain), `/effect foudre` (heavy rain with distant lavender lightning), `/effect auto` (drizzle at rest, rain while working), or `/effect off`.
+Use `/effect` for a live preview picker, or choose directly: `/effect bruine` (quiet drizzle), `/effect pluie` (steady rain), `/effect foudre` (heavy rain with distant lavender lightning), `/effect auto` (drizzle at rest; while working, rain as hard as the reasoning effort: each of low, medium, high, xhigh and max has its own weather, and max brings distant lightning), or `/effect off`.
 `/effect on` is an alias for `/effect auto`. Enter saves the choice in `bruine.json`; Escape cancels the preview. Weather is rendered locally and uses no model tokens.
 It follows the visible screen, including empty space below the composer and while reading back. It stays clear of the composer, controls and painted cards, pauses while selecting text, and follows `BRUINE_NO_ANIMATION`, `BRUINE_NO_RAIN`, ASCII and no-color settings.
 

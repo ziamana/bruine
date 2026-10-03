@@ -193,6 +193,11 @@ export interface DecisionContext {
   sessionAllowed: ReadonlySet<string>;
   /** Absolute project dir. */
   projectDir: string;
+  /**
+   * What the user said about the MCP server a tool comes from, when it is one (`mcp__<server>__…`):
+   * `readOnly` servers only read, `allowed` is a tool on the server's `alwaysAllow` list.
+   */
+  mcp?: (name: string) => { readOnly: boolean; allowed: boolean } | undefined;
 }
 
 export function parseArgs(raw: string): Record<string, unknown> {
@@ -348,6 +353,10 @@ export function decide(
   if (ctx.plan && (WRITE_TOOLS.has(name) || isBash)) {
     return "deny";
   }
+  // An MCP tool is an action on someone else's system (an issue filed, a row written) unless the
+  // user declared its server read-only: Plan mode refuses it like any other change.
+  const mcp = name.startsWith("mcp__") ? ctx.mcp?.(name) ?? { readOnly: false, allowed: false } : undefined;
+  if (ctx.plan && mcp !== undefined && !mcp.readOnly) return "deny";
 
   // 2. Full access asks for nothing.
   if (ctx.mode === "full") return "allow";
@@ -378,8 +387,9 @@ export function decide(
   // 4. "Always for this session" rules.
   if (ctx.sessionAllowed.has(ruleKey(name, execArgs))) return "allow";
 
-  // 5. Read-only tools.
+  // 5. Read-only tools, and the MCP tools the user let run on their own.
   if (READ_ONLY_TOOLS.has(name)) return "allow";
+  if (mcp !== undefined && (mcp.readOnly || mcp.allowed)) return "allow";
 
   if (isBash) {
     if (ctx.mode === "ask") return "ask";

@@ -59,7 +59,18 @@ export class Harness {
     scripts: Script[],
     permissionMode = "ask",
     ascii = false,
-    opts: { template?: TemplateCaps; legacy?: boolean; baseUrlOverride?: string; server?: ServerOptions; extraModel?: string; env?: Record<string, string> } = {},
+    opts: {
+      template?: TemplateCaps;
+      legacy?: boolean;
+      baseUrlOverride?: string;
+      server?: ServerOptions;
+      extraModel?: string;
+      env?: Record<string, string>;
+      /** Extra top-level bruine.json keys (e.g. mcpServers), merged over the defaults. */
+      bruineJson?: Record<string, unknown>;
+      /** Files to write into the project before bruine starts, by relative path. */
+      files?: Record<string, string>;
+    } = {},
   ) {
     const home = await mkdtemp(join(tmpdir(), "bruine-e2e-home-"));
     const project = await mkdtemp(join(tmpdir(), "bruine-e2e-project-"));
@@ -120,9 +131,11 @@ export class Harness {
               baseUrl: opts.baseUrlOverride ?? server.url,
             },
           },
+          ...(opts.bruineJson ?? {}),
         }),
       );
       await writeFile(join(project, "note.txt"), "E2E_READ_SENTINEL\n");
+      for (const [file, text] of Object.entries(opts.files ?? {})) await writeFile(join(project, file), text);
       const { dir } = await ensureProfile(home);
       // Reuse the installed bundles offline. Windows junctions need no symlink privilege.
       const modules = join(dir, "node_modules");

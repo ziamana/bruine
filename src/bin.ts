@@ -408,6 +408,29 @@ async function main(): Promise<void> {
   // or a non-TTY stdout.
   void checkForUpdate({ dshHome }).catch(() => undefined);
 
+  // MCP: a project's .mcp.json starts programs, so it is approved before the session starts.
+  try {
+    const { approveProjectServers } = await import("./mcp/approve.js");
+    const interactive = !headless && process.stdin.isTTY === true && process.stdout.isTTY === true;
+    await approveProjectServers(dshHome, process.cwd(), {
+      write: (line) => (headless ? console.error(line) : console.log(line)),
+      ...(interactive
+        ? {
+            ask: async (question: string) => {
+              const rl = createInterface({ input: process.stdin, output: process.stdout });
+              try {
+                return await new Promise<string>((done) => rl.question(question, done));
+              } finally {
+                rl.close();
+              }
+            },
+          }
+        : {}),
+    });
+  } catch (error) {
+    console.error(`bruine: could not read the MCP settings (${(error as Error).message}); MCP servers are off for this session.`);
+  }
+
   // C7: no boot drawing between the launcher and the session. The wordmark is the
   // setup welcome's, and the session's own header is two plain lines; an animated
   // mark here meant the interactive screen waited on an IPC handshake before it

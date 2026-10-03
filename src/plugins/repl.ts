@@ -17,6 +17,8 @@ import bruineEffort, { BRUINE_EFFORT_SERVICE } from "./effort.js";
 import bruineModel, { BRUINE_MODEL_SERVICE } from "./model.js";
 import { BRUINE_RENDER_SERVICE } from "./render.js";
 import { readAvailableSkills, type AvailableSkill } from "../setup/skills.js";
+import { BRUINE_MCP_SERVICE, type BruineMcpService } from "./mcp.js";
+import { runMcpCommand } from "../mcp/command.js";
 import { recentSessions, replaySession, sessionChoice } from "./session-history.js";
 import { configFiles, openInEditor, resolveEditor } from "./config-edit.js";
 import { formatTasks, listTasks, stopTask, type JobsLike, type SubagentsLike } from "./tasks.js";
@@ -68,6 +70,7 @@ export const BRUINE_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/reload", description: "Re-read settings.yaml and the terminal background" },
   { name: "/mouse", description: "Turn mouse selection on or off (the wheel scrolls while off)" },
   { name: "/effect", description: "Choose bruine, pluie, foudre, auto (on), or off" },
+  { name: "/mcp", description: "List MCP servers and their tools; /mcp enable|disable <name>" },
   { name: "/help", description: "Show commands and keys" },
   { name: "/exit", description: "Quit bruine (also ctrl+d)" },
 ];
@@ -782,6 +785,15 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     }
     if (cmd === "/resume") {
       await resumeConversation();
+      return;
+    }
+    if (cmd === "/mcp") {
+      const mcp = ctx.get(BRUINE_MCP_SERVICE) as BruineMcpService | undefined;
+      try {
+        reply(runMcpCommand(clean, mcp?.status() ?? [], mcp?.problems ?? [], { home: runtimeHome(), projectDir: process.cwd() }));
+      } catch (error) {
+        reply(`Could not update the MCP settings: ${(error as Error).message}`);
+      }
       return;
     }
     if (cmd === "/verify") {

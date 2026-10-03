@@ -36,6 +36,33 @@ training), and the offer can end without notice, so keep another model in reach.
 | Works on | Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal |
 | herdr | Works with herdr: shows up as `bruine` in `herdr agent list`. |
 
+## MCP servers
+
+bruine runs the tools of any MCP server, in the format Claude Code and Cursor use, so a server row
+from a README or from your Claude Code config works as it is. Put your own servers under
+`mcpServers` in `~/.bruine/bruine.json`; a project can share its own in `.mcp.json` at its root.
+
+```json
+{
+  "mcpServers": {
+    "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" } },
+    "docs": { "type": "http", "url": "https://example.com/mcp", "readOnly": true }
+  }
+}
+```
+
+- The tools show up as `mcp__<server>__<tool>` and go through the same permission gate as every
+  other tool: they ask first in Ask mode, are judged in Auto, and Plan mode refuses them. A server
+  marked `"readOnly": true` runs without asking (also in Plan mode); `"alwaysAllow": ["tool"]`
+  lets chosen tools through. `${VAR}` and `${VAR:-default}` are read from the environment.
+- A project's `.mcp.json` starts programs on your machine, so its servers only run once you have
+  seen what they run and said yes. The answer is kept per project, and a changed command asks again.
+- Servers connect before the first turn and the tool list stays the same for the whole session, so
+  the prompt cache survives. `/mcp` lists the servers, their state and tools; `/mcp enable <name>`
+  and `/mcp disable <name>` apply to the next session.
+- Tools are bridged; MCP resources and prompts are not (yet). Streamable HTTP is supported, the old
+  SSE transport is not.
+
 ## Commands
 
 ```
@@ -55,7 +82,7 @@ task denies any tool action that would need a permission prompt; use `--permissi
 only when that task should run with full access.
 
 Inside a session, `/` opens the command palette: `/new`, `/resume`, `/verify`, `/compact`, `/plan`, `/permissions`,
-`/model`, `/provider`, `/effort`, `/skills`, `/reload`, `/help`, `/exit`. `f2` walks the routes you
+`/model`, `/provider`, `/effort`, `/skills`, `/mcp`, `/reload`, `/help`, `/exit`. `f2` walks the routes you
 used recently. You can keep typing while bruine works: a prompt sent during a turn waits above the
 box and goes out, as its own turn, when the current one ends (`↑` on an empty box takes the last one
 back to edit; `escape` stops the turn and puts the queued prompts back in the box, unsent). `ctrl+t` shows the task list, `ctrl+o` expands tool output, `ctrl+e` cycles the

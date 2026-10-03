@@ -6,6 +6,7 @@
  */
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { cloudKeyEnv } from "./cloud.js";
 import {
   renderSettingsYaml,
   writeEnvVar,
@@ -35,8 +36,8 @@ export type StepId = (typeof STEPS)[number];
 export interface RolePick {
   /** A discovered server (localhost / network / tailscale / manual). */
   discovered?: Discovered;
-  /** Or a cloud route handled by dsh-base / the openrouter route. */
-  cloud?: "deepseek-official" | "openrouter";
+  /** Or a cloud route: the engine's own DeepSeek route, or a provider of the pi-ai catalog. */
+  cloud?: string;
   model: string;
   /**
    * Served context window, from the SERVER (`meta.n_ctx` / `/props`) or typed
@@ -55,7 +56,6 @@ export function roleFromModelRef(ref: {
   template?: TemplateCaps;
 }): RolePick | undefined {
   if (ref.provider === "deepseek-official") return { cloud: "deepseek-official", model: ref.model };
-  if (ref.provider === "openrouter") return { cloud: "openrouter", model: ref.model };
   if (typeof ref.baseUrl === "string" && ref.baseUrl !== "") {
     const u = new URL(ref.baseUrl);
     const port = Number(u.port) || (u.protocol === "https:" ? 443 : 80);
@@ -114,16 +114,11 @@ export function defaultAnswers(): SetupAnswers {
   };
 }
 
-const CLOUD_KEY_ENV: Record<"deepseek-official" | "openrouter", string> = {
-  "deepseek-official": "DEEPSEEK_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-};
-
 /** Env names whose keys are required by the chosen cloud roles. */
 export function requiredKeyEnvs(answers: SetupAnswers): string[] {
   const envs = new Set<string>();
   for (const role of [answers.roles.main, answers.roles.fast, answers.roles.vision]) {
-    if (role?.cloud !== undefined) envs.add(CLOUD_KEY_ENV[role.cloud]);
+    if (role?.cloud !== undefined) envs.add(cloudKeyEnv(role.cloud));
   }
   return [...envs];
 }
@@ -417,12 +412,15 @@ export class SetupFlow {
       visionRef = visionFresh !== undefined ? reuseForRole("vision", visionFresh) : undefined;
     }
 
-    if (a.roles.main?.cloud === "openrouter" || a.roles.fast?.cloud === "openrouter" || a.roles.vision?.cloud === "openrouter") {
-      const origOpenRouter = origProviders?.openrouter;
-      providers.openrouter =
-        origOpenRouter !== undefined && origOpenRouter !== null && typeof origOpenRouter === "object"
-          ? deepCopy(origOpenRouter)
-          : { apiKeyEnv: "OPENROUTER_API_KEY" };
+    // A cloud provider of the catalog needs only its key: the engine knows its endpoint and
+    // models. The engine's own DeepSeek route needs nothing at all.
+    for (const cloud of new Set([a.roles.main, a.roles.fast, a.roles.vision].flatMap((r) => (r?.cloud !== undefined ? [r.cloud] : [])))) {
+      if (cloud === "deepseek-official") continue;
+      const orig = origProviders?.[cloud];
+      providers[cloud] =
+        orig !== undefined && orig !== null && typeof orig === "object"
+          ? deepCopy(orig)
+          : { apiKeyEnv: cloudKeyEnv(cloud) };
     }
 
     const doc: SettingsDoc = { ...(origDoc ?? {}) };

@@ -2,7 +2,7 @@
 
 An interactive terminal coding agent that runs **your** models.
 
-Point kumo at a local llama.cpp server, OpenRouter, DeepSeek, or anything that speaks the
+Point kumo at a local llama.cpp server, any cloud provider (DeepSeek, Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI and about twenty more), or anything that speaks the
 OpenAI-compatible `/v1` API. It edits files, runs commands, and asks before anything risky. It is a
 profile plus a bundle of plugins on top of [DeepSeek Harness](https://github.com/deepseek-ai) (dsh),
 not a fork, so harness updates arrive without a merge.

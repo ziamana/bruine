@@ -38,6 +38,7 @@ import {
   type SetupAnswers,
   type Theme,
 } from "./flow.js";
+import { DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_OFFICIAL, loadCloudProviders, type CloudProvider } from "./cloud.js";
 import { SPACE_BUNNY_NOTICE, spaceBunnyPick } from "./spacebunny.js";
 import {
   LOCAL_PORTS,
@@ -251,6 +252,12 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
     }
   }
 
+  /** A route with no endpoint of its own is a cloud one: the engine's DeepSeek, or a catalog provider. */
+  const isCloudRoute = (name: string): boolean => {
+    if (name === "deepseek-official") return true;
+    const declared = (settingsDoc?.["llm-pi-ai"] as { providers?: Record<string, { baseURL?: unknown } | null> } | undefined)?.providers?.[name];
+    return declared !== undefined && declared !== null && typeof declared === "object" && declared.baseURL === undefined;
+  };
   const byBaseUrl = (baseUrl: string): Discovered | undefined => discoveries.find((d) => d.baseUrl === baseUrl);
   const byProvider = (pName: string): Discovered | undefined =>
     discoveries.find((d) => d.providerName === pName);
@@ -260,7 +267,7 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
   if (typeof def?.provider === "string" && typeof def?.model === "string" && def.provider !== "" && def.model !== "") {
     const pName = def.provider;
     const mId = def.model;
-    if (pName === "deepseek-official" || pName === "openrouter") {
+    if (isCloudRoute(pName)) {
       roles.main = { cloud: pName, model: mId };
     } else {
       const d = byProvider(pName);
@@ -310,7 +317,7 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
       }
       const ref = kumoDoc.models[role];
       if (ref?.provider === undefined || ref.model === undefined) continue;
-      if (ref.provider === "deepseek-official" || ref.provider === "openrouter") {
+      if (isCloudRoute(ref.provider)) {
         roles[role] = { cloud: ref.provider, model: ref.model };
         continue;
       }
@@ -682,6 +689,8 @@ export async function runFullSetup(
   // The setup wizard owns the terminal from the first frame. Clear any shell
   // output above it so the animated welcome is the only visible content.
   terminal.clearScreen();
+  // The provider catalog is read while the welcome plays, so the first cloud pick is instant.
+  void loadCloudProviders();
   tui.start();
   try {
     return await drive();
@@ -1117,6 +1126,53 @@ export async function runFullSetup(
     return { roles };
   }
 
+  /**
+   * A cloud provider, then one of its models: every provider the engine's catalog describes
+   * that needs only a key. The key itself is asked for on the keys step.
+   */
+  async function askCloud(label: string, current: RolePick | undefined): Promise<Outcome<RolePick>> {
+    setStatus("reading the provider catalog…");
+    const providers = await loadCloudProviders();
+    setStatus(stepTitle("roles"));
+    const items: SelectItem[] = providers.map((p) => ({
+      value: p.id,
+      label: p.name,
+      description: p.models.length > 0 ? `${p.keyEnv}  ·  ${String(p.models.length)} models` : p.keyEnv,
+    }));
+    const at = current?.cloud === undefined ? -1 : providers.findIndex((p) => p.id === current.cloud);
+    const ps = await selectStep(`Cloud provider for ${label} (type to filter)`, items, (i) => i, {
+      filter: true,
+      ...(at >= 0 ? { initial: at } : {}),
+    });
+    if (ps === BACK || ps === CANCEL) return ps;
+    const provider = providers[ps] as CloudProvider;
+    const def = provider.id === DEEPSEEK_OFFICIAL.id ? DEEPSEEK_DEFAULT_MODEL : undefined;
+    if (provider.models.length === 0) {
+      const typed = await lineStep(def !== undefined ? `Model id on ${provider.name} [${def}]: ` : `Model id on ${provider.name}: `);
+      if (typed === BACK || typed === CANCEL) return typed;
+      const model = typed.trim() === "" ? def : typed.trim();
+      if (model === undefined) throw new Error("model id required");
+      return { cloud: provider.id, model };
+    }
+    const modelItems: SelectItem[] = provider.models.map((m) => ({
+      value: m.id,
+      label: `${m.name}${m.name === m.id ? "" : `  (${m.id})`}${m.contextWindow !== undefined ? `  ·  ${fmtK(m.contextWindow)} ctx` : ""}${m.reasoning ? "  ·  thinking" : ""}`,
+    }));
+    modelItems.push({ value: "+", label: "+ Type a model id…" });
+    const curAt = current?.cloud === provider.id ? provider.models.findIndex((m) => m.id === current.model) : -1;
+    const ms = await selectStep(`Model on ${provider.name} (type to filter)`, modelItems, (i) => i, {
+      filter: true,
+      ...(curAt >= 0 ? { initial: curAt } : {}),
+    });
+    if (ms === BACK || ms === CANCEL) return ms;
+    const chosen = modelItems[ms] as SelectItem;
+    if (chosen.value !== "+") return { cloud: provider.id, model: chosen.value };
+    const typed = await lineStep(`Model id on ${provider.name}: `);
+    if (typed === BACK || typed === CANCEL) return typed;
+    if (typed.trim() === "") throw new Error("model id required");
+    return { cloud: provider.id, model: typed.trim() };
+  }
+
   async function askRole(
     label: string,
     opts: { required?: boolean; allowNone?: boolean; useMainDefault?: RolePick },
@@ -1130,8 +1186,7 @@ export async function runFullSetup(
     discoveries.forEach((d, i) =>
       items.push({ value: `s${String(i)}`, label: `${discoveredLabel(d)}  ·  ${d.baseUrl}` }),
     );
-    items.push({ value: "deepseek", label: "DeepSeek (cloud, needs an API key)" });
-    items.push({ value: "openrouter", label: "OpenRouter (cloud, needs an API key)" });
+    items.push({ value: "cloud", label: "Cloud provider…  (DeepSeek, Anthropic, OpenAI, Google, OpenRouter, Groq, and more; needs an API key)" });
     // T35: Skip (keep current) on the main pick skips the whole Roles step.
     // Preselect the current role so `kumo setup` shows what is there.
     let initial: number | undefined;
@@ -1141,7 +1196,7 @@ export async function runFullSetup(
       if (cur !== undefined) {
         const idx =
           cur.cloud !== undefined
-            ? items.findIndex((it) => it.value === (cur.cloud === "deepseek-official" ? "deepseek" : "openrouter"))
+            ? items.findIndex((it) => it.value === "cloud")
             : discoveries.findIndex((d) => d.host === cur.discovered?.host && d.port === cur.discovered?.port);
         const mapped = cur.cloud !== undefined ? idx : idx >= 0 ? idx + (opts.allowNone === true ? 1 : 0) + (opts.useMainDefault !== undefined ? 1 : 0) : -1;
         if (mapped >= 0) initial = mapped;
@@ -1153,7 +1208,7 @@ export async function runFullSetup(
       if (curFast !== undefined) {
         const idx =
           curFast.cloud !== undefined
-            ? items.findIndex((it) => it.value === (curFast.cloud === "deepseek-official" ? "deepseek" : "openrouter"))
+            ? items.findIndex((it) => it.value === "cloud")
             : discoveries.findIndex((d) => d.host === curFast.discovered?.host && d.port === curFast.discovered?.port);
         if (idx >= 0) {
           initial = curFast.cloud !== undefined ? idx : idx + 1;
@@ -1172,13 +1227,7 @@ export async function runFullSetup(
     if (item.value === "skip") return SKIP;
     if (item.value === "none") return undefined;
     if (item.value === "main") return opts.useMainDefault;
-    if (item.value === "deepseek" || item.value === "openrouter") {
-      const cloud = item.value === "deepseek" ? "deepseek-official" : "openrouter";
-      const def = cloud === "deepseek-official" ? "deepseek-flash" : "openrouter/auto";
-      const typed = await lineStep(`Model id on ${cloud} [${def}]: `);
-      if (typed === BACK || typed === CANCEL) return typed;
-      return { cloud, model: typed.trim() === "" ? def : typed.trim() };
-    }
+    if (item.value === "cloud") return askCloud(label, opts.required === true ? flow.answers.roles.main : flow.answers.roles.fast);
     const d = discoveries[Number(item.value.slice(1))] as Discovered;
     const modelItems: SelectItem[] = d.models.map((m) => {
       const ctx = d.modelInfos?.find((mi) => mi.id === m)?.contextWindow;

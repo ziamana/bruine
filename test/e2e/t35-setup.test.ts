@@ -486,8 +486,14 @@ test("first install with a cloud model: no Skip trap on the main model, and the 
     // Nothing is kept on a first install, so there is no Skip row to fall into.
     expect(h.text()).not.toContain("Skip (keep");
     expect(h.text()).not.toContain("(s skips)");
+    h.press("enter"); // Cloud provider…
+    await h.waitFor("Cloud provider for main");
+    // Not two providers any more: the engine's catalog, DeepSeek first.
+    expect(h.text()).toContain("Anthropic");
+    expect(h.text()).toContain("Groq");
+    expect(h.text()).toContain("GROQ_API_KEY");
     h.press("enter"); // DeepSeek
-    await h.waitFor("Model id on deepseek-official");
+    await h.waitFor("Model id on DeepSeek");
     h.press("enter");
     await h.until(() => h.text().includes("Role: fast"), 20_000, "fast role");
     expect(h.text()).not.toContain("(s skips)");
@@ -504,6 +510,61 @@ test("first install with a cloud model: no Skip trap on the main model, and the 
     expect(h.exit).toBeUndefined();
   } finally {
     await h.dump("t35-cloud-failure");
+    await h.close();
+  }
+});
+
+test("first install → Groq from the catalog → model, key, saved as a catalog route", async () => {
+  const home = await mkdtemp(join(tmpdir(), "kumo-t35-groq-"));
+  const h = await SetupPty.start(home);
+  try {
+    await h.waitFor("Choose your setup");
+    await h.waitFor("Quick setup");
+    await h.pressN("down", 1);
+    h.press("enter");
+    await h.waitFor("AI servers: found, add, or remove");
+    for (let i = 0; i < 8 && !(await h.selectedLine()).includes("Continue →"); i++) {
+      await h.pressN("down", 1);
+    }
+    h.press("enter");
+    await h.waitFor("Free model");
+    h.press("enter"); // No
+    await h.until(() => h.text().includes("Role: main"), 20_000, "roles step");
+    h.press("enter"); // Cloud provider…
+    await h.waitFor("Cloud provider for main");
+    h.type("groq");
+    await h.until(() => h.text().includes("Filter: groq_"), 20_000, "filtered providers");
+    h.press("enter");
+    await h.waitFor("Model on Groq");
+    expect(h.text()).toMatch(/\(\S+\)\s+·\s+\d+k ctx/);
+    h.press("enter"); // first model
+    await h.until(() => h.text().includes("Role: fast"), 20_000, "fast role");
+    h.press("enter"); // use main
+    await h.until(() => h.text().includes("Role: vision"), 20_000, "vision role");
+    h.press("enter"); // none
+    await h.waitFor("Enter GROQ_API_KEY (input is hidden):");
+    h.type("gsk_e2e_secret");
+    h.press("enter");
+    await h.until(() => h.text().includes("Default access mode"), 20_000, "mode step");
+    h.press("enter");
+    await h.until(() => h.text().includes("Web search"), 20_000, "search step");
+    h.type("s");
+    await h.until(() => h.text().includes("Skills: Space toggles"), 20_000, "skills step");
+    h.type("s");
+    await h.until(() => h.text().includes("Select your preferred theme"), 20_000, "theme step");
+    h.type("s");
+    await h.until(() => h.text().includes("Share anonymous usage data"), 20_000, "telemetry step");
+    h.type("s");
+    await h.until(() => h.text().includes("Summary"), 20_000, "summary step");
+    expect(h.text()).toMatch(/Main\s+groq/);
+    h.press("enter");
+    await h.waitFor("kumo: configuration saved.");
+    const settings = parseYaml(await readFile(join(home, "settings.yaml"), "utf8")) as Record<string, any>;
+    expect(settings["agent-default-model"].provider).toBe("groq");
+    expect(settings["llm-pi-ai"].providers.groq).toEqual({ apiKeyEnv: "GROQ_API_KEY" });
+    expect(await readFile(join(home, ".env"), "utf8")).toContain("GROQ_API_KEY=gsk_e2e_secret");
+  } finally {
+    await h.dump("t35-groq-failure");
     await h.close();
   }
 });

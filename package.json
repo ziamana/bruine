@@ -51,6 +51,7 @@
   "files": [
     "dist",
     "skills",
+    "THIRD_PARTY_NOTICES.md",
     "cordis.patch.yml"
   ],
   "scripts": {

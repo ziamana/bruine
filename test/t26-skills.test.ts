@@ -136,6 +136,31 @@ test("/skills lists usable home and project skills and completes their names", a
   expect(forced?.items.map((item) => item.value)).toEqual(["apex", "browser", "impeccable"]);
 });
 
+describe("syncSkills and the skills kumo ships", () => {
+  test("a skill the user linked keeps its link when kumo ships the same name", async () => {
+    const home = await fakeUserHome();
+    const skillsDir = join(home, ".kumo", "skills");
+    const bundled = join(home, "bundle");
+    await putSkill(join(bundled, "beta"), "beta", "shipped copy");
+    await syncSkills({ homeSkillsDir: skillsDir, bundledRoot: join(home, "no-bundle"), chosen: ["beta"], home });
+    const r = await syncSkills({ homeSkillsDir: skillsDir, bundledRoot: bundled, chosen: ["beta"], home });
+    expect(r.installed).toEqual([]);
+    expect((await lstat(join(skillsDir, "beta"))).isSymbolicLink()).toBe(true);
+    expect((await readInstalledSkills(skillsDir))[0]?.kind).toBe("linked");
+  });
+
+  test("with no link of the user's, the shipped copy is installed", async () => {
+    const home = await fakeUserHome();
+    const skillsDir = join(home, ".kumo", "skills");
+    const bundled = join(home, "bundle");
+    await putSkill(join(bundled, "beta"), "beta", "shipped copy");
+    const r = await syncSkills({ homeSkillsDir: skillsDir, bundledRoot: bundled, chosen: ["beta"], home });
+    expect(r.installed).toEqual(["beta"]);
+    expect((await readInstalledSkills(skillsDir))[0]?.kind).toBe("shipped");
+    expect(await readFile(join(skillsDir, "beta", "SKILL.md"), "utf8")).toContain("shipped copy");
+  });
+});
+
 describe("syncSkills links foreign skills (T26)", () => {
   test("accepted: source edits are visible through $DSH_HOME/skills/<name>/SKILL.md", async () => {
     const home = await fakeUserHome();
@@ -291,6 +316,7 @@ describe("wizard skills-step defaults (T26)", () => {
       "browser",
       "impeccable",
       "make-interfaces-feel-better",
+      "playwright-cli",
       "thermo-nuclear-code-quality-review",
       "youtube-transcript",
     ]);
@@ -308,6 +334,16 @@ describe("wizard skills-step defaults (T26)", () => {
     expect(initialSkillChecks(items, undefined, foundSkills)).toEqual(new Set([1, 2]));
     // A list the user already saved is theirs: the recommendation never overrides it.
     expect(initialSkillChecks(items, ["other"], foundSkills)).toEqual(new Set([3]));
+  });
+
+  test("first run: a recommended skill kumo ships is pre-checked too, and an ordinary shipped one is not", () => {
+    const items: CheckItem[] = [
+      { value: "#h", label: "Shipped with kumo", disabled: true },
+      { value: "code-review", label: "code-review" },
+      { value: "impeccable", label: "impeccable" },
+      { value: "playwright-cli", label: "playwright-cli" },
+    ];
+    expect(initialSkillChecks(items, undefined, [])).toEqual(new Set([2, 3]));
   });
 
   test("a saved list pre-checks exactly that; headers never check", () => {
@@ -487,4 +523,28 @@ describe("kumo skills command (T26)", () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-t26-cli-empty-"));
     expect(runSkillsCli(home)).toContain("No skills enabled");
   }, 30_000);
+});
+
+describe("skills written by other people, shipped with kumo", () => {
+  const theirs = ["impeccable", "make-interfaces-feel-better", "playwright-cli", "thermo-nuclear-code-quality-review", "youtube-transcript"];
+
+  test("each carries its own license file and is named in THIRD_PARTY_NOTICES.md", async () => {
+    const notices = await readFile(join(repoRoot, "THIRD_PARTY_NOTICES.md"), "utf8");
+    for (const name of theirs) {
+      const license = await readFile(join(repoRoot, "skills", name, "LICENSE"), "utf8");
+      expect(license, `${name}: LICENSE`).toMatch(/Apache License|MIT License/);
+      expect(notices, `${name}: notice`).toContain(`\`${name}\``);
+      expect(existsSync(join(repoRoot, "skills", name, "SKILL.md")), `${name}: SKILL.md`).toBe(true);
+    }
+  });
+
+  test("impeccable keeps the notice its author ships", () => {
+    expect(existsSync(join(repoRoot, "skills", "impeccable", "NOTICE.md"))).toBe(true);
+  });
+
+  test("the notices ship in the package", async () => {
+    const pkg = JSON.parse(await readFile(join(repoRoot, "package.json"), "utf8")) as { files: string[] };
+    expect(pkg.files).toContain("THIRD_PARTY_NOTICES.md");
+    expect(pkg.files).toContain("skills");
+  });
 });

@@ -55,10 +55,14 @@ describe("style (T24.1)", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("no em-dash anywhere in skills/**", () => {
+  test("no em-dash anywhere in kumo's own skills/**", () => {
     const root = join(__dirname, "..", "skills");
+    // The skills written by other people are shipped as their authors wrote them (see
+    // THIRD_PARTY_NOTICES.md): their wording is not ours to change.
+    const theirs = ["impeccable", "make-interfaces-feel-better", "playwright-cli", "thermo-nuclear-code-quality-review", "youtube-transcript"];
     const offenders: string[] = [];
     for (const file of skillFiles(root)) {
+      if (theirs.some((name) => file.startsWith(join(root, name)))) continue;
       const text = readFileSync(file, "utf8");
       if (text.includes("—")) offenders.push(file);
     }

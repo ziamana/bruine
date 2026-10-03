@@ -442,11 +442,14 @@ export function installedSkillsList(dshHome: string): string[] | undefined {
 }
 
 /**
- * Skills the setup pre-checks on a first run wherever they were found, not only under
- * the user home `.agents/skills`: they are linked from the folder they live in, never copied.
+ * Skills the setup pre-checks on a first run: the ones kumo ships (see THIRD_PARTY_NOTICES.md)
+ * and the same names found on the computer, in whichever agent's folder. A found one is
+ * linked from where it lives, never copied. `browser` is a user's own variant of the shipped
+ * `playwright-cli`; either is pre-checked when it exists.
  */
 export const RECOMMENDED_SKILLS: readonly string[] = [
   "browser",
+  "playwright-cli",
   "impeccable",
   "make-interfaces-feel-better",
   "thermo-nuclear-code-quality-review",
@@ -469,7 +472,7 @@ export function initialSkillChecks(
     if (item.disabled === true) return;
     if (saved !== undefined) {
       if (saved.includes(item.value)) checked.add(i);
-    } else if (found.some((f) => f.name === item.value && (f.source === "agents" || RECOMMENDED_SKILLS.includes(f.name)))) {
+    } else if (RECOMMENDED_SKILLS.includes(item.value) || found.some((f) => f.name === item.value && f.source === "agents")) {
       checked.add(i);
     }
   });

@@ -276,15 +276,20 @@ export async function syncSkills(opts: {
   const copied: string[] = [];
   await mkdir(opts.homeSkillsDir, { recursive: true });
   for (const name of opts.chosen) {
-    const shipped = bundled.find((s) => s.name === name);
-    const external = shipped === undefined ? found.find((s) => s.name === name) : undefined;
+    const prev = manifest[name];
+    const foundByName = found.find((s) => s.name === name);
+    // A skill the user linked from another agent's folder stays that link, even when kumo now
+    // ships the same name: re-running the setup must not swap their live, editable copy for
+    // a frozen one.
+    const keepsLink = prev?.kind === "linked" && foundByName !== undefined && existsSync(prev.source);
+    const shipped = keepsLink ? undefined : bundled.find((s) => s.name === name);
+    const external = shipped === undefined ? foundByName : undefined;
     if (shipped === undefined && external === undefined) continue; // unknown name: never invented
     const srcDir = (shipped ?? external)!.dir;
     const want: InstalledSkillEntry =
       shipped !== undefined
         ? { name, kind: "shipped", source: srcDir }
         : { name, kind: "linked", source: srcDir };
-    const prev = manifest[name];
     if (
       prev !== undefined &&
       prev.kind === want.kind &&

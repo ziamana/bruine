@@ -30,8 +30,8 @@ const SHOTS = [
   { at: T.readPending, s: 1.18, fx: 960, fy: rowY(10.5), tx: 960, ty: 410 },
   { at: T.approval - 4, s: 1.22, fx: 960, fy: rowY(19.5), tx: 960, ty: 400 },
   { at: T.bashDone, s: 1.2, fx: 960, fy: rowY(17.5), tx: 960, ty: 400 },
-  { at: T.answerStart + sec(1.4), s: 1.12, fx: 960, fy: rowY(19.5), tx: 960, ty: 430 },
-  { at: sec(12.3), s: 1.02, fx: 960, fy: 540, tx: 960, ty: 520 },
+  { at: T.answerStart + sec(0.5), s: 1.12, fx: 960, fy: rowY(19.5), tx: 960, ty: 430 },
+  { at: T.queueSend - 6, s: 1.14, fx: 960, fy: rowY(22.5), tx: 960, ty: 420 },
 ] as const;
 const MOVE = sec(0.8);
 
@@ -104,7 +104,13 @@ const ToolRow: React.FC<{ state: ToolState; verb: string; target: string; tail: 
 };
 
 const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame }) => {
-  const promptTyped = frame < T.submit ? typed(copy.prompt, frame, T.typeStart, T.typeCps) : "";
+  const promptTyped =
+    frame < T.submit
+      ? typed(copy.prompt, frame, T.typeStart, T.typeCps)
+      : frame >= T.queueTypeStart && frame < T.queueSubmit
+        ? typed(copy.queued, frame, T.queueTypeStart, T.queueCps)
+        : "";
+  const queuedOn = frame >= T.queueSubmit && frame < T.queueSend;
   const submitted = frame >= T.submit;
   const reasoningChars = Math.floor(((frame - T.reasonStart) / VIDEO.fps) * T.reasonCps);
   const collapsed = frame >= T.collapse;
@@ -235,9 +241,40 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
     });
     blank("b4");
   }
+  // The queued prompt goes out when the turn ends: it is the next user message, then its answer.
+  if (frame >= T.queueSend) {
+    rows.push(
+      <Row key="user2" bg="#152a36" style={{ paddingLeft: CELL * 2, opacity: ease(frame, T.queueSend, 8) }}>
+        <C c={COLORS.sky}>›</C> <C c={COLORS.text}>{copy.queued}</C>
+      </Row>,
+    );
+    if (frame >= T.queueAnswerStart) {
+      const shown = copy.queuedAnswer.slice(0, Math.max(0, Math.floor(((frame - T.queueAnswerStart) / VIDEO.fps) * T.answerCps)));
+      rows.push(
+        <Row key="a2" style={{ paddingLeft: CELL * 2 }}>
+          <C c={COLORS.text}>{shown}</C>
+        </Row>,
+      );
+    }
+  }
+  if (queuedOn) {
+    const k = ease(frame, T.queueSubmit, 10, Easing.out(Easing.back(1.5)));
+    rows.push(
+      <div key="queued" style={{ opacity: Math.min(1, k), transform: `translateY(${(1 - k) * 8}px)` }}>
+        <Row style={{ paddingLeft: CELL * 1 }}>
+          <C c={COLORS.lavender}>↳</C> <C c={COLORS.faint}>{copy.queuedLabel}</C>
+          {"  "}
+          <C c={COLORS.muted}>{copy.queued}</C>
+        </Row>
+        <Row style={{ paddingLeft: CELL * 3 }}>
+          <C c={COLORS.faint}>{copy.queuedHint}</C>
+        </Row>
+      </div>,
+    );
+  }
 
   // The live speed: measured while the model writes, held once it stops.
-  const writing = (frame >= T.reasonStart && frame < T.collapse) || (frame >= T.answerStart && frame < T.answerStart + sec(1.4));
+  const writing = (frame >= T.reasonStart && frame < T.collapse) || (frame >= T.answerStart && frame < T.answerStart + sec(1.4)) || (frame >= T.queueAnswerStart && frame < T.queueAnswerStart + sec(1));
   const tps = frame < T.reasonStart ? "  -  " : writing ? (57 + hash01(Math.floor(frame / 6), 3) * 3.4).toFixed(1) : "58.6";
   const ruleWidth = WIN.width - PAD_X * 2;
   const approvalOn = frame >= T.approval && frame < T.approve + 10;
@@ -298,7 +335,7 @@ const Terminal: React.FC<{ copy: Copy["demo"]; frame: number }> = ({ copy, frame
               height: ROW - 8,
               verticalAlign: "middle",
               background: COLORS.text,
-              opacity: Math.floor(frame / 24) % 2 === 0 || (frame > T.typeStart && frame < T.submit) ? 0.85 : 0,
+              opacity: Math.floor(frame / 24) % 2 === 0 || (frame > T.typeStart && frame < T.submit) || (frame > T.queueTypeStart && frame < T.queueSubmit) ? 0.85 : 0,
             }}
           />
         </Row>
@@ -402,6 +439,9 @@ export const Demo: React.FC<{ copy: Copy["demo"] }> = ({ copy }) => {
       </div>
       <div style={{ position: "absolute", right: 130, bottom: 110 }}>
         <KeyCap label={`⏎ ${copy.enterKey}`} at={T.approve} />
+      </div>
+      <div style={{ position: "absolute", right: 130, bottom: 110 }}>
+        <KeyCap label={`⏎ ${copy.enterKey}`} at={T.queueSubmit} />
       </div>
     </Scene>
   );

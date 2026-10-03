@@ -35,8 +35,8 @@ and `public/soundtrack-fr.wav` (Node 22.18+ runs the TypeScript directly). A sin
 ## The script
 
 1. **Intro** (6.6 s). One drop falls in the dark and rings out; *bruine*, as a dictionary gives it. The rain collects into the mark, light crosses it.
-2. **Models** (6.2 s). Bruine in the middle, llama.cpp on one side, the cloud providers around it, each landing like a drop.
-3. **Demo** (13.2 s). A session in the real interface, filmed by a camera that follows it: reasoning, tools, diff, the permission prompt, the tests, the measured speed.
+2. **Models** (6.2 s). Bruine in the middle, llama.cpp and your MCP servers on one side, the cloud providers around it, each landing like a drop.
+3. **Demo** (13.2 s). A session in the real interface, filmed by a camera that follows it: reasoning, a second prompt queued while it works, tools, diff, the permission prompt, the tests, the measured speed, then the queued prompt going out.
 4. **Effort** (5.8 s). The harder it thinks, the harder it rains: `ctrl+e` from `low` to `max`, the frame glows as in the terminal, the storm comes.
 5. **Promises** (7.2 s). Measured not quoted, one permission gate, a prompt cache that survives.
 6. **Outro** (6.8 s). The mark on wet ground, `npm install -g bruine`, `bruine`, and the rain stops.

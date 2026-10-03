@@ -17,6 +17,8 @@ function chipAt(i: number, n: number): [number, number] {
   return [HUB[0] + RING.rx * Math.cos(angle), HUB[1] + RING.ry * Math.sin(angle)];
 }
 const LOCAL_AT: [number, number] = [HUB[0] - RING.rx, HUB[1]];
+const MCP_AT: [number, number] = [HUB[0] - RING.rx + 10, HUB[1] + 262];
+const MCP_SIZE = { width: 380, height: 100 };
 
 /** A line from the hub out to a model, drawn as it lands, with drops running in along it. */
 const Route: React.FC<{ to: [number, number]; at: number; frame: number; color: string; seed: number }> = ({ to, at, frame, color, seed }) => {
@@ -113,6 +115,7 @@ export const Models: React.FC<{ copy: Copy["models"] }> = ({ copy }) => {
     <Scene>
       <svg width={1920} height={1080} style={{ position: "absolute", inset: 0 }}>
         <Route to={LOCAL_AT} at={MODELS.local} frame={frame} color={COLORS.sky} seed={9} />
+        <Route to={MCP_AT} at={MODELS.mcp} frame={frame} color={COLORS.mint} seed={5} />
         {copy.providers.map((name, i) => (
           <Route key={name} to={chipAt(i, n)} at={MODELS.chip(i)} frame={frame} color={COLORS.lavender} seed={i} />
         ))}
@@ -164,6 +167,15 @@ export const Models: React.FC<{ copy: Copy["models"] }> = ({ copy }) => {
           <div style={{ fontFamily: FONTS.mono, fontSize: 40, color: COLORS.text }}>{copy.localName}</div>
           <div style={{ fontFamily: FONTS.mono, fontSize: 22, color: COLORS.sky }}>{copy.localAddress}</div>
           <div style={{ fontSize: 20, color: COLORS.muted }}>{copy.localDetail}</div>
+        </div>
+      </Landing>
+      <Landing at={MODELS.mcp} frame={frame} x={MCP_AT[0]} y={MCP_AT[1]} width={MCP_SIZE.width} height={MCP_SIZE.height} ring={COLORS.mint}>
+        <div style={{ ...chipStyle, flexDirection: "column", gap: 4, border: "1px solid rgba(143,227,163,0.45)" }}>
+          <div style={{ fontSize: 27 }}>
+            <span style={{ fontFamily: FONTS.mono, fontSize: 17, letterSpacing: 3, color: COLORS.mint, marginRight: 14 }}>{copy.mcpLabel}</span>
+            {copy.mcpName}
+          </div>
+          <div style={{ fontSize: 19, color: COLORS.muted }}>{copy.mcpDetail}</div>
         </div>
       </Landing>
       {copy.providers.map((name, i) => {

@@ -11,9 +11,11 @@ const VISUAL = 230;
 const Speed: React.FC<{ copy: Copy["promises"]["speed"]; at: number }> = ({ copy, at }) => {
   const frame = useCurrentFrame();
   const strike = ease(frame, at + PROMISES.strike, 10);
-  const count = Math.round(
-    interpolate(frame, [at + PROMISES.countFrom, at + PROMISES.countTo], [0, Number(copy.measured)], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) }),
-  );
+  const count = interpolate(frame, [at + PROMISES.countFrom, at + PROMISES.countTo], [0, Number(copy.measured)], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.out(Easing.cubic),
+  });
   const settled = Math.max(0, 1 - Math.abs(frame - at - PROMISES.countTo) / 12);
   return (
     <div style={{ height: VISUAL, display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 56, paddingBottom: 18 }}>
@@ -25,12 +27,46 @@ const Speed: React.FC<{ copy: Copy["promises"]["speed"]; at: number }> = ({ copy
         <div style={{ fontSize: 20, color: COLORS.faint, marginTop: 6 }}>{copy.quotedLabel}</div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <div style={{ fontFamily: FONTS.mono, fontSize: 104, color: COLORS.mint, lineHeight: 1, textShadow: `0 0 ${30 * settled + 10}px rgba(143,227,163,${0.25 + 0.5 * settled})` }}>{count}</div>
+        <div style={{ fontFamily: FONTS.mono, fontSize: 104, color: COLORS.mint, lineHeight: 1, textShadow: `0 0 ${30 * settled + 10}px rgba(143,227,163,${0.25 + 0.5 * settled})` }}>
+          <Odometer value={count} digits={copy.measured.length} height={104} />
+        </div>
         <div style={{ fontSize: 20, color: COLORS.muted, marginTop: 10 }}>
           {copy.measuredLabel} · <span style={{ fontFamily: FONTS.mono }}>{copy.unit}</span>
         </div>
       </div>
     </div>
+  );
+};
+
+/**
+ * Digits that roll like a counter: the ones wheel turns continuously and carries into the tens
+ * only in its last tenth of a turn, so the number reads at every frame.
+ */
+const Odometer: React.FC<{ value: number; digits: number; height: number }> = ({ value, digits, height }) => {
+  const wheels: number[] = [];
+  let carry = value;
+  for (let d = 0; d < digits; d += 1) {
+    const place = Math.pow(10, d);
+    const whole = Math.floor(value / place);
+    const ones = (value / place) % 10;
+    // The lowest wheel turns smoothly; a higher one moves only while the one below passes 9 to 0.
+    const below = d === 0 ? 0 : (value / Math.pow(10, d - 1)) % 10;
+    wheels.unshift(d === 0 ? ones : (whole % 10) + Math.max(0, below - 9));
+    carry = whole;
+  }
+  void carry;
+  return (
+    <span style={{ display: "inline-flex" }}>
+      {wheels.map((pos, i) => (
+        <span key={i} style={{ display: "inline-block", height, overflow: "hidden", lineHeight: `${height}px` }}>
+          <span style={{ display: "flex", flexDirection: "column", transform: `translateY(${-pos * height}px)` }}>
+            {Array.from({ length: 11 }, (_, n) => (
+              <span key={n} style={{ height }}>{n % 10}</span>
+            ))}
+          </span>
+        </span>
+      ))}
+    </span>
   );
 };
 

@@ -104,6 +104,9 @@ export interface Copy {
     localName: string;
     localAddress: string;
     localDetail: string;
+    mcpLabel: string;
+    mcpName: string;
+    mcpDetail: string;
     cloudLabel: string;
     providers: string[];
     more: string;
@@ -123,6 +126,10 @@ export interface Copy {
     bash: { verb: string; target: string; time: string; output: string };
     approval: { question: string; options: string[] };
     answer: string[];
+    queued: string;
+    queuedLabel: string;
+    queuedHint: string;
+    queuedAnswer: string;
     footerLeft: string;
     footerRight: string;
     enterKey: string;
@@ -168,6 +175,9 @@ const en: Copy = {
     localName: "llama.cpp",
     localAddress: "localhost:8080",
     localDetail: "found by the setup wizard",
+    mcpLabel: "MCP",
+    mcpName: "your MCP servers",
+    mcpDetail: "tools behind the same permission gate",
     cloudLabel: "Cloud",
     providers: ["DeepSeek", "Anthropic", "OpenAI", "Google", "OpenRouter", "Groq", "Mistral", "xAI"],
     more: "and about twenty more",
@@ -204,11 +214,16 @@ const en: Copy = {
       "fetchJson now retries twice more after a failure, 250 ms then 500 ms apart.",
       "The 48 tests pass.",
     ],
+    queued: "then document it in the README",
+    queuedLabel: "next",
+    queuedHint: "↑ edit the last  ·  esc stop, and take them back",
+    queuedAnswer: "Added a Retries section to the README: three attempts, 250 ms then 500 ms.",
     footerLeft: "ask  12%/262k (auto)  (local) qwen3-coder · high",
     footerRight: "tok/s  ·  cache 94%",
     enterKey: "Enter",
     callouts: [
       { title: "Thinking, live", body: "The reasoning streams word by word, then folds into one line." },
+      { title: "Keep typing", body: "A prompt sent while it works waits, then goes out when the turn ends." },
       { title: "Tool calls you can read", body: "Each call reads as a sentence, with its duration and a coloured rail." },
       { title: "Every edit, as a diff", body: "Added and removed lines carry the same weight." },
       { title: "It asks first", body: "Ask, Auto or Full access, from a rule table you can read." },
@@ -217,7 +232,7 @@ const en: Copy = {
   },
   effort: {
     title: "The harder it thinks, the harder it rains.",
-    sub: "ctrl+e cycles the reasoning effort. The rain and the prompt frame follow it.",
+    sub: "ctrl+e cycles the reasoning effort. The prompt frame follows it, and with /effect auto the rain does too.",
     prompt: "Refactor the session store",
     label: "effort",
     levels: ["low", "medium", "high", "xhigh", "max"],
@@ -263,6 +278,9 @@ const fr: Copy = {
     localName: "llama.cpp",
     localAddress: "localhost:8080",
     localDetail: "détecté par l'assistant d'installation",
+    mcpLabel: "MCP",
+    mcpName: "vos serveurs MCP",
+    mcpDetail: "des outils derrière la même barrière",
     cloudLabel: "Cloud",
     providers: ["DeepSeek", "Anthropic", "OpenAI", "Google", "OpenRouter", "Groq", "Mistral", "xAI"],
     more: "et une vingtaine d'autres",
@@ -292,11 +310,16 @@ const fr: Copy = {
       "fetchJson réessaie deux fois après un échec, à 250 ms puis 500 ms d'écart.",
       "Les 48 tests passent.",
     ],
+    queued: "puis documente-le dans le README",
+    queuedLabel: "next",
+    queuedHint: "↑ edit the last  ·  esc stop, and take them back",
+    queuedAnswer: "Section Retries ajoutée au README : trois essais, 250 ms puis 500 ms.",
     footerLeft: "ask  12%/262k (auto)  (local) qwen3-coder · high",
     footerRight: "tok/s  ·  cache 94%",
     enterKey: "Entrée",
     callouts: [
       { title: "La réflexion, en direct", body: "Le raisonnement s'écrit mot à mot, puis se replie en une ligne." },
+      { title: "Continuez à écrire", body: "Un prompt envoyé pendant le travail attend, puis part à la fin du tour." },
       { title: "Des appels lisibles", body: "Chaque outil se lit comme une phrase, avec sa durée et un rail coloré." },
       { title: "Chaque modification en diff", body: "Lignes ajoutées et retirées, avec le même poids." },
       { title: "Il demande d'abord", body: "Ask, Auto ou Full access, selon une table de règles lisible." },
@@ -305,7 +328,7 @@ const fr: Copy = {
   },
   effort: {
     title: "Plus il réfléchit, plus il pleut.",
-    sub: "ctrl+e change l'effort de réflexion. La pluie et le cadre du prompt suivent.",
+    sub: "ctrl+e change l'effort de réflexion. Le cadre du prompt suit, et avec /effect auto la pluie aussi.",
     prompt: "Refactor the session store",
     label: "effort",
     levels: ["low", "medium", "high", "xhigh", "max"],

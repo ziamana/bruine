@@ -62,6 +62,7 @@ export const MODELS = {
   hub: sec(0.08),
   local: sec(0.7),
   chip: (i: number): number => sec(1.0) + i * 6,
+  mcp: sec(2.15),
   more: sec(2.35),
   compat: sec(2.85),
   footnote: sec(3.55),
@@ -87,8 +88,14 @@ export const DEMO = {
   bashDone: sec(9.95),
   answerStart: sec(10.2),
   answerCps: 80,
+  /** A second prompt typed while the agent works: it waits, then goes out when the turn ends. */
+  queueTypeStart: sec(3.0),
+  queueCps: 30,
+  queueSubmit: sec(4.25),
+  queueSend: sec(11.55),
+  queueAnswerStart: sec(11.85),
 } as const;
-export const CAPTION_AT = [DEMO.thinking, DEMO.readPending, DEMO.editPending + 6, DEMO.bashPending + 4, DEMO.answerStart] as const;
+export const CAPTION_AT = [DEMO.thinking, DEMO.queueSubmit, DEMO.readPending, DEMO.editPending + 6, DEMO.bashPending + 4, DEMO.answerStart] as const;
 
 export const EFFORT = {
   title: sec(0.3),
@@ -179,7 +186,7 @@ export function rainLevelAt(frame: number): number {
 export const rainSpeed = (level: number): number => 0.35 + 1.5 * clamp01(level);
 
 /** The texts whose keystrokes are heard, for a language. */
-export function typedTexts(lang: Lang): { prompt: string; install: string; run: string } {
+export function typedTexts(lang: Lang): { prompt: string; install: string; run: string; queued: string } {
   const copy = COPY[lang];
-  return { prompt: copy.demo.prompt, install: copy.outro.install, run: copy.outro.run };
+  return { prompt: copy.demo.prompt, install: copy.outro.install, run: copy.outro.run, queued: copy.demo.queued };
 }

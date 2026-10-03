@@ -367,6 +367,11 @@ function score(lang: Lang): Mix {
   // Demo: the keys, the reasoning, each tool, the question, the tests.
   keyFrames(copy.demo.prompt.length, DEMO.typeStart, DEMO.typeCps).forEach((f, i) => keyClick(mix, s("demo", f), copy.demo.prompt[i] === " " ? 0.1 : 0.14, 1000 + i));
   keyClick(mix, s("demo", DEMO.submit), 0.3, 1999, true);
+  // The second prompt, typed while the agent works: it queues, then goes out when the turn ends.
+  keyFrames(copy.demo.queued.length, DEMO.queueTypeStart, DEMO.queueCps).forEach((f, i) => keyClick(mix, s("demo", f), copy.demo.queued[i] === " " ? 0.08 : 0.11, 1500 + i));
+  keyClick(mix, s("demo", DEMO.queueSubmit), 0.24, 1998, true);
+  blip(mix, s("demo", DEMO.queueSubmit) + 0.04, note("D6"), 0.05, 0.3);
+  ["A5", "D6"].forEach((n, i) => blip(mix, s("demo", DEMO.queueSend) + i * 0.08, note(n), 0.07, 0.2, 0.4));
   {
     const t0 = s("demo", DEMO.reasonStart);
     const length = s("demo", DEMO.collapse) - t0;

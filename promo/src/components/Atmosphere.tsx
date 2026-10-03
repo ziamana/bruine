@@ -121,6 +121,9 @@ export const TransitionRings: React.FC = () => {
     }
     const r = wipeRadius(t);
     const fade = 1 - t / (FADE + 20);
+    // The leading ring splits into its colours at the edge, like light through a raindrop.
+    shapes.push(<circle key={`${tr.scene}-ar`} cx={tr.x + 3} cy={tr.y} r={r * 1.006} fill="none" stroke={COLORS.pink} strokeWidth={2} opacity={0.4 * fade} style={{ mixBlendMode: "screen" }} />);
+    shapes.push(<circle key={`${tr.scene}-ab`} cx={tr.x - 3} cy={tr.y} r={r * 0.994} fill="none" stroke={COLORS.sky} strokeWidth={2} opacity={0.4 * fade} style={{ mixBlendMode: "screen" }} />);
     shapes.push(<circle key={`${tr.scene}-a`} cx={tr.x} cy={tr.y} r={r} fill="none" stroke={COLORS.violetLight} strokeWidth={2.5} opacity={0.75 * fade} />);
     shapes.push(<circle key={`${tr.scene}-b`} cx={tr.x} cy={tr.y} r={r * 0.62} fill="none" stroke={COLORS.lavender} strokeWidth={1.5} opacity={0.5 * fade} />);
     shapes.push(<circle key={`${tr.scene}-c`} cx={tr.x} cy={tr.y} r={r * 0.33} fill="none" stroke={COLORS.sky} strokeWidth={1} opacity={0.4 * fade} />);
@@ -151,6 +154,10 @@ export const SceneShell: React.FC<{ children: React.ReactNode; enter?: [number, 
   const { durationInFrames } = useVideoConfig();
   const masks: string[] = [];
   let scale = 1;
+  // A camera that breathes: a few pixels of slow drift, never enough to read as movement.
+  const t = frame / 45;
+  const driftX = Math.sin(t * 0.47) * 3;
+  const driftY = Math.cos(t * 0.31) * 2;
   if (enter !== undefined) {
     const t = frame - DROP_LANDS;
     if (t < 0) return null;
@@ -171,7 +178,7 @@ export const SceneShell: React.FC<{ children: React.ReactNode; enter?: [number, 
   return (
     <AbsoluteFill
       style={{
-        transform: `scale(${scale})`,
+        transform: `translate(${driftX}px, ${driftY}px) scale(${scale})`,
         opacity: dim,
         maskImage: mask,
         WebkitMaskImage: mask,

@@ -1,3 +1,4 @@
+import { configReadPath, configWritePath } from "../compat.js";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -338,10 +339,10 @@ export async function detectSearxng(
 }
 
 async function writeKumoJson(dshHome: string, search: SearchChoice): Promise<void> {
-  const kumoJsonPath = join(dshHome, "kumo.json");
+  const kumoJsonPath = configWritePath(dshHome);
   let doc: Record<string, unknown> = {};
   try {
-    doc = JSON.parse(await readFile(kumoJsonPath, "utf8")) as Record<string, unknown>;
+    doc = JSON.parse(await readFile(configReadPath(dshHome), "utf8")) as Record<string, unknown>;
   } catch {
     doc = {};
   }

@@ -531,10 +531,10 @@ describe("the switch (T37)", () => {
   test("both the route taken and the one left are remembered, other keys kept", async () => {
     const h = harness();
     const home = await attach(h, { settings: SETTINGS });
-    await writeFile(join(home, "kumo.json"), JSON.stringify({ permissionMode: "ask" }));
+    await writeFile(join(home, "bruine.json"), JSON.stringify({ permissionMode: "ask" }));
     await h.picker.runCommand("/model local/qwen3.8-27b");
     await h.picker.persisted;
-    const doc = JSON.parse(await readFile(join(home, "kumo.json"), "utf8"));
+    const doc = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
     expect(doc.permissionMode).toBe("ask");
     // Newest first, and the model we came from is there: f2 needs it.
     expect(doc.recentModels).toEqual(["local/qwen3.8-27b", "local/Ornith.gguf"]);
@@ -545,7 +545,7 @@ describe("the switch (T37)", () => {
     const home = await attach(h, { settings: SETTINGS });
     await h.picker.runCommand("/model local/qwen3.8-27b");
     await h.picker.persisted;
-    expect(JSON.parse(await readFile(join(home, "kumo.json"), "utf8")).recentModels).toHaveLength(2);
+    expect(JSON.parse(await readFile(join(home, "bruine.json"), "utf8")).recentModels).toHaveLength(2);
     await h.picker.cycleRecent(1);
     expect(h.holder.current?.model).toBe("Ornith.gguf");
   });
@@ -555,7 +555,7 @@ describe("the switch (T37)", () => {
     const home = await attach(h, { settings: SETTINGS });
     await h.picker.runCommand("/model local/never-declared");
     await h.picker.persisted;
-    expect(existsSync(join(home, "kumo.json"))).toBe(false);
+    expect(existsSync(join(home, "bruine.json"))).toBe(false);
   });
 
   test("before the session exists the command says so instead of throwing", async () => {
@@ -574,7 +574,7 @@ describe("recent routes, f2 (T38)", () => {
     const h = harness();
     const home = await attach(h, { settings: SETTINGS });
     await writeFile(
-      join(home, "kumo.json"),
+      join(home, "bruine.json"),
       JSON.stringify({ recentModels: ["local/qwen3.8-27b", "local/Ornith.gguf"] }),
     );
     h.holder.current = { provider: "local", model: "qwen3.8-27b" };
@@ -599,7 +599,7 @@ describe("recent routes, f2 (T38)", () => {
     const h = harness();
     const home = await attach(h, { settings: SETTINGS });
     await writeFile(
-      join(home, "kumo.json"),
+      join(home, "bruine.json"),
       JSON.stringify({ recentModels: ["local/qwen3.8-27b", "local/gone", "not-a-provider"] }),
     );
     h.holder.current = { provider: "local", model: "Ornith.gguf" };

@@ -290,9 +290,9 @@ describe("wizard skills-step defaults (T26)", () => {
   test("savedSkillsList: kumo.json's list, or undefined when never saved", async () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-t26-pref-"));
     expect(savedSkillsList(home)).toBeUndefined();
-    await writeFile(join(home, "kumo.json"), JSON.stringify({ mode: "full", skills: ["a", "b"] }));
+    await writeFile(join(home, "bruine.json"), JSON.stringify({ mode: "full", skills: ["a", "b"] }));
     expect(savedSkillsList(home)).toEqual(["a", "b"]);
-    await writeFile(join(home, "kumo.json"), JSON.stringify({ mode: "simple" }));
+    await writeFile(join(home, "bruine.json"), JSON.stringify({ mode: "simple" }));
     expect(savedSkillsList(home)).toBeUndefined();
   });
 
@@ -443,7 +443,7 @@ describe("kumo launch migration (T26b)", () => {
         "nope",
       );
       await writeFile(join(kumoHome, "settings.yaml"), renderSettingsYaml(settings));
-      await writeFile(join(kumoHome, "kumo.json"), JSON.stringify({ permissionMode: "full", search: { provider: "none" } }));
+      await writeFile(join(kumoHome, "bruine.json"), JSON.stringify({ permissionMode: "full", search: { provider: "none" } }));
 
       const child = spawn(
         process.execPath,

@@ -1,3 +1,4 @@
+import { runtimeHome } from "../compat.js";
 import { createRequire } from "node:module";
 import { TASKS_HELP } from "../ui/task-panel.js";
 import { formatShell, isShellLine, runShell } from "./shell.js";
@@ -457,7 +458,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   const flush = (session: unknown): Promise<unknown> => sessions.flush(session);
 
   /** Palette items: kumo's commands plus dsh's, no duplicates (kumo wins). */
-  const skillsDir = join(process.env.DSH_HOME ?? join(homedir(), ".kumo"), "skills");
+  const skillsDir = join(runtimeHome(), "skills");
   const completeCommandList = (): SlashCommand[] => {
     let commands: SlashCommand[];
     try {

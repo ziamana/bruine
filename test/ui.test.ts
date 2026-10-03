@@ -1525,7 +1525,7 @@ describe("suggest ghost (T28B)", () => {
     const { join } = await import("node:path");
     const home = await mkdtemp(join(tmpdir(), "kumo-suggest-"));
     await writeFile(
-      join(home, "kumo.json"),
+      join(home, "bruine.json"),
       JSON.stringify({ models: { fast: { provider: "p", model: "m" } }, suggestions: true }),
     );
     const prev = process.env.DSH_HOME;

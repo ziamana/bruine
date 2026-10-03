@@ -1,3 +1,4 @@
+import { configReadPath, configWritePath } from "../compat.js";
 /**
  * The full-setup flow (T21) as a pure state machine: the UI (full.ts) drives
  * it step by step; nothing touches the disk until the summary screen calls
@@ -511,7 +512,7 @@ export async function commitPlan(dshHome: string, plan: SetupPlan): Promise<void
   // a wizard Save rewrites kumo.json but must not forget the user's choices.
   let kumoJson = plan.kumoJson;
   try {
-    const previous = JSON.parse(await readFile(join(dshHome, "kumo.json"), "utf8")) as Record<string, unknown>;
+    const previous = JSON.parse(await readFile(configReadPath(dshHome), "utf8")) as Record<string, unknown>;
     if (previous.reasoningEffort !== undefined) {
       const doc = JSON.parse(kumoJson) as Record<string, unknown>;
       doc.reasoningEffort = previous.reasoningEffort;
@@ -520,7 +521,7 @@ export async function commitPlan(dshHome: string, plan: SetupPlan): Promise<void
   } catch {
     // no previous kumo.json: write the plan as-is
   }
-  await writeAtom(join(dshHome, "kumo.json"), kumoJson, 0o600);
+  await writeAtom(configWritePath(dshHome), kumoJson, 0o600);
   for (const [name, value] of plan.env) {
     await writeEnvVar(join(dshHome, ".env"), name, value);
   }

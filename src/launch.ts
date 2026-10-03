@@ -1,3 +1,4 @@
+import { appHome } from "./compat.js";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -41,12 +42,12 @@ export function buildLaunch(
   for (const [key, value] of Object.entries(env)) {
     if (value !== undefined) out[key] = value;
   }
-  out.DSH_HOME = env.KUMO_HOME ?? pathMod.join(home, ".kumo");
+  out.DSH_HOME = appHome(env, home, pathMod);
   out.KUMO_TOOLS = opts.tools === "full" ? "full" : "lean";
   if (opts.telemetry !== true) {
     out.DSH_TELEMETRY_DISABLED = "1";
   }
-  const appArgs = ["--profile", "kumo", ...argv];
+  const appArgs = ["--profile", "bruine", ...argv];
   if (opts.dshEntry !== undefined) {
     return { command: process.execPath, args: [opts.dshEntry, ...appArgs], env: out };
   }

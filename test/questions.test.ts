@@ -256,8 +256,8 @@ describe("QuestionForm (T28A)", () => {
     const { setSuggestionsChoice } = await import("../src/setup/full.js");
     const home = await mkdtemp(join(tmpdir(), "kumo-sg-"));
     await setSuggestionsChoice(home, false);
-    expect(JSON.parse(await readFile(join(home, "kumo.json"), "utf8"))).toMatchObject({ suggestions: false });
+    expect(JSON.parse(await readFile(join(home, "bruine.json"), "utf8"))).toMatchObject({ suggestions: false });
     await setSuggestionsChoice(home, true);
-    expect(JSON.parse(await readFile(join(home, "kumo.json"), "utf8"))).toMatchObject({ suggestions: true });
+    expect(JSON.parse(await readFile(join(home, "bruine.json"), "utf8"))).toMatchObject({ suggestions: true });
   });
 });

@@ -99,7 +99,7 @@ describe("T35 prefill from settings.yaml (Aron shape, no kumo.json)", () => {
     await writeFile(join(home, "settings.yaml"), ARON_SETTINGS);
     await mkdir(join(home, "skills"), { recursive: true });
     await writeFile(
-      join(home, "skills", ".kumo-installed.json"),
+      join(home, "skills", ".bruine-installed.json"),
       JSON.stringify({ "git-workflow": { name: "git-workflow", kind: "shipped", source: "/p/skills/git-workflow" } }),
     );
     const pre = loadPrefill(home)!;
@@ -113,10 +113,10 @@ describe("T35 prefill from settings.yaml (Aron shape, no kumo.json)", () => {
   test("an explicit empty skills list in kumo.json still wins over the manifest", async () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-t35-"));
     await writeFile(join(home, "settings.yaml"), ARON_SETTINGS);
-    await writeFile(join(home, "kumo.json"), JSON.stringify({ skills: [] }));
+    await writeFile(join(home, "bruine.json"), JSON.stringify({ skills: [] }));
     await mkdir(join(home, "skills"), { recursive: true });
     await writeFile(
-      join(home, "skills", ".kumo-installed.json"),
+      join(home, "skills", ".bruine-installed.json"),
       JSON.stringify({ "git-workflow": { name: "git-workflow", kind: "shipped", source: "/p/skills/git-workflow" } }),
     );
     expect(loadPrefill(home)!.skills).toEqual([]);

@@ -124,7 +124,7 @@ describe("kumo setup reads a cloud route back", () => {
       "llm-pi-ai:\n  providers:\n    groq:\n      apiKeyEnv: GROQ_API_KEY\nagent-default-model:\n  provider: groq\n  model: llama-3.1-8b-instant\n",
     );
     await writeFile(join(home, ".env"), "GROQ_API_KEY=gsk_saved\n");
-    await writeFile(join(home, "kumo.json"), JSON.stringify({ mode: "full", models: { main: { provider: "groq", model: "llama-3.1-8b-instant" } } }));
+    await writeFile(join(home, "bruine.json"), JSON.stringify({ mode: "full", models: { main: { provider: "groq", model: "llama-3.1-8b-instant" } } }));
     const prefill = await loadPrefill(home);
     expect(prefill?.roles.main).toEqual({ cloud: "groq", model: "llama-3.1-8b-instant" });
     expect(prefill?.keys.GROQ_API_KEY).toBe("gsk_saved");

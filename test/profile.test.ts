@@ -7,20 +7,20 @@ import { ensureProfile, profilePaths } from "../src/profile.js";
 describe("profilePaths (T14.4)", () => {
   test("win32 home uses backslash separators", () => {
     const p = profilePaths("C:\\Users\\x", path.win32);
-    expect(p.dir).toBe("C:\\Users\\x\\profiles\\kumo");
-    expect(p.packageJson).toBe("C:\\Users\\x\\profiles\\kumo\\package.json");
-    expect(p.patchYml).toBe("C:\\Users\\x\\profiles\\kumo\\cordis.patch.yml");
+    expect(p.dir).toBe("C:\\Users\\x\\profiles\\bruine");
+    expect(p.packageJson).toBe("C:\\Users\\x\\profiles\\bruine\\package.json");
+    expect(p.patchYml).toBe("C:\\Users\\x\\profiles\\bruine\\cordis.patch.yml");
     expect(p.agentsDir).toBe("C:\\Users\\x\\agents");
   });
 
   test("posix home uses slash separators", () => {
     const p = profilePaths("/home/x", path.posix);
-    expect(p.cordisYml).toBe("/home/x/profiles/kumo/cordis.yml");
+    expect(p.cordisYml).toBe("/home/x/profiles/bruine/cordis.yml");
   });
 
   test("the running platform's own module decides the separator", () => {
     const p = profilePaths("/home/x");
-    expect(p.cordisYml).toBe(path.join("/home/x", "profiles", "kumo", "cordis.yml"));
+    expect(p.cordisYml).toBe(path.join("/home/x", "profiles", "bruine", "cordis.yml"));
   });
 });
 
@@ -30,12 +30,12 @@ describe("ensureProfile", () => {
     const result = await ensureProfile(home);
 
     expect(result.created).toBe(true);
-    expect(result.dir).toBe(join(home, "profiles", "kumo"));
+    expect(result.dir).toBe(join(home, "profiles", "bruine"));
 
     const packageJson = JSON.parse(
       await readFile(join(result.dir, "package.json"), "utf8"),
     );
-    expect(packageJson.name).toBe("dsh-profile-kumo");
+    expect(packageJson.name).toBe("dsh-profile-bruine");
     expect(packageJson.dsh.profile.bundles).toEqual([
       "@deepseek-ai/dsh-base",
       "kumo-code",
@@ -58,7 +58,7 @@ describe("ensureProfile", () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-profile-"));
     await ensureProfile(home);
 
-    const patchPath = join(home, "profiles", "kumo", "cordis.patch.yml");
+    const patchPath = join(home, "profiles", "bruine", "cordis.patch.yml");
     await writeFile(patchPath, "# my custom overrides\n- foo\n");
 
     const result = await ensureProfile(home);
@@ -92,20 +92,20 @@ describe("ensureProfile migration (T20.3)", () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-profile-"));
     // Simulate the old layout: legacy dependency name + stale node_modules symlink.
     const legacy = {
-      name: "dsh-profile-kumo",
+      name: "dsh-profile-bruine",
       private: true,
       dependencies: { [legacyName]: "link:/somewhere/old" },
       dsh: { profile: { bundles: ["@deepseek-ai/dsh-base", legacyName], patchReload: "startup" } },
     };
     await ensureProfile(home); // write current files first…
-    const dir = join(home, "profiles", "kumo");
+    const dir = join(home, "profiles", "bruine");
     await writeFile(join(dir, "package.json"), JSON.stringify(legacy, null, 2) + "\n");
     await mkdir(join(dir, "node_modules", legacyName), { recursive: true });
     await writeFile(join(dir, "node_modules", legacyName, "package.json"), "{}");
     // …and home content that must survive.
     await writeFile(join(home, "settings.yaml"), SETTINGS);
     await writeFile(join(home, ".env"), "X=1\n");
-    await writeFile(join(home, "kumo.json"), '{"mode":"simple"}\n');
+    await writeFile(join(home, "bruine.json"), '{"mode":"simple"}\n');
     await mkdir(join(home, "sessions"), { recursive: true });
     await writeFile(join(home, "sessions", "keep"), "s");
 
@@ -118,7 +118,7 @@ describe("ensureProfile migration (T20.3)", () => {
     await expect(stat(join(dir, "node_modules"))).rejects.toThrow(); // old install gone
     expect(await readFile(join(home, "settings.yaml"), "utf8")).toBe(SETTINGS);
     expect(await readFile(join(home, ".env"), "utf8")).toBe("X=1\n");
-    expect(await readFile(join(home, "kumo.json"), "utf8")).toBe('{"mode":"simple"}\n');
+    expect(await readFile(join(home, "bruine.json"), "utf8")).toBe('{"mode":"simple"}\n');
     expect(await readFile(join(home, "sessions", "keep"), "utf8")).toBe("s");
 
     // Idempotent after migration.
@@ -129,7 +129,7 @@ describe("ensureProfile migration (T20.3)", () => {
   test("a profile carrying extra plugin deps under the current name is kept", async () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-profile-"));
     await ensureProfile(home);
-    const pkgPath = join(home, "profiles", "kumo", "package.json");
+    const pkgPath = join(home, "profiles", "bruine", "package.json");
     const manifest = JSON.parse(await readFile(pkgPath, "utf8"));
     manifest.dependencies["kumo-some-plugin"] = "^1.0.0";
     manifest.dsh.profile.bundles.push("kumo-some-plugin");

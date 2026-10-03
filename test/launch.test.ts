@@ -1,3 +1,4 @@
+import { appHome } from "../src/compat.js";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import path from "node:path";
@@ -23,8 +24,8 @@ describe("flagMode (T11.2)", () => {
 describe("buildLaunch", () => {
   test("default home → DSH_HOME is the .kumo dir under home", () => {
     const { env } = buildLaunch([], { PATH: "/usr/bin" }, "/home/tu44");
-    expect(env.DSH_HOME).toBe(join("/home/tu44", ".kumo"));
-    expect(path.basename(env.DSH_HOME)).toBe(".kumo");
+    expect(env.DSH_HOME).toBe(appHome({}, "/home/tu44"));
+    expect([".bruine", ".kumo"]).toContain(path.basename(env.DSH_HOME));
   });
 
   test("KUMO_HOME overrides DSH_HOME", () => {
@@ -35,7 +36,7 @@ describe("buildLaunch", () => {
   test("argv is passed through after --profile kumo", () => {
     const { command, args } = buildLaunch(["fix the tests"], {}, "/home/x");
     expect(command).toBe("dsh");
-    expect(args).toEqual(["--profile", "kumo", "fix the tests"]);
+    expect(args).toEqual(["--profile", "bruine", "fix the tests"]);
   });
 
   test("original env keys are preserved", () => {
@@ -70,12 +71,12 @@ describe("buildLaunch", () => {
       dshEntry: "/opt/dsh/lib/bin.js",
     });
     expect(command).toBe(process.execPath);
-    expect(args).toEqual(["/opt/dsh/lib/bin.js", "--profile", "kumo", "hi"]);
+    expect(args).toEqual(["/opt/dsh/lib/bin.js", "--profile", "bruine", "hi"]);
   });
 
   test("win32-style home joins with backslashes (T14.4)", () => {
     const { env } = buildLaunch([], {}, "C:\\Users\\x", { pathMod: path.win32 });
-    expect(env.DSH_HOME).toBe("C:\\Users\\x\\.kumo");
+    expect(env.DSH_HOME).toBe("C:\\Users\\x\\.bruine");
   });
 });
 
@@ -93,10 +94,10 @@ describe("dshInvocation", () => {
     expect(dshInvocation(undefined, ["plugin"])).toEqual({ command: "dsh", args: ["plugin"] });
   });
   test("pinned copy runs under the current node binary", () => {
-    const inv = dshInvocation("/x/bin.js", ["plugin", "--profile", "kumo"]);
+    const inv = dshInvocation("/x/bin.js", ["plugin", "--profile", "bruine"]);
     expect(inv.command).toBe(process.execPath);
     expect(inv.args[0]).toBe("/x/bin.js");
-    expect(inv.args.slice(1)).toEqual(["plugin", "--profile", "kumo"]);
+    expect(inv.args.slice(1)).toEqual(["plugin", "--profile", "bruine"]);
   });
 });
 

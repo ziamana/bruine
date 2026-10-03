@@ -96,7 +96,7 @@ export class Harness {
       }
       await writeFile(join(home, ".env"), "KUMO_LOCAL_API_KEY=e2e\n");
       await writeFile(
-        join(home, "kumo.json"),
+        join(home, "bruine.json"),
         JSON.stringify({
           permissionMode,
           search: { provider: "none" },

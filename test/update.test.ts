@@ -156,7 +156,7 @@ describe("off switches (T30)", () => {
 
   test("kumo.json updateCheck survives the merge and keeps the other fields", async () => {
     const home = await freshHome();
-    await writeFile(join(home, "kumo.json"), JSON.stringify({ mode: "full", telemetry: false }, null, 2));
+    await writeFile(join(home, "bruine.json"), JSON.stringify({ mode: "full", telemetry: false }, null, 2));
     await setUpdateCheck(home, false);
     const doc = await readKumoJsonDoc(home);
     expect(doc).toMatchObject({ mode: "full", telemetry: false, updateCheck: false });
@@ -165,7 +165,7 @@ describe("off switches (T30)", () => {
     expect(readUpdateCheckChoice(await readKumoJsonDoc(home))).toBe(true);
     // No POSIX mode bits on Windows: privacy there is an ACL, not a 0600.
     if (process.platform !== "win32") {
-      expect((await stat(join(home, "kumo.json"))).mode & 0o777).toBe(0o600);
+      expect((await stat(join(home, "bruine.json"))).mode & 0o777).toBe(0o600);
     }
   });
 

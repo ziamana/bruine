@@ -1,3 +1,4 @@
+import { runtimeHome, configReadPath, configWritePath } from "../compat.js";
 /**
  * T37 — `/model` and `/provider`: the route, chosen without leaving the session.
  *
@@ -276,12 +277,12 @@ interface KumoJson {
 }
 
 function kumoHome(): string {
-  return process.env.DSH_HOME ?? join(homedir(), ".kumo");
+  return runtimeHome();
 }
 
 function readKumoJson(): KumoJson {
   try {
-    const path = join(kumoHome(), "kumo.json");
+    const path = configReadPath(kumoHome());
     if (!existsSync(path)) return {};
     return JSON.parse(readFileSync(path, "utf8")) as KumoJson;
   } catch {
@@ -303,7 +304,7 @@ export async function rememberRoutes(...keys: string[]): Promise<void> {
     (key, index, all) => all.indexOf(key) === index,
   );
   doc.recentModels = recents.slice(0, 8);
-  const path = join(kumoHome(), "kumo.json");
+  const path = configWritePath(kumoHome());
   // Unique temp name: two quick switches must not fight over one .tmp.
   const tmp = `${path}.${String(process.pid)}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`;
   await writeFile(tmp, `${JSON.stringify(doc, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -322,7 +323,7 @@ export async function rememberRoutes(...keys: string[]): Promise<void> {
  */
 export function readEnvKeys(dshHome?: string): Set<string> {
   const out = new Set<string>();
-  const home = dshHome ?? process.env.DSH_HOME ?? join(homedir(), ".kumo");
+  const home = dshHome ?? runtimeHome();
   try {
     const path = join(home, ".env");
     if (!existsSync(path)) return out;

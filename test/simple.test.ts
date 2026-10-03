@@ -182,7 +182,7 @@ describe("simpleSetup", () => {
     });
     expect(asked).toHaveLength(1); // web search offer, default answer ""
     expect(asked[0]).toContain("Web search");
-    const kumoJson = JSON.parse(await readFile(join(home, "kumo.json"), "utf8"));
+    const kumoJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
     expect(kumoJson).toEqual({ mode: "simple", permissionMode: "auto", search: { provider: "none" } });
     const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
     expect(parsed["agent-default-model"]).toEqual({ provider: "local", model: "llama3" });
@@ -358,7 +358,7 @@ describe("simpleSetup", () => {
     });
     await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(secretsAsked).toEqual(["DeepSeek API key: ", "Brave Search API key: "]);
-    const kumoJson = JSON.parse(await readFile(join(home, "kumo.json"), "utf8"));
+    const kumoJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
     expect(kumoJson.search).toEqual({ provider: "brave", apiKeyEnv: "BRAVE_API_KEY" });
     const env = await readFile(join(home, ".env"), "utf8");
     expect(env).toContain("BRAVE_API_KEY=brave-1");
@@ -369,7 +369,7 @@ describe("simpleSetup", () => {
     const home = await mkdtemp(join(tmpdir(), "kumo-setup-"));
     const { io } = fakeIO({ answers: ["n", "2", "4"], secrets: ["sk-abc", "tav-1"] });
     await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
-    const kumoJson = JSON.parse(await readFile(join(home, "kumo.json"), "utf8"));
+    const kumoJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
     expect(kumoJson.search).toEqual({ provider: "tavily", apiKeyEnv: "TAVILY_API_KEY" });
     expect(await readFile(join(home, ".env"), "utf8")).toContain("TAVILY_API_KEY=tav-1");
   });
@@ -390,7 +390,7 @@ describe("simpleSetup", () => {
     const outcome = await simpleSetup(home, io, { ports: [8880], fetchImpl });
     expect(outcome.kind).toBe("local");
     expect(asked[0]).toContain("SearXNG detected on http://127.0.0.1:8888");
-    const kumoJson = JSON.parse(await readFile(join(home, "kumo.json"), "utf8"));
+    const kumoJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
     expect(kumoJson.search).toEqual({ provider: "searxng", url: "http://127.0.0.1:8888" });
   });
 });

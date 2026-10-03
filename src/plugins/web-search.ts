@@ -1,3 +1,4 @@
+import { runtimeHome, configReadPath } from "../compat.js";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -45,8 +46,8 @@ export function readSearchConfig(
   read: (path: string) => string = (p) => readFileSync(p, "utf8"),
   has: (path: string) => boolean = existsSync,
 ): SearchConfig {
-  const home = env.DSH_HOME ?? join(homedir(), ".kumo");
-  const path = join(home, "kumo.json");
+  const home = runtimeHome(env);
+  const path = configReadPath(home);
   try {
     if (!has(path)) return { provider: "none" };
     const raw = JSON.parse(read(path)) as { search?: { provider?: string; url?: string; apiKeyEnv?: string } };

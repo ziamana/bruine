@@ -55,7 +55,7 @@ describe("syncSkills (T21.6)", () => {
     });
     expect(r1).toEqual({ installed: ["alpha"], removed: [], copied: [] });
     expect(existsSync(join(dir, "alpha", "SKILL.md"))).toBe(true);
-    const manifest = JSON.parse(await readFile(join(dir, ".kumo-installed.json"), "utf8"));
+    const manifest = JSON.parse(await readFile(join(dir, ".bruine-installed.json"), "utf8"));
     // T26: entries carry kind + source, not the T21 file list.
     expect(manifest).toEqual({
       alpha: { name: "alpha", kind: "shipped", source: join(bundled, "alpha") },
@@ -85,7 +85,7 @@ describe("syncSkills (T21.6)", () => {
     expect(existsSync(join(dir, "alpha"))).toBe(false);
     expect(existsSync(join(dir, "beta", "SKILL.md"))).toBe(true);
     expect(existsSync(join(dir, "mine", "SKILL.md"))).toBe(true); // untouched
-    const m3 = JSON.parse(await readFile(join(dir, ".kumo-installed.json"), "utf8"));
+    const m3 = JSON.parse(await readFile(join(dir, ".bruine-installed.json"), "utf8"));
     expect(Object.keys(m3)).toEqual(["beta"]);
   });
 });

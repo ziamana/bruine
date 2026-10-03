@@ -317,11 +317,11 @@ describe("bench home", () => {
     });
     const settings = await readFile(join(home, "settings.yaml"), "utf8");
     expect(settings).toContain("127.0.0.1:8081");
-    const patch = await readFile(join(home, "profiles", "kumo", "cordis.patch.yml"), "utf8");
+    const patch = await readFile(join(home, "profiles", "bruine", "cordis.patch.yml"), "utf8");
     expect(patch).toContain("Ornith 9B");
     expect(patch).toContain("Match the existing code style");
-    expect(existsSync(join(home, "profiles", "kumo", "node_modules", "kumo-code", "package.json"))).toBe(true);
-    expect(existsSync(join(home, "profiles", "kumo", "node_modules", "@deepseek-ai", "dsh-base", "package.json"))).toBe(true);
+    expect(existsSync(join(home, "profiles", "bruine", "node_modules", "kumo-code", "package.json"))).toBe(true);
+    expect(existsSync(join(home, "profiles", "bruine", "node_modules", "@deepseek-ai", "dsh-base", "package.json"))).toBe(true);
     await rm(home, { recursive: true, force: true });
   });
 });

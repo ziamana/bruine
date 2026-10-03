@@ -21,7 +21,7 @@ export function profilePaths(
   dshHome: string,
   pathMod: typeof path = path,
 ): ProfilePaths {
-  const dir = pathMod.join(dshHome, "profiles", "kumo");
+  const dir = pathMod.join(dshHome, "profiles", "bruine");
   return {
     dir,
     packageJson: pathMod.join(dir, "package.json"),
@@ -77,7 +77,7 @@ export const PERSONA_SUFFIX = "Your working directory is {{cwd}}.";
 
 /** The persona prefix, `%s` = model display name. */
 const PERSONA_PREFIX_TEMPLATE =
-  "You are kumo, a terminal coding agent powered by %s. Be short and " +
+  "You are bruine, a terminal coding agent powered by %s. Be short and " +
   "direct: answer first, detail only when asked. Reply in the user's " +
   "language. Never use emojis. Only mention tools you actually have.";
 
@@ -213,7 +213,7 @@ export async function ensureProfile(
   await mkdir(dir, { recursive: true });
 
   const packageJson = {
-    name: "dsh-profile-kumo",
+    name: "dsh-profile-bruine",
     private: true,
     dependencies: {
       [pkg.name]: pkg.version,

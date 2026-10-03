@@ -25,6 +25,7 @@
     "tui"
   ],
   "bin": {
+    "bruine": "dist/bin.js",
     "kumo": "dist/bin.js"
   },
   "exports": {

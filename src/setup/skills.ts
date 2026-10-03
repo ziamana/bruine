@@ -1,3 +1,4 @@
+import { SKILLS_MANIFEST_NAME, manifestReadPath } from "../compat.js";
 /**
  * Skill installation (T21.6, T26): every skill the user enables lives in
  * `$DSH_HOME/skills/<name>/` (where dsh's user-dsh skill source reads them).
@@ -47,7 +48,7 @@ export interface InstalledSkillEntry {
 
 export type InstalledSkills = Record<string, InstalledSkillEntry>;
 
-export const SKILLS_MANIFEST = ".kumo-installed.json";
+export const SKILLS_MANIFEST = SKILLS_MANIFEST_NAME;
 
 /** Skill folders of the other agents on this computer, in precedence order. */
 export const SKILL_SOURCES: ReadonlyArray<{ label: string; rel: string[] }> = [
@@ -242,7 +243,7 @@ async function readManifest(manifestPath: string): Promise<InstalledSkills> {
 
 /** What `kumo skills` prints; sorted by name. Missing manifest → empty. */
 export async function readInstalledSkills(homeSkillsDir: string): Promise<InstalledSkillEntry[]> {
-  const manifest = await readManifest(join(homeSkillsDir, SKILLS_MANIFEST));
+  const manifest = await readManifest(manifestReadPath(homeSkillsDir));
   return Object.values(manifest).sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -286,7 +287,7 @@ export async function syncSkills(opts: {
 }): Promise<{ installed: string[]; removed: string[]; copied: string[] }> {
   const pathMod = opts.pathMod ?? path;
   const manifestPath = pathMod.join(opts.homeSkillsDir, SKILLS_MANIFEST);
-  const manifest = await readManifest(manifestPath);
+  const manifest = await readManifest(manifestReadPath(opts.homeSkillsDir, pathMod));
   const removed: string[] = [];
   for (const name of Object.keys(manifest)) {
     if (opts.chosen.includes(name)) continue;
@@ -364,7 +365,7 @@ export async function migrateAgentsSkills(opts: {
 }): Promise<{ linked: string[]; copied: string[] }> {
   const pathMod = opts.pathMod ?? path;
   const home = opts.home ?? homedir();
-  if (existsSync(pathMod.join(opts.homeSkillsDir, SKILLS_MANIFEST))) {
+  if (existsSync(manifestReadPath(opts.homeSkillsDir, pathMod))) {
     return { linked: [], copied: [] };
   }
   const inAgents = (await scanFoundSkills(home, pathMod)).filter((s) => s.source === "agents");

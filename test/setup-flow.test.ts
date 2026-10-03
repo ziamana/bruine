@@ -69,7 +69,7 @@ describe("SetupFlow step machine (T21)", () => {
       flow.save({ dshHome: home, bundledSkillsRoot: join(home, "none"), bundledSkills: [] }),
     ).rejects.toThrow(/canceled/);
     await expect(stat(join(home, "settings.yaml"))).rejects.toThrow();
-    await expect(stat(join(home, "kumo.json"))).rejects.toThrow();
+    await expect(stat(join(home, "bruine.json"))).rejects.toThrow();
   });
 
   test("Save before the summary step is refused", async () => {

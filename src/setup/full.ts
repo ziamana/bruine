@@ -1,3 +1,4 @@
+import { configReadPath, configWritePath, manifestReadPath } from "../compat.js";
 import { isAscii } from "../render/chars.js";
 /**
  * The kumo setup wizard (T21): pi-tui SelectList/checkbox steps; Esc goes
@@ -81,7 +82,7 @@ type Skippable<T> = Outcome<T | typeof SKIP>;
 export async function setSuggestionsChoice(dshHome: string, value: boolean): Promise<void> {
   const doc = (await readKumoJsonDoc(dshHome)) as Record<string, unknown>;
   doc.suggestions = value;
-  const file = join(dshHome, "kumo.json");
+  const file = configWritePath(dshHome);
   await mkdir(dshHome, { recursive: true });
   const tmp = `${file}.tmp`;
   await writeFile(tmp, `${JSON.stringify(doc, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -171,7 +172,7 @@ function readEnvFile(dshHome: string): Record<string, string> {
 export function loadPrefill(dshHome: string): SetupAnswers | undefined {
   let kumoDoc: KumoJsonShape | undefined;
   try {
-    kumoDoc = JSON.parse(readFileSync(join(dshHome, "kumo.json"), "utf8")) as KumoJsonShape;
+    kumoDoc = JSON.parse(readFileSync(configReadPath(dshHome), "utf8")) as KumoJsonShape;
   } catch {
     kumoDoc = undefined;
   }
@@ -426,7 +427,7 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
 export function savedSkillsList(dshHome: string): string[] | undefined {
   try {
     const doc = JSON.parse(
-      readFileSync(join(dshHome, "kumo.json"), "utf8"),
+      readFileSync(configReadPath(dshHome), "utf8"),
     ) as { skills?: unknown };
     return Array.isArray(doc.skills) ? doc.skills.map((s) => String(s)) : undefined;
   } catch {
@@ -442,7 +443,7 @@ export function savedSkillsList(dshHome: string): string[] | undefined {
  */
 export function installedSkillsList(dshHome: string): string[] | undefined {
   try {
-    const raw = JSON.parse(readFileSync(join(dshHome, "skills", SKILLS_MANIFEST), "utf8")) as Record<string, unknown>;
+    const raw = JSON.parse(readFileSync(manifestReadPath(join(dshHome, "skills")), "utf8")) as Record<string, unknown>;
     const names = Object.keys(raw).filter((n) => n !== "" && typeof raw[n] !== "undefined");
     return names.length > 0 ? names.sort((a, b) => a.localeCompare(b)) : [];
   } catch {

@@ -560,7 +560,7 @@ test.skipIf(process.platform === "win32")("/config opens settings.yaml and kumo.
     const record = join(h.project, "opened.txt");
     writeFileSync(recorder, `#!/bin/sh\nprintf '%s\\n' "$@" > '${record}'\n`);
     chmodSync(recorder, 0o755);
-    const configPath = join(h.home, "kumo.json");
+    const configPath = join(h.home, "bruine.json");
     writeFileSync(configPath, JSON.stringify({ ...JSON.parse(readFileSync(configPath, "utf8")), editor: recorder }));
 
     h.type("/config");
@@ -568,7 +568,7 @@ test.skipIf(process.platform === "win32")("/config opens settings.yaml and kumo.
     await h.waitFor("Opened settings.yaml and kumo.json in fake-editor.sh");
     await h.until(() => existsSync(record), 3000, "the editor ran");
     const opened = readFileSync(record, "utf8").trim().split("\n");
-    expect(opened).toEqual([join(h.home, "settings.yaml"), join(h.home, "kumo.json")]);
+    expect(opened).toEqual([join(h.home, "settings.yaml"), join(h.home, "bruine.json")]);
     // The screen says what to do next, and kumo is still running.
     expect(h.screen().join("\n")).toContain("/reload");
     expect(h.exit).toBeUndefined();
@@ -760,7 +760,7 @@ test("/config path lists the files without opening anything", async () => {
     await h.waitFor("Config files:");
     const screen = h.screen().join("\n");
     expect(screen).toContain("settings.yaml");
-    expect(screen).toContain("kumo.json");
+    expect(screen).toContain("bruine.json");
     expect(screen).not.toContain(".env");
   });
 });

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { appHome, configReadPath } from "./compat.js";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createInterface } from "node:readline";
@@ -84,7 +85,7 @@ function ensureBundleInstalled(
   if (!headless) console.log("Setting up kumo (one time)…");
   const { status, error, output } = runDsh(
     dshEntry,
-    ["plugin", "--profile", "kumo", "add", spec],
+    ["plugin", "--profile", "bruine", "add", spec],
     env,
     true,
   );
@@ -110,7 +111,7 @@ interface KumoJson {
 
 function readKumoJson(dshHome: string): KumoJson {
   try {
-    return JSON.parse(readFileSync(join(dshHome, "kumo.json"), "utf8")) as KumoJson;
+    return JSON.parse(readFileSync(configReadPath(dshHome), "utf8")) as KumoJson;
   } catch {
     return {};
   }
@@ -292,7 +293,7 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const dshHome = process.env.KUMO_HOME ?? join(os.homedir(), ".kumo");
+  const dshHome = appHome();
 
   if (argv[0] === "skills") {
     await printSkills(dshHome);

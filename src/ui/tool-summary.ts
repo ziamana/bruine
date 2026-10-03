@@ -1,3 +1,4 @@
+import { configReadPath } from "../compat.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -7,7 +8,7 @@ export function toolSummariesEnabled(env: NodeJS.ProcessEnv = process.env): bool
   if (env.KUMO_TOOL_SUMMARIES === "1") return true;
   if (!env.DSH_HOME) return true;
   try {
-    const doc = JSON.parse(readFileSync(join(env.DSH_HOME, "kumo.json"), "utf8")) as { toolSummaries?: unknown };
+    const doc = JSON.parse(readFileSync(configReadPath(env.DSH_HOME), "utf8")) as { toolSummaries?: unknown };
     return doc?.toolSummaries !== false;
   } catch {
     return true;

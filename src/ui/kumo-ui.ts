@@ -1,3 +1,4 @@
+import { runtimeHome, configReadPath } from "../compat.js";
 import { parse as parseYaml } from "yaml";
 import {
   Container,
@@ -214,8 +215,8 @@ export function readKumoJsonForHeader(dshHome?: string): {
   models?: { main?: { baseUrl?: string; provider?: string; model?: string; name?: string; contextWindow?: number } };
 } | undefined {
   try {
-    const home = dshHome ?? process.env.DSH_HOME ?? join(homedir(), ".kumo");
-    const p = join(home, "kumo.json");
+    const home = dshHome ?? runtimeHome();
+    const p = configReadPath(home);
     if (!existsSync(p)) return undefined;
     return JSON.parse(readFileSync(p, "utf8")) as {
       models?: { main?: { baseUrl?: string; provider?: string; model?: string; name?: string; contextWindow?: number } };
@@ -292,7 +293,7 @@ export interface SettingsProvider {
  */
 export function readSettingsProviders(dshHome?: string): SettingsProvider[] {
   try {
-    const home = dshHome ?? process.env.DSH_HOME ?? join(homedir(), ".kumo");
+    const home = dshHome ?? runtimeHome();
     const p = join(home, "settings.yaml");
     if (!existsSync(p)) return [];
     const doc = parseYaml(readFileSync(p, "utf8")) as any;
@@ -326,7 +327,7 @@ export function readSettingsProviders(dshHome?: string): SettingsProvider[] {
 /** settings.yaml reader: default route + baseURL/name/window (real YAML parser; the hand-written one broke on kumo's own list style). */
 export function readSettingsRoute(dshHome?: string): SettingsRoute | undefined {
   try {
-    const home = dshHome ?? process.env.DSH_HOME ?? join(homedir(), ".kumo");
+    const home = dshHome ?? runtimeHome();
     const p = join(home, "settings.yaml");
     if (!existsSync(p)) return undefined;
     const doc = parseKumoSettingsYaml(readFileSync(p, "utf8"));
@@ -1117,7 +1118,7 @@ export class KumoUi {
     const plugins = readKumoPlugins();
     let skills: string[] = [];
     try {
-      const home = process.env.DSH_HOME ?? join(homedir(), ".kumo");
+      const home = runtimeHome();
       skills = (await readInstalledSkills(join(home, "skills"))).map((entry) => entry.name);
     } catch {
       skills = [];

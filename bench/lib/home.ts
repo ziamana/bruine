@@ -127,7 +127,7 @@ export async function writeBenchHome(opts: BenchHomeOptions): Promise<{ profileD
 
   const settings = benchHomeSettings(opts);
   await writeFile(join(home, "settings.yaml"), renderSettingsYaml(settings), "utf8");
-  await writeFile(join(home, "kumo.json"), `${JSON.stringify(benchHomeKumoJson(opts), null, 2)}\n`, "utf8");
+  await writeFile(join(home, "bruine.json"), `${JSON.stringify(benchHomeKumoJson(opts), null, 2)}\n`, "utf8");
   const env = opts.env ?? {};
   const lines = Object.entries(env).map(([k, v]) => `${k}=${v}`);
   await writeFile(join(home, ".env"), `${lines.join("\n")}\n`, "utf8");

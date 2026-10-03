@@ -160,7 +160,7 @@ describe("the gate without a terminal (T42)", () => {
       };
       expect(await mkModes()).toBe("auto");
       expect(Modes).toBeDefined();
-      await writeFile(join(fresh, "kumo.json"), JSON.stringify({ access: "ask" }));
+      await writeFile(join(fresh, "bruine.json"), JSON.stringify({ access: "ask" }));
       expect(await mkModes()).toBe("ask");
     } finally {
       if (prev === undefined) delete process.env.DSH_HOME;

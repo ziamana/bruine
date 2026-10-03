@@ -45,16 +45,16 @@ test("a readable description never hides the real command in approval", () => {
 test("the environment overrides the saved preference and new calls use it", () => {
   const home = mkdtempSync(join(tmpdir(), "kumo-tool-summary-"));
   try {
-    writeFileSync(join(home, "kumo.json"), JSON.stringify({ toolSummaries: false }));
+    writeFileSync(join(home, "bruine.json"), JSON.stringify({ toolSummaries: false }));
     expect(toolSummariesEnabled({ DSH_HOME: home })).toBe(false);
     expect(toolSummariesEnabled({ DSH_HOME: home, KUMO_TOOL_SUMMARIES: "1" })).toBe(true);
-    writeFileSync(join(home, "kumo.json"), JSON.stringify({ toolSummaries: true }));
+    writeFileSync(join(home, "bruine.json"), JSON.stringify({ toolSummaries: true }));
     expect(toolSummariesEnabled({ DSH_HOME: home, KUMO_TOOL_SUMMARIES: "0" })).toBe(false);
     process.env.DSH_HOME = home; process.env.KUMO_TOOL_SUMMARIES = "0";
     const tool = new ToolCallComponent("bash", () => 0);
     tool.setArgs('{"description":"Check tests", "command":"pnpm test"}');
     expect(strip(tool.render(100)[0]!)).toContain("pnpm test");
-    writeFileSync(join(home, "kumo.json"), "invalid json");
+    writeFileSync(join(home, "bruine.json"), "invalid json");
     expect(toolSummariesEnabled({ DSH_HOME: home })).toBe(true);
     expect(toolSummariesEnabled({})).toBe(true);
   } finally { rmSync(home, { recursive: true, force: true }); }

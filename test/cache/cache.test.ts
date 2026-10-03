@@ -72,7 +72,7 @@ beforeAll(async () => {
   await writeFile(join(home, "settings.yaml"), renderSettingsYaml(settings));
   await writeFile(join(home, ".env"), "KUMO_LOCAL_API_KEY=local\n");
   await writeFile(
-    join(home, "kumo.json"),
+    join(home, "bruine.json"),
     JSON.stringify({ mode: "simple", search: { provider: "none" }, permissionMode: "full" }, null, 2),
   );
   const { dir } = await ensureProfile(home);
@@ -225,7 +225,7 @@ describe("Cache Hunter (T17)", () => {
       expect(third).toContain("Plan mode is on");
       const sys3 = (mains[2]!.messages.find((m) => m.role === "system" || m.role === "developer")?.content ?? "") as string;
       expect(sys3).not.toContain("Plan mode is on");
-      expect(sys3).toContain("You are kumo");
+      expect(sys3).toContain("You are bruine");
     },
     300_000,
   );

@@ -287,7 +287,7 @@ describe("kumo-effort runtime (T34)", () => {
       models: { main: { provider: "local", model: "m1", template: { enableThinking: true } } },
       ...(h.savedDoc as object),
     };
-    await writeFile(join(home, "kumo.json"), JSON.stringify(doc));
+    await writeFile(join(home, "bruine.json"), JSON.stringify(doc));
     await h.effort.attach({ agent: {}, selection: h.holder, ui: h.ui as never } as never, h.llm as never);
     return home;
   }
@@ -317,7 +317,7 @@ describe("kumo-effort runtime (T34)", () => {
     h.holder.current = { provider: "openrouter", model: "m1" };
     const home = await mkdtemp(join(tmpdir(), "kumo-t34-"));
     process.env.DSH_HOME = home;
-    await writeFile(join(home, "kumo.json"), JSON.stringify({ models: {} }));
+    await writeFile(join(home, "bruine.json"), JSON.stringify({ models: {} }));
     await h.effort.attach({ agent: {}, selection: h.holder, ui: h.ui as never } as never, h.llm as never);
     expect(h.holder.current?.reasoningEffort).toBeUndefined();
     expect(h.footerState.effort).toBe("auto");
@@ -335,7 +335,7 @@ describe("kumo-effort runtime (T34)", () => {
     expect(h.footerState.effort).toBe("high");
     // remembered per model in kumo.json:
     await h.effort.persisted;
-    const doc = JSON.parse(await readFile(join(h.home!, "kumo.json"), "utf8")) as any;
+    const doc = JSON.parse(await readFile(join(h.home!, "bruine.json"), "utf8")) as any;
     expect(doc.reasoningEffort).toEqual({ m1: "high" });
     expect(doc.models).toBeDefined(); // other keys preserved
   });

@@ -1,3 +1,4 @@
+import { runtimeHome, configReadPath } from "../compat.js";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -69,8 +70,8 @@ const PERMISSION_ORDER: PermissionMode[] = ["ask", "auto", "full"];
 
 function readKumoJson(env: NodeJS.ProcessEnv = process.env): Record<string, unknown> {
   try {
-    const home = env.DSH_HOME ?? join(homedir(), ".kumo");
-    const path = join(home, "kumo.json");
+    const home = runtimeHome(env);
+    const path = configReadPath(home);
     if (!existsSync(path)) return {};
     return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
   } catch {

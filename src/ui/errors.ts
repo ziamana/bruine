@@ -1,3 +1,4 @@
+import { runtimeHome } from "../compat.js";
 /**
  * T33b — errors must say what to do. One mapping from a dsh/pi-ai turn
  * failure to the ticket's two UI lines: one red actionable line, one dim
@@ -216,7 +217,7 @@ export async function fetchAvailableModels(baseUrl: string): Promise<string[]> {
 }
 
 export function kumoLogPath(env: NodeJS.ProcessEnv = process.env): string {
-  const home = env.DSH_HOME ?? join(process.env.HOME ?? ".", ".kumo");
+  const home = runtimeHome(env);
   return join(home, "logs", "kumo.log");
 }
 

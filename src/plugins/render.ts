@@ -1,3 +1,4 @@
+import { configReadPath } from "../compat.js";
 import { Text } from "@earendil-works/pi-tui";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -613,7 +614,7 @@ export function attachTui(
     try {
       const home = process.env.DSH_HOME;
       if (home === undefined || home === "") return true;
-      const raw = readFileSync(join(home, "kumo.json"), "utf8");
+      const raw = readFileSync(configReadPath(home), "utf8");
       const doc = JSON.parse(raw) as { suggestions?: boolean };
       return doc.suggestions ?? true;
     } catch {
@@ -625,7 +626,7 @@ export function attachTui(
     try {
       const home = process.env.DSH_HOME;
       if (home !== undefined && home !== "") {
-        const raw = readFileSync(join(home, "kumo.json"), "utf8");
+        const raw = readFileSync(configReadPath(home), "utf8");
         const doc = JSON.parse(raw) as {
           models?: {
             fast?: { provider?: string; model?: string };

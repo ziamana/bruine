@@ -22,9 +22,9 @@ const withPrograms = (...names: string[]) => ({
 
 describe("configFiles", () => {
   test("is the files that exist, settings first, and never .env", () => {
-    const dir = home({ "kumo.json": "{}", "settings.yaml": "x: 1", ".env": "KEY=secret" });
-    expect(configFiles(dir)).toEqual([join(dir, "settings.yaml"), join(dir, "kumo.json")]);
-    expect(configFiles(home({ "kumo.json": "{}" }))).toEqual([expect.stringMatching(/kumo\.json$/)]);
+    const dir = home({ "bruine.json": "{}", "settings.yaml": "x: 1", ".env": "KEY=secret" });
+    expect(configFiles(dir)).toEqual([join(dir, "settings.yaml"), join(dir, "bruine.json")]);
+    expect(configFiles(home({ "bruine.json": "{}" }))).toEqual([expect.stringMatching(/bruine\.json$/)]);
     expect(configFiles(home())).toEqual([]);
   });
 });
@@ -37,9 +37,9 @@ describe("resolveEditor: the user's word, then the desktop's", () => {
   });
 
   test("then `editor` in kumo.json", () => {
-    const dir = home({ "kumo.json": JSON.stringify({ editor: "kwrite" }) });
+    const dir = home({ "bruine.json": JSON.stringify({ editor: "kwrite" }) });
     const { env, exists } = withPrograms("kate");
-    expect(resolveEditor(dir, env, "linux", exists)).toEqual({ command: "kwrite", args: [], source: "kumo.json" });
+    expect(resolveEditor(dir, env, "linux", exists)).toEqual({ command: "kwrite", args: [], source: "bruine.json" });
   });
 
   test("a quoted path with spaces stays one program", () => {

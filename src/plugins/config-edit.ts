@@ -1,9 +1,10 @@
+import { configReadPath } from "../compat.js";
 import { spawn, type SpawnOptions } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
 /** The files `/config` opens, in the order a person edits them. `.env` holds keys and is never opened for you. */
-const CONFIG_FILES = ["settings.yaml", "kumo.json"] as const;
+const CONFIG_FILES = ["settings.yaml", "bruine.json"] as const;
 
 /**
  * Editors that take over the terminal kumo is drawing in. Opening one from inside the
@@ -20,7 +21,7 @@ const GUI_EDITORS = ["kate", "kwrite", "gedit", "xed", "mousepad", "pluma", "cod
 
 /** The config files that exist under `home`, as absolute paths. */
 export function configFiles(home: string, exists: (p: string) => boolean = existsSync): string[] {
-  return CONFIG_FILES.map((name) => join(home, name)).filter((p) => exists(p));
+  return [join(home, "settings.yaml"), configReadPath(home)].filter((p) => exists(p));
 }
 
 /** How an editor is launched: the program, what goes before the files, and where the choice came from. */
@@ -51,7 +52,7 @@ function onPath(command: string, env: NodeJS.ProcessEnv, exists: (p: string) => 
 /** What kumo.json says under `editor`, or nothing: a missing or broken file is no opinion. */
 function editorFromKumoJson(home: string): string | undefined {
   try {
-    const doc = JSON.parse(readFileSync(join(home, "kumo.json"), "utf8")) as { editor?: unknown };
+    const doc = JSON.parse(readFileSync(configReadPath(home), "utf8")) as { editor?: unknown };
     return typeof doc.editor === "string" && doc.editor.trim() !== "" ? doc.editor : undefined;
   } catch {
     return undefined;
@@ -74,7 +75,7 @@ export function resolveEditor(
 ): EditorChoice | undefined {
   const stated: Array<[string, string | undefined]> = [
     ["KUMO_EDITOR", env.KUMO_EDITOR],
-    ["kumo.json", editorFromKumoJson(home)],
+    ["bruine.json", editorFromKumoJson(home)],
   ];
   for (const [source, line] of stated) {
     const split = line === undefined ? undefined : splitCommand(line);

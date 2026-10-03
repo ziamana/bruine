@@ -9,6 +9,7 @@
  *
  *   pnpm bench -- --route local/ornith-9b --variant dsh --tasks read-default-port,bug-range-off-by-one --repeat 1
  */
+import { appHome } from "../src/compat.js";
 import { readFile, readdir, rm, mkdir, mkdtemp } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -33,7 +34,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /** `~/.kumo/settings.yaml`, the file a real kumo install writes. */
 function defaultSettingsPath(): string {
-  const home = process.env.KUMO_HOME ?? join(homedir(), ".kumo");
+  const home = appHome();
   return join(home, "settings.yaml");
 }
 

@@ -22,7 +22,7 @@ describe("profile composition (T15)", () => {
       };
       const add = spawnSync(
         process.execPath,
-        [entry as string, "plugin", "--profile", "kumo", "add", repoRoot],
+        [entry as string, "plugin", "--profile", "bruine", "add", repoRoot],
         { stdio: ["ignore", "pipe", "pipe"], env, cwd: repoRoot },
       );
       expect(add.status, String(add.stderr)).toBe(0);
@@ -30,7 +30,7 @@ describe("profile composition (T15)", () => {
 
       const dump = spawnSync(
         process.execPath,
-        [entry as string, "--profile", "kumo", "--dump-config"],
+        [entry as string, "--profile", "bruine", "--dump-config"],
         { encoding: "utf8", env },
       );
       expect(dump.status, dump.stderr).toBe(0);
@@ -38,7 +38,7 @@ describe("profile composition (T15)", () => {
 
       // Identity (T15.1)
       expect(out).toContain("includeHarnessIdentity: false");
-      expect(out).toContain("You are kumo");
+      expect(out).toContain("You are bruine");
       expect(out).toContain("Your working directory is");
     // Plugins
     for (const needle of [

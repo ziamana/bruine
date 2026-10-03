@@ -1,3 +1,4 @@
+import { runtimeHome, configReadPath, configWritePath } from "./compat.js";
 /**
  * T30 — update check + `kumo update`.
  *
@@ -45,7 +46,7 @@ export function resolveDshHome(
   env: NodeJS.ProcessEnv = process.env,
   pathMod: typeof path = path,
 ): string {
-  return env.KUMO_HOME ?? env.DSH_HOME ?? pathMod.join(homedir(), ".kumo");
+  return runtimeHome(env, pathMod);
 }
 
 export function updateCachePath(dshHome: string, pathMod: typeof path = path): string {
@@ -131,7 +132,7 @@ async function writeUpdateCache(
 export async function readKumoJsonDoc(dshHome: string): Promise<Record<string, unknown>> {
   try {
     return JSON.parse(
-      await readFile(join(dshHome, "kumo.json"), "utf8"),
+      await readFile(configReadPath(dshHome), "utf8"),
     ) as Record<string, unknown>;
   } catch {
     return {};
@@ -218,7 +219,7 @@ export function readUpdateCheckChoice(
 export async function setUpdateCheck(dshHome: string, value: boolean): Promise<void> {
   const doc = await readKumoJsonDoc(dshHome);
   doc.updateCheck = value;
-  const file = join(dshHome, "kumo.json");
+  const file = configWritePath(dshHome);
   await mkdir(dshHome, { recursive: true });
   const tmp = `${file}.tmp`;
   await writeFile(tmp, `${JSON.stringify(doc, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });

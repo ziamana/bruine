@@ -236,7 +236,7 @@ test("T35: existing install → menu → Theme → light → Save and exit (only
     expect(after["ui-theme"]).toEqual({ preference: "light" });
     expect(before["ui-theme"]).toBeUndefined();
 
-    const kumo = JSON.parse(await readFile(join(home, "kumo.json"), "utf8")) as Record<string, any>;
+    const kumo = JSON.parse(await readFile(join(home, "bruine.json"), "utf8")) as Record<string, any>;
     expect(kumo.theme).toBe("light");
     expect((kumo.models as any).main).toMatchObject({
       provider: "local",
@@ -383,7 +383,7 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
     h.press("enter");
     await h.waitFor("kumo: configuration saved.");
 
-    const kumo = JSON.parse(await readFile(join(home, "kumo.json"), "utf8")) as Record<string, any>;
+    const kumo = JSON.parse(await readFile(join(home, "bruine.json"), "utf8")) as Record<string, any>;
     expect(kumo.search).toEqual({ provider: "none" });
     expect(kumo.skills).toEqual([]);
     expect(kumo.theme).toBe("dark");
@@ -458,7 +458,7 @@ test("first install → Yes to Space Bunny Free → its own route and key, nothi
     });
     const env = await readFile(join(home, ".env"), "utf8");
     expect(env).toContain("KUMO_ZEN_API_KEY=public");
-    const kumo = JSON.parse(await readFile(join(home, "kumo.json"), "utf8")) as Record<string, any>;
+    const kumo = JSON.parse(await readFile(join(home, "bruine.json"), "utf8")) as Record<string, any>;
     expect(kumo.models.main).toMatchObject({ provider: "opencode-zen", model: "space-bunny-free", contextWindow: 1_000_000 });
   } finally {
     await h.dump("t35-zen-failure");
@@ -616,7 +616,7 @@ test("setup cards keep Mode, Search and the three Telemetry choices independentl
     await h.waitMenu();
     await h.pressN("down", 6); h.press("enter");
     await h.waitFor("kumo: configuration saved.");
-    const doc = JSON.parse(await readFile(join(home, "kumo.json"), "utf8"));
+    const doc = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
     expect(doc.permissionMode).toBe("ask");
     expect(doc.search).toEqual({ provider: "none" });
     expect(doc.telemetry).toBe(false);

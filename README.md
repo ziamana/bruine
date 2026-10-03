@@ -1,20 +1,64 @@
+<div align="center">
+
+<img src="docs/demo/bruine.svg" alt="bruine in a terminal: a prompt, the model's reasoning streaming then folding away, a file read, an edit shown as a diff, two permission prompts, the tests passing, and a second prompt that was queued while it worked going out after" width="820">
+
 # bruine
 
-An interactive terminal coding agent that runs **your** models.
+**A coding agent for your terminal that runs your own models.**
 
-Point bruine at a local llama.cpp server, any cloud provider (DeepSeek, Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI and about twenty more), or anything that speaks the
-OpenAI-compatible `/v1` API. It edits files, runs commands, and asks before anything risky. It is a
-profile plus a bundle of plugins on top of [DeepSeek Harness](https://github.com/deepseek-ai) (dsh),
-not a fork, so harness updates arrive without a merge.
+*bruine* (French, /bʁɥin/): a fine, steady rain.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-b4a7ff)](LICENSE)
+[![Node 22+](https://img.shields.io/badge/node-22%2B-7dcfff)](https://nodejs.org)
+![Windows · macOS · Linux](https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-supported-8fe3a3)
+
+</div>
+
+Point bruine at a llama.cpp server on your machine, at any cloud provider (DeepSeek, Anthropic,
+OpenAI, Google, OpenRouter, Groq, Mistral, xAI and about twenty more), or at anything that speaks
+the OpenAI-compatible `/v1` API. It reads and edits your code, runs your commands, and asks before
+anything risky. There is no account, and nothing is sent anywhere you did not point it at.
 
 ```
 npm install -g bruine
 bruine
 ```
 
-The first launch opens the setup wizard: it scans for a local model server, asks for API keys if you
-want a cloud route, lets you pick skills, and writes `~/.bruine/`. There is no account and nothing is
-sent anywhere you did not point it at.
+The first launch opens a setup wizard: it finds a local model server if you run one, asks for API
+keys if you want a cloud route, lets you pick skills, and writes `~/.bruine/`.
+
+<sub>The demo above is the real bruine in a real terminal on a real project, with a scripted model so
+it is the same every time: [`test/e2e/demo-recording.test.ts`](test/e2e/demo-recording.test.ts)
+records it.</sub>
+
+## Why bruine
+
+- **Your models, first class.** A local model on one GPU is not a degraded cloud: bruine keeps the
+  prompt cache warm (the system prompt and the tool list never change inside a session), keeps side
+  requests off a single-slot server, and shows what the hardware really does.
+- **One permission gate you can read.** Ask, Auto or Full access, decided by a rule table in plain
+  TypeScript with tests, not a black box: a plain read runs, a path outside the project asks, a
+  dangerous command always asks, and Plan mode refuses changes. MCP tools go through the same gate.
+- **Numbers you can trust.** Context used, tokens per second, prefill and cache hits are measured from
+  bruine's own clock. The harness once reported 79 tok/s where the truth was 60; bruine does not copy it.
+- **Calm.** Reasoning streams word by word and folds into one line; tool calls read as sentences; edits
+  are diffs; you can keep typing while it works. And it rains in your terminal, as hard as the model is
+  asked to think.
+
+## The gist in a minute
+
+| You want to | In bruine |
+|---|---|
+| Plan before it builds | `Shift+Tab` toggles Plan and Build |
+| Choose how much it asks | `/permissions`, or `/ask`, `/auto`, `/full` |
+| Think harder or faster | `ctrl+e` cycles the reasoning effort, `/effort` picks one |
+| Switch model mid-session | `/model`, `f2` walks the ones you used recently |
+| Queue the next task while it works | just type and press Enter: it waits above the box |
+| Run a command yourself | `!npm test` (the output is not sent to the model) |
+| Show it a screenshot | `ctrl+v` (`alt+v` in Windows Terminal) |
+| Use your MCP servers | `mcpServers` in `bruine.json` or `.mcp.json`, then `/mcp` |
+| Reuse your skills | Claude Code, OpenCode, pi and `~/.agents/skills` skills are picked up |
+| Script it | `bruine -p "task" --output-format json` |
 
 A first setup also asks, as a plain yes or no, whether to use Space Bunny Free: a model OpenCode serves
 at no charge for a limited time through its Zen gateway, with no account and no key. The answer starts on
@@ -62,6 +106,57 @@ from a README or from your Claude Code config works as it is. Put your own serve
   and `/mcp disable <name>` apply to the next session.
 - Tools are bridged; MCP resources and prompts are not (yet). Streamable HTTP is supported, the old
   SSE transport is not.
+
+## How it compares
+
+An honest table, checked against each project's documentation in October 2026; tell us if something
+moved. Every one of these is a good tool, and some do things bruine does not.
+
+| | bruine | Claude Code | OpenCode | Aider | Codex CLI |
+|---|---|---|---|---|---|
+| Source | MIT | Proprietary | MIT | Apache-2.0 | Apache-2.0 |
+| Models | Any: local llama.cpp, any `/v1` server, ~30 cloud providers | Claude (Anthropic API, Bedrock, Vertex) | 75+ providers, local included | Most LLMs, local included | OpenAI; local open-weight models with `--oss` |
+| Built for local models | Yes: cache kept warm, single-slot aware, measured tok/s | No | Supported | Supported | gpt-oss through Ollama or LM Studio |
+| MCP | Tools, stdio and HTTP | Yes | Yes | Not built in | Yes |
+| Permission model | One rule table, Ask / Auto / Full, Plan mode | Modes and rules, Plan mode | Per-agent permissions, Plan agent | Confirms commands; Git is the safety net | Approval modes and an OS sandbox |
+| Undo a change | No (use Git) | Yes, checkpoints and `/rewind` | Yes, `/undo` `/redo` | Yes, every edit is a commit, `/undo` | No (`/undo` was removed; use Git) |
+| IDE integration | No, terminal only | Yes | Yes (LSP, desktop app) | Editor plugins by the community | Yes |
+
+**Where bruine is behind, today:** no checkpoints or rewind (Git is your undo), no IDE or ACP
+integration, MCP is tools only (no resources, prompts or OAuth login), no LSP, and it is young (0.0.x)
+on top of a harness that is itself a developer preview. If you mostly use Claude models in an IDE,
+Claude Code is the better fit; if you want Git-commit-per-edit, Aider is.
+
+## FAQ
+
+**Is it free?** Yes, MIT, and everything that runs locally stays MIT. You pay your model provider, or
+nothing at all with a local model.
+
+**Does it send my code anywhere?** Only to the model route you configured. Telemetry is off unless you
+turn it on in the setup. Network discovery of model servers is opt-in and only touches private ranges
+(10/8, 172.16/12, 192.168/16, and Tailscale 100.64/10).
+
+**Which local model should I use?** One trained for tool calls, served by llama.cpp (or any OpenAI
+compatible server) with a context of 32k or more. Small models can chat but tend to lose the thread in
+long agent loops. The setup detects what the server's chat template supports (thinking, effort levels).
+
+**Does it work on Windows?** Yes: Windows Terminal, PowerShell and the classic console; commands run in
+PowerShell there. [docs/PLATFORMS.md](docs/PLATFORMS.md) lists what was checked and what still has limits.
+
+**How do I make it ask less?** `/auto` lets a fast model judge the routine actions (risky ones still
+ask), "Always for this session" remembers one exact command, and `/full` asks nothing at all (it says
+so loudly). For an MCP server you trust, `"readOnly": true` or `"alwaysAllow": [...]`.
+
+**Can I reuse my Claude Code setup?** Your skills, yes, and MCP servers in the same format, including a
+project's `.mcp.json`. Claude Code hooks are not run.
+
+**What is dsh?** [DeepSeek Harness](https://github.com/deepseek-ai), the agent runtime underneath.
+bruine is a profile and a bundle of plugins on top of it, not a fork, so harness updates arrive without
+a merge. The version is pinned and upgraded on purpose.
+
+**Why does it rain?** Because it is called bruine. The weather is local, uses no tokens, stays out of
+the input box and the cards, follows the effort with `/effect auto`, and goes away with `/effect off`
+or `BRUINE_NO_ANIMATION=1`.
 
 ## Commands
 

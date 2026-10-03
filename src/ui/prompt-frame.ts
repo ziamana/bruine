@@ -3,7 +3,8 @@ import { stripTerminalSequences, truncateToWidth, visibleWidth, type Component }
 import { bruineIcons, isAscii, asciiText, type BruineIcons } from "../render/chars.js";
 import { paint } from "./palette.js";
 import { WorkingComponent } from "./working.js";
-import { rippleFrame } from "./rain.js";
+import { currentEffortName, rippleFrame } from "./rain.js";
+import { glowDrawable, glowMode, tintBorder, type GlowMode } from "./border-glow.js";
 import { Box } from "./box.js";
 
 import { TurnActivity } from "./turn-activity.js";
@@ -23,6 +24,7 @@ export class PromptFrame implements Component {
     private editor: PromptEditor,
     readonly activity: TurnActivity = new TurnActivity(),
     private icons: BruineIcons = bruineIcons(),
+    private readonly clock: () => number = Date.now,
   ) {
     this.#working = new WorkingComponent(Date.now, icons, activity);
     activity.subscribe(() => this.updateBorder());
@@ -30,7 +32,20 @@ export class PromptFrame implements Component {
   }
   get focused(): boolean { return this.editor.focused; }
   set focused(value: boolean) { this.editor.focused = value; this.updateBorder(); }
-  get active(): boolean { return (this.activity.active && this.#working.active) || this.#ripple() !== undefined; }
+  get active(): boolean { return (this.activity.active && this.#working.active) || this.#ripple() !== undefined || this.#glow() !== undefined; }
+  /**
+   * How hard the model is asked to think shows on the frame: a slow violet at `high`, a fast one at
+   * `xhigh`, every colour at `max`. Undefined when there is nothing to show or no way to show it
+   * (no motion, ASCII, a terminal that cannot blend colours, `BRUINE_NO_GLOW=1`, or a frame nobody
+   * is looking at).
+   */
+  #glow(): { mode: Exclude<GlowMode, "off">; time: number } | undefined {
+    if (!this.#working.active || isAscii(this.icons) || process.env.BRUINE_NO_GLOW === "1") return undefined;
+    if (!this.activity.active && !this.editor.focused) return undefined;
+    const mode = glowMode(currentEffortName());
+    if (mode === "off" || !glowDrawable()) return undefined;
+    return { mode, time: this.clock() };
+  }
   /**
    * The ring a finished turn leaves on the rule, for a second: a drop landed. It needs the same
    * motion the spinner needs (`BRUINE_NO_RIPPLE=1` turns this one off alone), and it keeps the
@@ -64,7 +79,9 @@ export class PromptFrame implements Component {
       ? `${ink(tl)}${this.activityRule(rows[0]!, width - 2, ascii, ripple)}${ink(tr)}`
       : `${ink(tl + h)}${rows[0]}${ink(h + tr)}`;
     const lower = `${ink(bl + h)}${rows[bottom]}${ink(h + br)}`;
-    return [top, ...rows.slice(1, bottom).map(row => box.row(row)), lower,
+    const glow = this.#glow();
+    const tint = (line: string, kind: "edges" | "all"): string => (glow === undefined ? line : tintBorder(line, kind, glow.mode, glow.time));
+    return [tint(top, "all"), ...rows.slice(1, bottom).map(row => tint(box.row(row), "edges")), tint(lower, "all"),
       ...rows.slice(bottom + 1).map(row => `  ${row}`)];
   }
   private activityRule(original: string, width: number, ascii: boolean, ripple?: string): string {

@@ -120,10 +120,17 @@ export function effortToRain(effort: string | undefined): number {
 }
 
 let currentLevel = 0.45;
+let currentEffort: string | undefined;
 
-/** The footer says the effort changed; the waiting labels follow it. */
+/** The footer says the effort changed; the waiting labels (and the prompt's glow) follow it. */
 export function setRainLevel(effort: string | undefined): void {
   currentLevel = effortToRain(effort);
+  currentEffort = effort;
+}
+
+/** The effort in use, as the footer last said it; undefined until it said. */
+export function currentEffortName(): string | undefined {
+  return currentEffort;
 }
 
 export function rainLevel(): number {

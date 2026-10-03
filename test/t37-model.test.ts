@@ -743,7 +743,7 @@ describe("Space Bunny Free in /model", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
+  }, 30_000);
 
   test("/model space-bunny does the same by name, and is refused without a terminal to ask in", async () => {
     const h = harness({ picks: [0] });

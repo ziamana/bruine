@@ -68,6 +68,7 @@ reasoning effort, `ctrl+v` pastes an image.
 | `BRUINE_NO_ANIMATION=1` | No rain, header or spinner animation |
 | `BRUINE_NO_RIPPLE=1` | Only the ring a finished turn leaves on the prompt rule; the rest of the motion stays |
 | `BRUINE_NO_RAIN=1` | No rain in the setup (margins and behind the panel); the rest of the motion stays |
+| `BRUINE_NO_GLOW=1` | The prompt frame stays one colour whatever the thinking effort (otherwise `high` shimmers violet slowly, `xhigh` fast, and `max` runs every colour) |
 | `BRUINE_INTRO` | The logo's entrance at launch: `random` (the default), `off`, or one effect: `rain`, `decrypt`, `beams`, `wipe`, `slide`, `blackhole`, `spotlights`, `waves`, `fog`, `mist`, `afterrain`, `storm`. Also `"intro"` in `bruine.json`. Any key stops it. |
 | `BRUINE_TOOL_SUMMARIES=0` | Disable readable tool descriptions (also `"toolSummaries": false` in `bruine.json`). Summaries reuse existing arguments and make no model calls. |
 | `BRUINE_BG=0` | Never paint a background, whatever the terminal reports |

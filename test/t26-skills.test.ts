@@ -22,7 +22,7 @@ import {
   syncSkills,
   type FoundSkill,
 } from "../src/setup/skills.js";
-import { initialSkillChecks, savedSkillsList } from "../src/setup/full.js";
+import { RECOMMENDED_SKILLS, initialSkillChecks, savedSkillsList } from "../src/setup/full.js";
 import type { CheckItem } from "../src/setup/widgets.js";
 import { createAutocomplete } from "../src/ui/file-complete.js";
 import { formatAvailableSkills, skillCommand } from "../src/plugins/repl.js";
@@ -284,6 +284,30 @@ describe("wizard skills-step defaults (T26)", () => {
       { name: "beta", description: "", dir: "/h/.claude/skills/beta", source: "claude", alsoIn: [] },
     ];
     expect(initialSkillChecks(items, undefined, foundSkills)).toEqual(new Set([3]));
+  });
+
+  test("first run: the recommended skills are pre-checked wherever they were found", () => {
+    expect([...RECOMMENDED_SKILLS].sort()).toEqual([
+      "browser",
+      "impeccable",
+      "make-interfaces-feel-better",
+      "thermo-nuclear-code-quality-review",
+      "youtube-transcript",
+    ]);
+    const items: CheckItem[] = [
+      { value: "#h", label: "Found on this computer", disabled: true },
+      { value: "impeccable", label: "impeccable" },
+      { value: "youtube-transcript", label: "youtube-transcript" },
+      { value: "other", label: "other" },
+    ];
+    const foundSkills: FoundSkill[] = [
+      { name: "impeccable", description: "", dir: "/h/.pi/agent/skills/impeccable", source: "pi", alsoIn: [] },
+      { name: "youtube-transcript", description: "", dir: "/h/.claude/skills/youtube-transcript", source: "claude", alsoIn: [] },
+      { name: "other", description: "", dir: "/h/.claude/skills/other", source: "claude", alsoIn: [] },
+    ];
+    expect(initialSkillChecks(items, undefined, foundSkills)).toEqual(new Set([1, 2]));
+    // A list the user already saved is theirs: the recommendation never overrides it.
+    expect(initialSkillChecks(items, ["other"], foundSkills)).toEqual(new Set([3]));
   });
 
   test("a saved list pre-checks exactly that; headers never check", () => {

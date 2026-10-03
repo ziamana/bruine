@@ -447,6 +447,18 @@ export function installedSkillsList(dshHome: string): string[] | undefined {
  * `.agents/skills` in the user home, the behavior dsh had before kumo took over USER skills.
  * Same name shipped AND found: the shipped row wins (one entry per name).
  */
+/**
+ * Skills the setup pre-checks on a first run wherever they were found, not only under
+ * `~/.agents/skills`: they are linked from the folder they live in, never copied.
+ */
+export const RECOMMENDED_SKILLS: readonly string[] = [
+  "browser",
+  "impeccable",
+  "make-interfaces-feel-better",
+  "thermo-nuclear-code-quality-review",
+  "youtube-transcript",
+];
+
 export function initialSkillChecks(
   items: CheckItem[],
   saved: string[] | undefined,
@@ -457,7 +469,7 @@ export function initialSkillChecks(
     if (item.disabled === true) return;
     if (saved !== undefined) {
       if (saved.includes(item.value)) checked.add(i);
-    } else if (found.some((f) => f.name === item.value && f.source === "agents")) {
+    } else if (found.some((f) => f.name === item.value && (f.source === "agents" || RECOMMENDED_SKILLS.includes(f.name)))) {
       checked.add(i);
     }
   });

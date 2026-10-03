@@ -56,14 +56,34 @@ export function railPaint(rail: RailState, char: string, t: number): string {
   return paintHex(blendHex(from, to, t), char);
 }
 
+function sameLines(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 /** Own block spacing/padding once, without changing the model's transcript. */
 export class ChatTranscript extends Container {
   constructor(private icons: KumoIcons = kumoIcons()) {
     super();
   }
+  /** What each block was laid out as, and from what, so a block that did not change is not laid out again. */
+  #laid = new WeakMap<Component, { width: number; palette: string; rail: RailState | undefined; role: PaletteRole; showRail: boolean; block: string[]; piece: string[] }>();
   render(width: number): string[] {
     const inner = Math.max(1, width - 4);
     const lines: string[] = [];
+    // The colours a card is painted with: when the terminal's background is probed, or the
+    // theme changes, this string changes and every block is laid out again.
+    const palette = [
+      boxLine("toolOk", "", 8),
+      boxLine("toolPending", "", 8),
+      boxLine("toolErr", "", 8),
+      fillLine("userBlock", ""),
+      railPaint("blue", "x", 0),
+      railPaint("red", "x", 0),
+      railPaint("active", "x", 0),
+      reasoningStyle("x"),
+    ].join("|");
     // A thicker rail (Aron, 2026-09-26: "la barre bleue est trop fine").
     const railChar = this.icons.think === "*" ? "|" : "▍";
     // Tool calls (bash, write, read…) sit on the same gray as the prompt band and the
@@ -89,50 +109,64 @@ export class ChatTranscript extends Container {
       const showRail = !bgEnabled();
       const block = child.render(rail === undefined ? inner : Math.max(1, width - 8));
       if (!block.length) continue;
-      lines.push("");
-      // The rail runs the full height of the card, padding lines included (Aron: "la
-      // barre bleue ne va pas jusqu'au bout"); its gradient spans all of them.
-      const railSpan = block.length + 1;
-      if (rail !== undefined) lines.push(card(role, showRail ? railPaint(rail, railChar, 0) : ""));
-      if ((child as { surface?: boolean }).surface === true) {
-        // User prompt: a full-width tinted band (Nuage), one line of padding each
-        // side, opening on the same 1-column accent as the console band.
-        const band = (text: string): string => {
-          const painted = bgEnabled();
-          const inner = width - 1;
-          // Only clip a line that genuinely overflows. truncateToWidth reserves
-          // three cells for its ellipsis as soon as the text carries ANSI, so a
-          // full-width line that already fits would come back with its last
-          // three characters replaced by "...".
-          const cut = visibleWidth(text) > inner ? truncateToWidth(text, inner) : text;
-          const body = painted ? cut + " ".repeat(Math.max(0, inner - visibleWidth(cut))) : cut;
-          return fillLine("userBlock", (painted ? " " : railPaint("blue", railChar, 0)) + body);
-        };
-        // The band's top line is its own padding: one blank row in the tint above
-        // the prompt, so the prompt sits inside the band rather than on its edge.
-        // It used to carry a right-aligned `turn N`, which is one more piece of
-        // chrome between the eye and the question that was asked, and a number the
-        // reader has no use for: the receipt under the answer already counts what a
-        // turn did.
-        lines.push(band(""));
-        // The accent spends the first of the band's two leading columns, so the
-        // prompt still starts in column 2.
-        for (const line of block) lines.push(band(` ${withoutEmoji(line)}`));
-        lines.push(band(""));
+      // A block that renders the same lines at the same width in the same colours lays out
+      // the same card. Laying out is the cost: every line is measured and clipped, and a long
+      // session held hundreds of settled blocks that were redone on every frame, so the
+      // screen answered a keystroke a fifth of a second late. Only a block that changed pays.
+      const hit = this.#laid.get(child);
+      if (hit !== undefined && hit.width === width && hit.palette === palette && hit.rail === rail && hit.role === role && hit.showRail === showRail && sameLines(hit.block, block)) {
+        lines.push(...hit.piece);
         continue;
       }
-      const last = block.length - 1;
-      for (const [i, line] of block.entries()) {
-        const clean = (child as Component & { transcriptStyle?: string }).transcriptStyle === "reasoning" ? reasoningStyle(withoutEmoji(line)) : withoutEmoji(line);
-        if (rail === undefined) {
-          lines.push(truncateToWidth(`  ${clean}`, width - 2));
-        } else {
-          const colored = railPaint(rail, railChar, (i + 1) / railSpan);
-          const body = `${showRail ? colored : " "} ${clean}`;
-          lines.push(card(role, visibleWidth(body) > cardCells ? truncateToWidth(body, cardCells) : body));
+      const piece = ((): string[] => {
+        const piece: string[] = [];
+        piece.push("");
+        // The rail runs the full height of the card, padding lines included (Aron: "la
+        // barre bleue ne va pas jusqu'au bout"); its gradient spans all of them.
+        const railSpan = block.length + 1;
+        if (rail !== undefined) piece.push(card(role, showRail ? railPaint(rail, railChar, 0) : ""));
+        if ((child as { surface?: boolean }).surface === true) {
+          // User prompt: a full-width tinted band (Nuage), one line of padding each
+          // side, opening on the same 1-column accent as the console band.
+          const band = (text: string): string => {
+            const painted = bgEnabled();
+            const inner = width - 1;
+            // Only clip a line that genuinely overflows. truncateToWidth reserves
+            // three cells for its ellipsis as soon as the text carries ANSI, so a
+            // full-width line that already fits would come back with its last
+            // three characters replaced by "...".
+            const cut = visibleWidth(text) > inner ? truncateToWidth(text, inner) : text;
+            const body = painted ? cut + " ".repeat(Math.max(0, inner - visibleWidth(cut))) : cut;
+            return fillLine("userBlock", (painted ? " " : railPaint("blue", railChar, 0)) + body);
+          };
+          // The band's top line is its own padding: one blank row in the tint above
+          // the prompt, so the prompt sits inside the band rather than on its edge.
+          // It used to carry a right-aligned `turn N`, which is one more piece of
+          // chrome between the eye and the question that was asked, and a number the
+          // reader has no use for: the receipt under the answer already counts what a
+          // turn did.
+          piece.push(band(""));
+          // The accent spends the first of the band's two leading columns, so the
+          // prompt still starts in column 2.
+          for (const line of block) piece.push(band(` ${withoutEmoji(line)}`));
+          piece.push(band(""));
+          return piece;
         }
-      }
-      if (rail !== undefined) lines.push(card(role, showRail ? railPaint(rail, railChar, 1) : ""));
+        for (const [i, line] of block.entries()) {
+          const clean = (child as Component & { transcriptStyle?: string }).transcriptStyle === "reasoning" ? reasoningStyle(withoutEmoji(line)) : withoutEmoji(line);
+          if (rail === undefined) {
+            piece.push(truncateToWidth(`  ${clean}`, width - 2));
+          } else {
+            const colored = railPaint(rail, railChar, (i + 1) / railSpan);
+            const body = `${showRail ? colored : " "} ${clean}`;
+            piece.push(card(role, visibleWidth(body) > cardCells ? truncateToWidth(body, cardCells) : body));
+          }
+        }
+        if (rail !== undefined) piece.push(card(role, showRail ? railPaint(rail, railChar, 1) : ""));
+        return piece;
+      })();
+      this.#laid.set(child, { width, palette, rail, role, showRail, block, piece });
+      lines.push(...piece);
     }
     return lines;
   }

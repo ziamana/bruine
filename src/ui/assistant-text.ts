@@ -63,10 +63,15 @@ export class AssistantTextComponent implements Component {
     this.#md.setText(withoutEmoji(this.#tw.text));
   }
 
+  /** The shaped lines of the last markdown render: while the renderer hands back the same lines, so do we. */
+  #shaped: { from: string[]; lines: string[] } | undefined;
+
   render(width: number): string[] {
     // One blank line between two blocks: the renderer leaves three around a
     // fence, and a screen where every block is floating has no rhythm at all.
-    return oneBlankBetween(this.#md.render(width));
+    const rendered = this.#md.render(width);
+    if (this.#shaped?.from !== rendered) this.#shaped = { from: rendered, lines: oneBlankBetween(rendered) };
+    return this.#shaped.lines;
   }
 
   invalidate(): void {

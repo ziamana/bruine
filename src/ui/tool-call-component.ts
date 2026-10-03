@@ -89,9 +89,9 @@ export class ToolCallComponent implements ChatToolCall {
   get diffCard(): boolean { return this.#diff !== undefined && this.#diff.lines.length > 0; }
   get doneOk(): boolean | undefined { return this.#done?.ok; }
   get seconds(): number | undefined { return this.#done?.seconds; }
-  args(delta: string): void { this.#rawArgs += delta; }
+  args(delta: string): void { this.#rawArgs += delta; this.#settled = undefined; }
   /** The durable event replaces streamed JSON, it must never be appended twice. */
-  setArgs(json: string): void { this.#rawArgs = json; }
+  setArgs(json: string): void { this.#rawArgs = json; this.#settled = undefined; }
   result(ok: boolean, output: string): void {
     // dsh wraps file reads in <path>/<type>/<content> tags: the header already says
     // which file, so show only the content lines.
@@ -103,6 +103,7 @@ export class ToolCallComponent implements ChatToolCall {
     while (lines.length > 0 && lines.at(-1)!.trim() === "") lines.pop();
     this.#diff = ok && WRITE_TOOLS.has(this.tool) ? diffForCall(this.tool, this.#rawArgs) : undefined;
     if (lines.at(-1) === "") lines.pop();
+    this.#settled = undefined;
     this.#done = { ok, seconds: (this.now() - this.#startTime) / 1000, lines: lines.slice(0, MAX_OUTPUT_LINES), rest: Math.max(0, lines.length - MAX_OUTPUT_LINES) };
   }
   cancel(): void { if (this.active) this.result(false, "Cancelled"); }
@@ -221,7 +222,15 @@ export class ToolCallComponent implements ChatToolCall {
       ...(hidden > 0 ? [ansi.faint(clipCells(`    ${ellipsis} ${String(hidden)} more lines`, width))] : []),
     ];
   }
+  /** A settled call at one width in one set of colours is the same lines every time it is asked for. */
+  #settled: { width: number; ink: string; lines: string[] } | undefined;
   render(width: number): string[] {
+    if (this.#done === undefined) return this.#draw(width);
+    const ink = `${ansi.gray("x")}${ansi.green("x")}${ansi.red("x")}${ansi.text("x")}`;
+    if (this.#settled?.width !== width || this.#settled.ink !== ink) this.#settled = { width, ink, lines: this.#draw(width) };
+    return this.#settled.lines;
+  }
+  #draw(width: number): string[] {
     const toolPad = padCells(this.tool, 7);
     if (!this.#done) {
       const fr = spinnerFrame(this.now() - this.#startTime, this.icons);

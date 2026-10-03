@@ -1,0 +1,171 @@
+import React from "react";
+import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
+import { COLORS, FONTS, type Copy } from "../config";
+import { Reveal, Scene, Title } from "../components/Scene";
+import { ease, sec } from "../lib/motion";
+
+const CARD_AT = [sec(0.55), sec(1.5), sec(2.45)] as const;
+const VISUAL = 230;
+
+const Speed: React.FC<{ copy: Copy["promises"]["speed"]; at: number }> = ({ copy, at }) => {
+  const frame = useCurrentFrame();
+  const strike = ease(frame, at + sec(0.7), 14);
+  const count = Math.round(interpolate(frame, [at + sec(0.5), at + sec(1.3)], [0, Number(copy.measured)], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }));
+  return (
+    <div style={{ height: VISUAL, display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 56, paddingBottom: 18 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{ position: "relative", fontFamily: FONTS.mono, fontSize: 64, color: COLORS.faint }}>
+          {copy.quoted}
+          <div style={{ position: "absolute", left: -6, top: "52%", height: 4, width: `calc(${strike * 100}% + 12px)`, background: COLORS.rose, borderRadius: 2 }} />
+        </div>
+        <div style={{ fontSize: 20, color: COLORS.faint, marginTop: 6 }}>{copy.quotedLabel}</div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{ fontFamily: FONTS.mono, fontSize: 104, color: COLORS.mint, lineHeight: 1 }}>{count}</div>
+        <div style={{ fontSize: 20, color: COLORS.muted, marginTop: 10 }}>
+          {copy.measuredLabel} · <span style={{ fontFamily: FONTS.mono }}>{copy.unit}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const VERDICT = { allow: COLORS.mint, ask: COLORS.amber, deny: COLORS.rose } as const;
+const Rules: React.FC<{ rules: Copy["promises"]["rules"]; at: number }> = ({ rules, at }) => {
+  const frame = useCurrentFrame();
+  return (
+    <div style={{ height: VISUAL, display: "flex", flexDirection: "column", justifyContent: "center", gap: 14, padding: "0 6px" }}>
+      {rules.map((rule, i) => {
+        const k = ease(frame, at + sec(0.45) + i * 8, 12);
+        const verdict = ease(frame, at + sec(0.45) + i * 8 + 10, 10);
+        return (
+          <div
+            key={rule.command}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: COLORS.window,
+              border: `1px solid ${COLORS.windowEdge}`,
+              borderRadius: 10,
+              padding: "0 16px",
+              height: 54,
+              opacity: k,
+              transform: `translateX(${(1 - k) * 12}px)`,
+              fontFamily: FONTS.mono,
+              fontSize: 22,
+            }}
+          >
+            <span style={{ color: COLORS.text }}>
+              <span style={{ color: COLORS.faint }}>$ </span>
+              {rule.command}
+            </span>
+            <span
+              style={{
+                color: VERDICT[rule.verdict],
+                border: `1.5px solid ${VERDICT[rule.verdict]}`,
+                borderRadius: 999,
+                padding: "2px 14px",
+                fontSize: 19,
+                opacity: verdict,
+              }}
+            >
+              {rule.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const Cache: React.FC<{ copy: Copy["promises"]["cache"]; at: number }> = ({ copy, at }) => {
+  const frame = useCurrentFrame();
+  const segment = (w: number, color: string, label?: string, alpha = 1): React.ReactNode => (
+    <div
+      style={{
+        width: w,
+        height: 34,
+        borderRadius: 6,
+        background: color,
+        opacity: alpha,
+        fontFamily: FONTS.mono,
+        fontSize: 16,
+        color: COLORS.night,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
+      {label}
+    </div>
+  );
+  return (
+    <div style={{ height: VISUAL, display: "flex", flexDirection: "column", justifyContent: "center", gap: 12, padding: "0 6px" }}>
+      {[1, 2, 3].map((turn, i) => {
+        const k = ease(frame, at + sec(0.45) + i * 9, 12);
+        return (
+          <div key={turn} style={{ display: "flex", alignItems: "center", gap: 6, opacity: k }}>
+            <div style={{ width: 60, fontFamily: FONTS.mono, fontSize: 17, color: COLORS.faint, whiteSpace: "nowrap" }}>
+              {copy.turn} {turn}
+            </div>
+            {segment(110, COLORS.lavender, copy.system)}
+            {segment(84, COLORS.sky, copy.tools)}
+            {Array.from({ length: turn * 2 }, (_, m) => (
+              <React.Fragment key={m}>{segment(18, m % 2 === 0 ? COLORS.chip : "#3a4058")}</React.Fragment>
+            ))}
+          </div>
+        );
+      })}
+      <div style={{ marginLeft: 66, width: 200, opacity: ease(frame, at + sec(1.2), 12) }}>
+        <div style={{ height: 10, borderLeft: `1.5px solid ${COLORS.lavender}`, borderRight: `1.5px solid ${COLORS.lavender}`, borderBottom: `1.5px solid ${COLORS.lavender}` }} />
+        <div style={{ fontSize: 18, color: COLORS.lavender, textAlign: "center", marginTop: 8, whiteSpace: "nowrap" }}>{copy.same}</div>
+      </div>
+    </div>
+  );
+};
+
+export const Promises: React.FC<{ copy: Copy["promises"] }> = ({ copy }) => {
+  const frame = useCurrentFrame();
+  const visuals = [
+    <Speed key="s" copy={copy.speed} at={CARD_AT[0]} />,
+    <Rules key="r" rules={copy.rules} at={CARD_AT[1]} />,
+    <Cache key="c" copy={copy.cache} at={CARD_AT[2]} />,
+  ];
+  return (
+    <Scene>
+      <AbsoluteFill style={{ alignItems: "center", paddingTop: 215 }}>
+        <Reveal at={sec(0.15)}>
+          <Title size={66}>{copy.title}</Title>
+        </Reveal>
+        <div style={{ display: "flex", gap: 40, marginTop: 72 }}>
+          {copy.cards.map((card, i) => {
+            const k = ease(frame, CARD_AT[i]!, 20);
+            return (
+              <div
+                key={card.title}
+                style={{
+                  width: 530,
+                  background: "rgba(28,32,48,0.88)",
+                  border: `1px solid ${COLORS.windowEdge}`,
+                  borderRadius: 22,
+                  padding: "34px 36px 40px",
+                  boxSizing: "border-box",
+                  opacity: k,
+                  transform: `translateY(${(1 - k) * 26}px)`,
+                }}
+              >
+                <div style={{ fontFamily: FONTS.mono, fontSize: 20, color: COLORS.lavender }}>{String(i + 1).padStart(2, "0")}</div>
+                {visuals[i]}
+                <div style={{ height: 1, background: COLORS.windowEdge, margin: "10px 0 28px" }} />
+                <div style={{ fontSize: 36, fontWeight: 600, color: COLORS.text, lineHeight: 1.2 }}>{card.title}</div>
+                <div style={{ fontSize: 23, color: COLORS.muted, lineHeight: 1.45, marginTop: 14 }}>{card.body}</div>
+              </div>
+            );
+          })}
+        </div>
+      </AbsoluteFill>
+    </Scene>
+  );
+};

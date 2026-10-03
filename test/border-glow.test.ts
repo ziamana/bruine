@@ -71,6 +71,17 @@ describe("glowColor", () => {
     expect(GLOW_PERIOD_MS.fast).toBeLessThan(GLOW_PERIOD_MS.slow);
   });
 
+  test("max is the fastest of the three: its colours move at least as far in a tenth of a second as xhigh's violet", () => {
+    const moved = (mode: "slow" | "fast" | "rainbow"): number => {
+      let total = 0;
+      for (const c of COLUMNS) total += distance(glowColor(mode, c, 0), glowColor(mode, c, 100));
+      return total;
+    };
+    expect(moved("rainbow")).toBeGreaterThan(moved("fast"));
+    expect(moved("rainbow")).toBeGreaterThan(moved("slow") * 8);
+    expect(GLOW_PERIOD_MS.rainbow).toBeLessThanOrEqual(GLOW_PERIOD_MS.fast);
+  });
+
   test("the pattern is a wave along the frame, not one colour for all of it", () => {
     expect(new Set(COLUMNS.map((c) => glowColor("slow", c, 0))).size).toBeGreaterThan(10);
   });

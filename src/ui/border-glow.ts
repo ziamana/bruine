@@ -36,7 +36,7 @@ const SPECTRUM = ["#7dcfff", "#b4a7ff", "#ff9ed2", "#ffd27d", "#a6e3a1", "#7dcff
 export const GLOW_PERIOD_MS: Record<Exclude<GlowMode, "off">, number> = {
   slow: 4200,
   fast: 900,
-  rainbow: 3200,
+  rainbow: 600,
 };
 
 /** How many cells it takes the pattern to repeat along the frame. */

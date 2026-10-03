@@ -38,6 +38,7 @@ import {
   type SetupAnswers,
   type Theme,
 } from "./flow.js";
+import { SPACE_BUNNY_NOTICE, spaceBunnyPick } from "./spacebunny.js";
 import {
   LOCAL_PORTS,
   cidr24Of,
@@ -1076,7 +1077,23 @@ export async function runFullSetup(
   async function stepRoles(): Promise<StepResult> {
     displayStep = "roles";
     const roles: SetupAnswers["roles"] = {};
-    const main = await askRole("main", { required: true });
+    // A first setup, with nothing chosen yet, offers the free model once as a yes or no. It is
+    // never preselected: the answer decides where the user's code goes.
+    let main: Skippable<RolePick | undefined> | undefined;
+    if (flow.answers.roles.main === undefined) {
+      const answer = await selectStep(
+        "Free model (you can still change it later)",
+        [
+          { value: "no", label: "No, I will choose my own model" },
+          { value: "yes", label: "Yes, use Space Bunny Free" },
+        ],
+        (i) => i,
+        { initial: 0, above: new Text(SPACE_BUNNY_NOTICE.split("\n").map((line, i) => (i === 0 ? line : ansi.gray(line))).join("\n"), 0, 0) },
+      );
+      if (answer === BACK || answer === CANCEL) return answer;
+      if (answer === 1) main = spaceBunnyPick();
+    }
+    main ??= await askRole("main", { required: true });
     if (main === BACK || main === CANCEL) return main;
     if (main === SKIP) return {};
     roles.main = main as RolePick;

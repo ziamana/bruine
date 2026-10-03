@@ -131,7 +131,7 @@ export function requiredKeyEnvs(answers: SetupAnswers): string[] {
 /** Does any chosen role run on a discovered server (→ local dummy key)? */
 function usesLocalServer(answers: SetupAnswers): boolean {
   return [answers.roles.main, answers.roles.fast, answers.roles.vision].some(
-    (r) => r?.discovered !== undefined,
+    (r) => r?.discovered !== undefined && r.discovered.apiKey === undefined,
   );
 }
 
@@ -307,6 +307,8 @@ export class SetupFlow {
         const origName = origByBaseUrl.get(d.baseUrl);
         if (origName !== undefined) {
           name = origName;
+        } else if (d.routeName !== undefined && !origNames.has(d.routeName) && ![...routeName.values()].includes(d.routeName)) {
+          name = d.routeName;
         } else {
           // Fresh route: local, local-2, … avoiding original names.
           if (routeName.size === 0 && !origNames.has("local")) {
@@ -332,10 +334,10 @@ export class SetupFlow {
           };
         } else {
           providers[name] = {
-            displayName: `Kumo server ${key}`,
+            displayName: d.displayName ?? `Kumo server ${key}`,
             api: "openai-completions",
             baseURL: d.baseUrl,
-            apiKeyEnv: "KUMO_LOCAL_API_KEY",
+            apiKeyEnv: d.apiKey?.env ?? "KUMO_LOCAL_API_KEY",
             // T19.A.2: an `off` effort so the Auto judge can get a plain answer.
             models: [],
           };
@@ -453,6 +455,10 @@ export class SetupFlow {
 
     const env: Array<[string, string]> = [];
     if (usesLocalServer(a)) env.push(["KUMO_LOCAL_API_KEY", "local"]);
+    for (const role of [a.roles.main, a.roles.fast, a.roles.vision]) {
+      const key = role?.discovered?.apiKey;
+      if (key !== undefined && !env.some(([name]) => name === key.env)) env.push([key.env, key.value]);
+    }
     for (const [name, value] of Object.entries(a.keys)) {
       if (value.trim() !== "") env.push([name, value.trim()]);
     }

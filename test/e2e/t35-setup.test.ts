@@ -341,6 +341,11 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
     }
     expect(await h.selectedLine()).toContain("Continue →");
     h.press("enter");
+    // A first setup offers the free model as a yes or no, with No under the cursor.
+    await h.waitFor("Free model");
+    expect(h.text()).toContain("Space Bunny Free");
+    expect(await h.selectedLine()).toContain("No, I will choose my own model");
+    h.press("enter");
     await h.until(() => h.text().includes("Role: main"), 20_000, "roles step");
 
     // Roles: main = the discovered server + its model, fast = use main, vision = none.
@@ -392,6 +397,71 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
     });
   } finally {
     await h.dump("t35-first-install-failure");
+    await h.close();
+    await server.close();
+  }
+});
+
+test("first install → Yes to Space Bunny Free → its own route and key, nothing asked about a key", async () => {
+  const server = await startServer([]);
+  const home = await mkdtemp(join(tmpdir(), "kumo-t35-zen-"));
+  const h = await SetupPty.start(home);
+  try {
+    await h.waitFor("Choose your setup");
+    await h.waitFor("Quick setup");
+    await h.pressN("down", 1);
+    h.press("enter");
+    await h.waitFor("AI servers: found, add, or remove");
+    h.type("address");
+    await h.until(() => h.text().includes("Filter: address_"), 20_000, "filtered server choices");
+    h.press("enter");
+    await h.waitFor("Server URL (e.g. http://192.168.1.64:8081):");
+    h.type(server.url);
+    h.press("enter");
+    await h.until(() => h.text().includes("1 model"), 20_000, "the probed server in the models list");
+    for (let i = 0; i < 8 && !(await h.selectedLine()).includes("Continue →"); i++) {
+      await h.pressN("down", 1);
+    }
+    h.press("enter");
+    await h.waitFor("Free model");
+    // The notice says where the code goes and that the offer can end.
+    expect(h.text()).toMatch(/sent to/i);
+    expect(h.text()).toMatch(/end without notice/i);
+    await h.pressN("down", 1);
+    expect(await h.selectedLine()).toContain("Yes, use Space Bunny Free");
+    h.press("enter");
+    // Main is chosen: the next question is fast, and the server found earlier is still offered.
+    await h.until(() => h.text().includes("Role: fast"), 20_000, "fast role");
+    h.press("enter");
+    await h.until(() => h.text().includes("Role: vision"), 20_000, "vision role");
+    h.press("enter");
+    await h.until(() => h.text().includes("No API keys needed"), 20_000, "keys step");
+    h.press("enter");
+    await h.until(() => h.text().includes("Default access mode"), 20_000, "mode step");
+    h.press("enter");
+    await h.until(() => h.text().includes("Web search"), 20_000, "search step");
+    h.type("s");
+    await h.until(() => h.text().includes("Skills: Space toggles"), 20_000, "skills step");
+    h.type("s");
+    await h.until(() => h.text().includes("Select your preferred theme"), 20_000, "theme step");
+    h.type("s");
+    await h.until(() => h.text().includes("Share anonymous usage data"), 20_000, "telemetry step");
+    h.type("s");
+    await h.until(() => h.text().includes("Summary"), 20_000, "summary step");
+    h.press("enter");
+    await h.waitFor("kumo: configuration saved.");
+    const settings = parseYaml(await readFile(join(home, "settings.yaml"), "utf8")) as Record<string, any>;
+    expect(settings["agent-default-model"]).toEqual({ provider: "opencode-zen", model: "space-bunny-free" });
+    expect(settings["llm-pi-ai"].providers["opencode-zen"]).toMatchObject({
+      baseURL: "https://opencode.ai/zen/v1",
+      apiKeyEnv: "KUMO_ZEN_API_KEY",
+    });
+    const env = await readFile(join(home, ".env"), "utf8");
+    expect(env).toContain("KUMO_ZEN_API_KEY=public");
+    const kumo = JSON.parse(await readFile(join(home, "kumo.json"), "utf8")) as Record<string, any>;
+    expect(kumo.models.main).toMatchObject({ provider: "opencode-zen", model: "space-bunny-free", contextWindow: 1_000_000 });
+  } finally {
+    await h.dump("t35-zen-failure");
     await h.close();
     await server.close();
   }

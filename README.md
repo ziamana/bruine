@@ -16,6 +16,11 @@ The first launch opens the setup wizard: it scans for a local model server, asks
 want a cloud route, lets you pick skills, and writes `~/.kumo/`. There is no account and nothing is
 sent anywhere you did not point it at.
 
+A first setup also asks, as a plain yes or no, whether to use Space Bunny Free: a model OpenCode serves
+at no charge for a limited time through its Zen gateway, with no account and no key. The answer starts on
+No. Saying yes sends your prompts and files to OpenCode's provider (which states zero retention and no
+training), and the offer can end without notice, so keep another model in reach.
+
 ## What it does
 
 | | |

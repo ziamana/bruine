@@ -5,6 +5,7 @@ import { parse as parseYaml } from "yaml";
 import { describe, expect, test } from "vitest";
 import { SetupFlow, requiredKeyEnvs, type SetupAnswers } from "../src/setup/flow.js";
 import { loadPrefill } from "../src/setup/full.js";
+import { SPACE_BUNNY, SPACE_BUNNY_NOTICE, spaceBunnyPick } from "../src/setup/spacebunny.js";
 import type { Discovered } from "../src/setup/discover.js";
 
 const server1: Discovered = {
@@ -196,5 +197,75 @@ describe("Save + prefill round-trip (T21)", () => {
     expect(a.skills).toEqual(["git-workflow"]);
     expect(a.theme).toBe("light");
     expect(a.keys.OPENROUTER_API_KEY).toBe("sk-o");
+  });
+});
+
+describe("Space Bunny Free (the yes or no of the roles step)", () => {
+  const plan = (): ReturnType<SetupFlow["buildPlan"]> => {
+    const flow = new SetupFlow();
+    flow.submit({ discoveries: [] });
+    flow.submit({ roles: { main: spaceBunnyPick() } });
+    flow.submit({});
+    flow.submit({ permissionMode: "ask" });
+    flow.submit({ search: { provider: "none" } });
+    flow.submit({ skills: [] });
+    flow.submit({ theme: "dark" });
+    flow.submit({ telemetry: false });
+    return flow.buildPlan({ dshHome: "/h", bundledSkillsRoot: "/p", bundledSkills: [] });
+  };
+
+  test("yes makes a route of its own, with its own key, and no local dummy key", () => {
+    const p = plan();
+    const parsed = parseYaml(p.settingsYaml) as Record<string, any>;
+    expect(parsed["llm-pi-ai"].providers["opencode-zen"]).toMatchObject({
+      displayName: "OpenCode Zen",
+      api: "openai-completions",
+      baseURL: "https://opencode.ai/zen/v1",
+      apiKeyEnv: "KUMO_ZEN_API_KEY",
+    });
+    expect(parsed["llm-pi-ai"].providers["opencode-zen"].models[0]).toMatchObject({
+      id: "space-bunny-free",
+      contextWindow: 1_000_000,
+    });
+    expect(parsed["agent-default-model"]).toEqual({ provider: "opencode-zen", model: "space-bunny-free" });
+    const names = p.env.map(([name]) => name);
+    expect(p.env).toContainEqual(["KUMO_ZEN_API_KEY", "public"]);
+    expect(names).not.toContain("KUMO_LOCAL_API_KEY");
+  });
+
+  test("the gateway refuses every key but its public one, so that is the one written", () => {
+    expect(SPACE_BUNNY.keyValue).toBe("public");
+  });
+
+  test("it asks for no key from the user", () => {
+    const flow = new SetupFlow();
+    flow.submit({ discoveries: [] });
+    flow.submit({ roles: { main: spaceBunnyPick() } });
+    expect(requiredKeyEnvs(flow.answers)).toEqual([]);
+  });
+
+  test("the question says where the code goes and that the offer can end", () => {
+    expect(SPACE_BUNNY_NOTICE).toMatch(/sent to/i);
+    expect(SPACE_BUNNY_NOTICE).toMatch(/end without notice/i);
+  });
+
+  test("next to a local server, each keeps its own key", () => {
+    const flow = new SetupFlow();
+    flow.submit({ discoveries: [server1] });
+    flow.submit({ roles: { main: spaceBunnyPick(), fast: { discovered: server1, model: "m1" } } });
+    flow.submit({});
+    flow.submit({ permissionMode: "ask" });
+    flow.submit({ search: { provider: "none" } });
+    flow.submit({ skills: [] });
+    flow.submit({ theme: "dark" });
+    flow.submit({ telemetry: false });
+    const p = flow.buildPlan({ dshHome: "/h", bundledSkillsRoot: "/p", bundledSkills: [] });
+    const parsed = parseYaml(p.settingsYaml) as Record<string, any>;
+    const providers = parsed["llm-pi-ai"].providers as Record<string, any>;
+    expect(providers["opencode-zen"].apiKeyEnv).toBe("KUMO_ZEN_API_KEY");
+    const local = Object.values(providers).find((prov) => prov.baseURL === server1.baseUrl);
+    expect(local.apiKeyEnv).toBe("KUMO_LOCAL_API_KEY");
+    expect(p.env).toContainEqual(["KUMO_ZEN_API_KEY", "public"]);
+    expect(p.env).toContainEqual(["KUMO_LOCAL_API_KEY", "local"]);
   });
 });

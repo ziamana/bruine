@@ -33,6 +33,11 @@ export interface Discovered {
   current?: boolean;
   /** T35: the original provider key in settings.yaml (for name preservation). */
   providerName?: string;
+  /** A route that is not a local server: the name it takes in settings.yaml and how it is shown. */
+  routeName?: string;
+  displayName?: string;
+  /** A route with a key of its own, written to the home's `.env` instead of the local dummy one. */
+  apiKey?: { env: string; value: string };
 }
 
 /** Which thinking knobs a chat template understands (T34). */

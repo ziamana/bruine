@@ -442,14 +442,8 @@ export function installedSkillsList(dshHome: string): string[] | undefined {
 }
 
 /**
- * Rows pre-checked when entering the skills step: the saved list when kumo
- * knows one; otherwise the T26 migration default — every skill found in
- * `.agents/skills` in the user home, the behavior dsh had before kumo took over USER skills.
- * Same name shipped AND found: the shipped row wins (one entry per name).
- */
-/**
  * Skills the setup pre-checks on a first run wherever they were found, not only under
- * `~/.agents/skills`: they are linked from the folder they live in, never copied.
+ * the user home `.agents/skills`: they are linked from the folder they live in, never copied.
  */
 export const RECOMMENDED_SKILLS: readonly string[] = [
   "browser",
@@ -459,6 +453,12 @@ export const RECOMMENDED_SKILLS: readonly string[] = [
   "youtube-transcript",
 ];
 
+/**
+ * Rows pre-checked when entering the skills step: the saved list when kumo
+ * knows one; otherwise the T26 migration default — every skill found in
+ * `.agents/skills` in the user home, the behavior dsh had before kumo took over USER skills.
+ * Same name shipped AND found: the shipped row wins (one entry per name).
+ */
 export function initialSkillChecks(
   items: CheckItem[],
   saved: string[] | undefined,

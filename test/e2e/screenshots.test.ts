@@ -158,3 +158,50 @@ test.skipIf(!enabled)("record the screenshots", async () => {
   await mkdir(join(out, ".."), { recursive: true });
   await writeFile(out, JSON.stringify({ cols: COLS, rows: ROWS, shots }));
 }, 120_000);
+
+/** The same bruine on a light terminal theme: every colour is fitted to the background it reports. */
+test.skipIf(!enabled)("record the light screenshot", async () => {
+  const h = await Harness.start(
+    [toolScript("read", { file_path: "src/report.ts" }, "call_read"), { ...toolScript("edit", { file_path: "src/report.ts", old_string: "  return rows.map(cell).join(\"\\n\");", new_string: "  const body = rows.map(cell).join(\"\\n\");\n  return `${body}\\n${summary(rows)}`;" }, "call_edit"), usage: usage(40, 6100) }, { usage: usage(20, 6400), chunks: [{ delta: { content: "The report now ends with its summary row." } }] }],
+    "auto",
+    false,
+    {
+      displayName: "Qwen3 Coder",
+      env: { BRUINE_COLOR: "truecolor", COLORTERM: "truecolor" },
+      bruineJson: { effect: "off", suggestions: false },
+      projectPath: "code/report",
+      background: "#fafafa",
+    },
+  );
+  await mkdir(join(h.project, "src"), { recursive: true });
+  await writeFile(join(h.project, "src", "report.ts"), "export function render(rows: Row[]): string {\n  return rows.map(cell).join(\"\\n\");\n}\n");
+  h.resize(COLS, 22);
+  const out = process.env.RECORD_OUT ?? join(h.project, "..", "shots.json");
+  try {
+    await h.waitFor("Qwen3", 30_000);
+    await delay(800);
+    await h.prompt("End the report with its summary row");
+    await h.until(() => /ends with its summary row/.test(h.screen().join("\n")), 30_000, "the answer");
+    await delay(1200);
+    const buffer = h.term.buffer.active;
+    const cell = buffer.getNullCell();
+    const rows: Span[][] = [];
+    for (let y = 0; y < 22; y += 1) {
+      const line = buffer.getLine(buffer.viewportY + y);
+      const spans: Span[] = [];
+      for (let x = 0; x < COLS; x += 1) {
+        line?.getCell(x, cell);
+        if (cell.getWidth() === 0) continue;
+        const ch = cell.getChars() || " ";
+        const fg = cell.isFgRGB() ? `#${cell.getFgColor().toString(16).padStart(6, "0")}` : cell.isFgPalette() ? palette(cell.getFgColor()) : null;
+        const bg = cell.isBgRGB() ? `#${cell.getBgColor().toString(16).padStart(6, "0")}` : cell.isBgPalette() ? palette(cell.getBgColor()) : null;
+        const flags = (cell.isBold() ? 1 : 0) | (cell.isItalic() ? 2 : 0) | (cell.isDim() ? 4 : 0) | (cell.isInverse() ? 8 : 0) | (cell.isUnderline() ? 16 : 0);
+        spans.push([x, ch, fg, bg, flags]);
+      }
+      rows.push(spans);
+    }
+    await writeFile(out.replace(/\.json$/, "-light.json"), JSON.stringify({ cols: COLS, rows: 22, background: "#fafafa", shots: { "6-light": rows } }));
+  } finally {
+    await h.close();
+  }
+}, 120_000);

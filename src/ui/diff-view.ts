@@ -190,15 +190,15 @@ export function renderDiff(d: FileDiff, width: number, ascii = false): string[] 
     const room = Math.max(1, width - visibleWidth(prefix) - sign.length - gutter.length);
     const body = clipCells(l.text.replace(/\t/g, "  "), room, ellipsis);
     const pad = " ".repeat(Math.max(0, room - stringWidth(body)));
-    if (l.kind === "ctx") return `${paint("faint", prefix)}${paint("faint", sign)}${paint("muted", `${gutter}${body}${pad}`)}`;
+    if (l.kind === "ctx") return `${paint("muted", prefix)}${paint("faint", sign)}${paint("muted", `${gutter}${body}${pad}`)}`;
     const role = l.kind === "add" ? "mint" : "rose";
     const ink = l.kind === "add" ? "addFg" : "delFg";
     const band = `${gutter}${body}${pad}`;
     const painted = bgEnabled() ? onBg(l.kind === "add" ? "addBg" : "delBg", paint(ink, band)) : paint(ink, band);
-    return `${paint("faint", prefix)}${paint(role, sign)}${painted}`;
+    return `${paint("muted", prefix)}${paint(role, sign)}${painted}`;
   };
   const out = shown.map(row);
   const rest = d.lines.length - shown.length;
-  if (rest > 0) out.push(paint("faint", `${" ".repeat(Math.min(width, 4))}${ellipsis} ${String(rest)} more lines`));
+  if (rest > 0) out.push(paint("muted", `${" ".repeat(Math.min(width, 4))}${ellipsis} ${String(rest)} more lines`));
   return out;
 }

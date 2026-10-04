@@ -65,7 +65,7 @@ export const markdownThemeFor = (icons: BruineIcons = bruineIcons()): MarkdownTh
     codeBlock: (s) => s,
     codeBlockBorder: (s) => {
       const lang = s.replace(/^```/, "").trim();
-      return lang === "" ? gutter : `${gutter}${ansi.faint(lang)}`;
+      return lang === "" ? gutter : `${gutter}${ansi.gray(lang)}`;
     },
     codeBlockIndent: gutter,
     highlightCode,

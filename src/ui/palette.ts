@@ -58,7 +58,9 @@ export const NUAGE = {
   rose: { hex: "#ff7a90", basic: 31 },
   pink: { hex: "#ff9ed2", basic: 35 },
   text: { hex: "#e6e9f2", basic: 37 },
-  muted: { hex: "#8a90a6", basic: 90 },
+  // 4.8:1 on `chip`, the brightest dark surface it is read on (it was #8a90a6,
+  // 4.37:1 there and 4.41:1 on a One Dark background).
+  muted: { hex: "#9298ae", basic: 90 },
   // 3.20:1 on `surface`, the AA floor for a border or control. It was #5b6178
   // (2.64:1), under the floor, and it drew the editor border and the dock
   // divider. Structure only: anything a user has to read is `muted` (5.10:1).
@@ -98,6 +100,53 @@ const PROBED_ROLES = ["surface", "chip", "edge", "userBlock", "toolOk", "toolPen
 type ProbedRole = (typeof PROBED_ROLES)[number];
 
 export type PaletteRole = keyof typeof NUAGE;
+
+/**
+ * The foreground roles, and the contrast each one owes the surfaces it is read
+ * on. The authored values are for a dark terminal; on a light one they start
+ * from LIGHT_INK instead, and either way setTerminalBackdrop moves a role
+ * towards black or white until it meets its floor, so a terminal with an odd
+ * background (One Dark's #282c34, Solarized Light's cream) still reads.
+ */
+const INK_FLOOR = {
+  text: 7,
+  muted: 4.5,
+  // Structure only (borders, rules, dots): the 3:1 floor for a mark, not text.
+  faint: 3,
+  sky: 4.5,
+  skyDeep: 4.5,
+  lavender: 4.5,
+  mint: 4.5,
+  amber: 4.5,
+  rose: 4.5,
+  pink: 4.5,
+  railActive: 3,
+  railActiveEnd: 3,
+  railErrorEnd: 3,
+  addFg: 4.5,
+  delFg: 4.5,
+} as const;
+type InkRole = keyof typeof INK_FLOOR;
+const INK_ROLES = Object.keys(INK_FLOOR) as InkRole[];
+
+/** Where each foreground starts on a light terminal: the same hues, as ink. */
+const LIGHT_INK: Record<InkRole, string> = {
+  text: "#1d2233",
+  muted: "#555c74",
+  faint: "#8a90a6",
+  sky: "#0a6c9e",
+  skyDeep: "#195f93",
+  lavender: "#5b45c9",
+  mint: "#1d7a3c",
+  amber: "#8a5d00",
+  rose: "#c02848",
+  pink: "#b02a78",
+  railActive: "#1678b4",
+  railActiveEnd: "#1a6aa3",
+  railErrorEnd: "#b0384e",
+  addFg: "#145c2a",
+  delFg: "#8e1a32",
+};
 
 function rgb(hex: string): [number, number, number] {
   const n = Number.parseInt(hex.slice(1), 16);
@@ -210,39 +259,114 @@ export function deriveBackdrop(bg: { r: number; g: number; b: number }): Backdro
   return out;
 }
 
+/** What a foreground role resolves to once the terminal has been asked. */
+export type Ink = Record<InkRole, string>;
+
+/**
+ * Move `hex` towards `pole` (black on a light terminal, white on a dark one) in
+ * small steps until it meets `floor` against every surface in `under`. The hue
+ * is kept as long as possible, which is the point: a lavender that has to
+ * darken stays a lavender.
+ */
+function fit(hex: string, under: readonly string[], floor: number, pole: [number, number, number]): string {
+  const start = rgb(hex);
+  for (let t = 0; t <= 1.0001; t += 0.04) {
+    const candidate = toHex(mix(start, pole, t));
+    if (under.every((surface) => contrastRatio(candidate, surface) >= floor)) return candidate;
+  }
+  return toHex(pole);
+}
+
+/**
+ * The foregrounds to write on a terminal whose background is `bg`: every role
+ * meets its floor on the background and on every painted surface it can sit
+ * on, and the two diff inks on their own bands.
+ */
+export function deriveInk(bg: { r: number; g: number; b: number }, backdrop: Backdrop = deriveBackdrop(bg)): Ink {
+  const base = toHex([bg.r, bg.g, bg.b]);
+  const light = brightness(base) > 0.5;
+  const pole: [number, number, number] = light ? [0, 0, 0] : [255, 255, 255];
+  const blocks = [base, backdrop.surface, backdrop.chip, backdrop.userBlock, backdrop.toolOk, backdrop.toolPending, backdrop.toolErr];
+  const out = {} as Ink;
+  for (const role of INK_ROLES) {
+    const start = light ? LIGHT_INK[role] : NUAGE[role].hex;
+    const under = role === "addFg" ? [backdrop.addBg] : role === "delFg" ? [backdrop.delBg] : role === "faint" ? [base, backdrop.surface] : blocks;
+    out[role] = fit(start, under, INK_FLOOR[role], pole);
+  }
+  return out;
+}
+
 /** Backgrounds probed from the terminal; empty until a reply lands. */
 const probed: Partial<Record<ProbedRole, string>> = {};
+/** Foregrounds fitted to that background; empty until a reply lands. */
+const inked: Partial<Record<InkRole, string>> = {};
 
-/** Adopt the terminal's real background (OSC 11) for the painted surfaces. */
+/** Adopt the terminal's real background (OSC 11) for the painted surfaces and the ink on them. */
 export function setTerminalBackdrop(bg?: { r: number; g: number; b: number }): Backdrop | undefined {
-  for (const role of PROBED_ROLES) delete probed[role];
+  resetTerminalBackdrop();
   if (bg === undefined) return undefined;
   const next = deriveBackdrop(bg);
   for (const role of PROBED_ROLES) probed[role] = next[role];
+  const ink = deriveInk(bg, next);
+  for (const role of INK_ROLES) inked[role] = ink[role];
   return next;
 }
 
 /** The surfaces currently in force (tests reset this with resetColorDepth). */
 export function resetTerminalBackdrop(): void {
   for (const role of PROBED_ROLES) delete probed[role];
+  for (const role of INK_ROLES) delete inked[role];
 }
 
-/** Nearest xterm-256 color cube index for an RGB triple. */
-export function to256(hex: string): number {
-  const [r, g, b] = rgb(hex);
-  const q = (v: number): number => (v < 48 ? 0 : v < 115 ? 1 : Math.min(5, Math.floor((v - 35) / 40)));
-  const [qr, qg, qb] = [q(r), q(g), q(b)];
-  const cube = 16 + 36 * qr + 6 * qg + qb;
-  // Grays read better on the dedicated gray ramp.
-  if (Math.abs(r - g) < 12 && Math.abs(g - b) < 12) {
-    const gray = Math.round(((r + g + b) / 3 - 8) / 10);
-    if (gray >= 0 && gray <= 23) return 232 + gray;
-  }
-  return cube;
+/** The hex a role is written in right now: fitted to the terminal once it has answered. */
+export function inkHex(role: PaletteRole): string {
+  return inked[role as InkRole] ?? NUAGE[role].hex;
 }
+
+/** The six levels of each axis of the xterm-256 color cube. */
+const CUBE = [0, 95, 135, 175, 215, 255] as const;
+
+function distance(a: [number, number, number], b: [number, number, number]): number {
+  // Weighted the way the eye is: green differences count most, blue least.
+  return 2 * (a[0] - b[0]) ** 2 + 4 * (a[1] - b[1]) ** 2 + 3 * (a[2] - b[2]) ** 2;
+}
+
+/**
+ * Nearest xterm-256 index for a color: the closest of the cube and the 24-step
+ * gray ramp. The cube has nothing between black and #00005f, so a dark tinted
+ * surface (#1c2030) used to snap to navy and a dark green to #005f00; the gray
+ * ramp is what such a surface actually looks like.
+ *
+ * `hue` keeps the cube for a role whose hue is its meaning (the two diff bands,
+ * the error card): a red band that turns gray stops saying "removed".
+ */
+export function to256(hex: string, hue = false): number {
+  const c = rgb(hex);
+  const nearest = (v: number): number => {
+    let best = 0;
+    for (let i = 1; i < CUBE.length; i += 1) if (Math.abs(CUBE[i]! - v) < Math.abs(CUBE[best]! - v)) best = i;
+    return best;
+  };
+  const [qr, qg, qb] = [nearest(c[0]), nearest(c[1]), nearest(c[2])];
+  const cube = 16 + 36 * qr + 6 * qg + qb;
+  const cubeRgb: [number, number, number] = [CUBE[qr]!, CUBE[qg]!, CUBE[qb]!];
+  const level = Math.max(0, Math.min(23, Math.round(((c[0] + c[1] + c[2]) / 3 - 8) / 10)));
+  const grayRgb: [number, number, number] = [8 + 10 * level, 8 + 10 * level, 8 + 10 * level];
+  const isGray = Math.abs(c[0] - c[1]) < 12 && Math.abs(c[1] - c[2]) < 12;
+  if (hue && !isGray) {
+    // Keep the hue, but never let a dark band collapse to pure black.
+    if (cube === 16) return c[0] >= c[1] && c[0] >= c[2] ? 52 : c[1] >= c[2] ? 22 : 17;
+    return cube;
+  }
+  return distance(c, grayRgb) <= distance(c, cubeRgb) ? 232 + level : cube;
+}
+
+/** Background roles whose hue carries meaning, so 256 colors keep it. */
+const HUE_ROLES: ReadonlySet<string> = new Set(["addBg", "delBg", "toolErr", "sky", "edge"]);
 
 export function fgCode(role: PaletteRole | string, depth: ColorDepth): string {
-  const sw: Swatch = typeof role === "string" && role.startsWith("#") ? { hex: role, basic: 37 } : NUAGE[role as PaletteRole];
+  const sw: Swatch =
+    typeof role === "string" && role.startsWith("#") ? { hex: role, basic: 37 } : { hex: inkHex(role as PaletteRole), basic: NUAGE[role as PaletteRole].basic };
   if (depth === "none") return "";
   if (depth === "truecolor") {
     const [r, g, b] = rgb(sw.hex);
@@ -255,16 +379,16 @@ export function fgCode(role: PaletteRole | string, depth: ColorDepth): string {
 export function bgCode(role: PaletteRole | string, depth: ColorDepth): string {
   if (typeof role === "string" && role.startsWith("#")) return bgEscape(role, 40, depth);
   const sw: Swatch = NUAGE[role as PaletteRole];
-  return bgEscape(probed[role as ProbedRole] ?? sw.hex, sw.basic, depth);
+  return bgEscape(probed[role as ProbedRole] ?? sw.hex, sw.basic, depth, HUE_ROLES.has(role));
 }
 
-function bgEscape(hex: string, basic: number, depth: ColorDepth): string {
+function bgEscape(hex: string, basic: number, depth: ColorDepth, hue = false): string {
   if (depth === "none") return "";
   if (depth === "truecolor") {
     const [r, g, b] = rgb(hex);
     return `\x1b[48;2;${String(r)};${String(g)};${String(b)}m`;
   }
-  if (depth === "256") return `\x1b[48;5;${String(to256(hex))}m`;
+  if (depth === "256") return `\x1b[48;5;${String(to256(hex, hue))}m`;
   return `\x1b[${String(basic + 10)}m`;
 }
 

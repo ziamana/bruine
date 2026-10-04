@@ -58,7 +58,7 @@ export class ReasoningComponent implements Component {
     if (!this.#ended) return [ansi.violet(dim(thinkingWords(words, width, this.now() - this.#startTime, this.icons)))];
     // The head stays the head whether the thought is open or not: the line that
     // closed it is the line that opens it again.
-    const head = ansi.faint(dim(clipCells(`${this.icons.think} Thought for ${formatElapsed(this.#endTime - this.#startTime)}`, width)));
+    const head = ansi.gray(dim(clipCells(`${this.icons.think} Thought for ${formatElapsed(this.#endTime - this.#startTime)}`, width)));
     if (!this.#expanded) return [head];
     const indent = " ".repeat(2);
     const body = this.#thought.trim();
@@ -66,7 +66,7 @@ export class ReasoningComponent implements Component {
     const room = Math.max(1, width - indent.length);
     return [
       head,
-      ...wrapTextWithAnsi(body, room).map((line) => `${indent}${ansi.faint(dim(line))}`),
+      ...wrapTextWithAnsi(body, room).map((line) => `${indent}${ansi.gray(ansi.italic(line))}`),
     ];
   }
   invalidate(): void {}

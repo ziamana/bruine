@@ -8,7 +8,7 @@ import {
 } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
 import { bruineIcons, withoutEmoji, type BruineIcons } from "../render/chars.js";
-import { blendHex, bgEnabled, boxLine, colorDepth, fillLine, paintHex, NUAGE, type PaletteRole } from "./palette.js";
+import { blendHex, bgEnabled, boxLine, colorDepth, fillLine, inkHex, paintHex, type PaletteRole } from "./palette.js";
 import { reasoningStyle } from "../render/reasoning.js";
 import { ansi } from "./theme.js";
 
@@ -29,13 +29,13 @@ export function chipMarkers(line: string): string {
 
 /** The rail's top and bottom colors, so a tool call fades down its own height. */
 const RAIL_FADE = {
-  blue: [NUAGE.sky.hex, NUAGE.skyDeep.hex],
-  red: [NUAGE.rose.hex, NUAGE.railErrorEnd.hex],
+  blue: ["sky", "skyDeep"],
+  red: ["rose", "railErrorEnd"],
   // T55 P1c: the live rail is the brightest mark in the transcript. A tool in
   // flight and a tool that finished ten seconds ago used to be the same blue, so
   // "where is bruine right now" meant reading every block.
-  active: [NUAGE.railActive.hex, NUAGE.railActiveEnd.hex],
-} as const;
+  active: ["railActive", "railActiveEnd"],
+} as const satisfies Record<string, readonly [PaletteRole, PaletteRole]>;
 
 /** What the left rail is saying: live, settled, or failed. */
 export type RailState = keyof typeof RAIL_FADE;
@@ -53,7 +53,7 @@ export function railPaint(rail: RailState, char: string, t: number): string {
     return rail === "red" ? ansi.red(char) : ansi.blue(char);
   }
   const [from, to] = RAIL_FADE[rail];
-  return paintHex(blendHex(from, to, t), char);
+  return paintHex(blendHex(inkHex(from), inkHex(to), t), char);
 }
 
 function sameLines(a: readonly string[], b: readonly string[]): boolean {

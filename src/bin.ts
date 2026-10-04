@@ -11,6 +11,7 @@ import { buildLaunch, flagMode, resolveDshEntry, runDsh } from "./launch.js";
 import { ensureProfile, linkProfileBundles, resolveDshBaseDir } from "./profile.js";
 import { simpleSetup, type SetupIO } from "./setup/simple.js";
 import { migrateAgentsSkills } from "./setup/skills.js";
+import { ensureDefaultSkills } from "./setup/default-skills.js";
 import { localDefaultRoute } from "./setup/discover.js";
 import { ansi } from "./ui/theme.js";
 import { parseFlags } from "./flags.js";
@@ -398,6 +399,23 @@ async function main(): Promise<void> {
   // existing user who upgrades and just runs `bruine` would otherwise silently
   // lose every skill (agentsHome no longer points at the user home). Runs
   // once before dsh starts; the skills manifest is the marker.
+  // The skills bruine ships start on for whoever never chose any, whatever route the setup took
+  // (the wizard's simple path, a skipped step, the plain prompts); it must run before the migration,
+  // which takes a manifest as "the user already chose".
+  const defaults = await ensureDefaultSkills({
+    dshHome,
+    bundledRoot: resolve(dirname(fileURLToPath(import.meta.url)), "..", "skills"),
+  });
+  const shipped = defaults.installed.filter((name) => !defaults.kept.includes(name));
+  const sayDefault = (said: string): void => {
+    const line = process.stdout.isTTY === true ? ansi.dim(said) : said;
+    if (headless) console.error(line); else console.log(line);
+  };
+  if (shipped.length > 0) sayDefault(`bruine: ${String(shipped.length)} skills are on (turn any off with bruine setup)`);
+  if (defaults.kept.length > 0) {
+    const k = String(defaults.kept.length);
+    sayDefault(`bruine: kept your ${k} skill${defaults.kept.length === 1 ? "" : "s"} from .agents/skills (manage them with bruine setup)`);
+  }
   const migrated = await migrateAgentsSkills({ homeSkillsDir: join(dshHome, "skills") });
   if (migrated.linked.length > 0) {
     const n = String(migrated.linked.length);

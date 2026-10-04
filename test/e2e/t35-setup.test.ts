@@ -6,6 +6,7 @@
  * - first install → `s` on Web search, Skills, Theme, Telemetry → saved with
  *   defaults.
  */
+import { readdirSync } from "node:fs";
 import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +17,9 @@ import { beforeAll, expect, test } from "vitest";
 import * as pty from "node-pty";
 import type { Terminal as TerminalType } from "@xterm/headless";
 import { build, root } from "./harness.js";
+
+// A first setup starts with every shipped skill on, remotion apart, even when the step is skipped.
+const DEFAULT_SKILLS = readdirSync(join(root, "skills")).filter((n) => n !== "remotion").sort();
 import { startServer } from "./sse-server.js";
 
 const require = createRequire(import.meta.url);
@@ -248,7 +252,7 @@ test("T35: existing install → menu → Theme → light → Save and exit (only
     });
     // Untouched answers keep their defaults, not invented values.
     expect(bruine.search).toEqual({ provider: "none" });
-    expect(bruine.skills).toEqual([]);
+    expect([...bruine.skills].sort()).toEqual(DEFAULT_SKILLS);
     expect(bruine.telemetry).toBe(false);
   } finally {
     await h.dump("t35-menu-failure");
@@ -390,7 +394,7 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
 
     const bruine = JSON.parse(await readFile(join(home, "bruine.json"), "utf8")) as Record<string, any>;
     expect(bruine.search).toEqual({ provider: "none" });
-    expect(bruine.skills).toEqual([]);
+    expect([...bruine.skills].sort()).toEqual(DEFAULT_SKILLS);
     expect(bruine.theme).toBe("dark");
     expect(bruine.telemetry).toBe(false);
     expect(bruine.permissionMode).toBe("auto");

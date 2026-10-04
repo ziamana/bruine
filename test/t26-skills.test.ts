@@ -296,7 +296,7 @@ describe("wizard skills-step defaults (T26)", () => {
     expect(savedSkillsList(home)).toBeUndefined();
   });
 
-  test("first run of this version: everything found in ~/.agents is pre-checked", () => {
+  test("first run of this version: everything shipped and everything found in .agents is pre-checked", () => {
     const items: CheckItem[] = [
       { value: "#h1", label: "Shipped with bruine", disabled: true },
       { value: "shipped-one", label: "shipped-one" },
@@ -308,7 +308,7 @@ describe("wizard skills-step defaults (T26)", () => {
       { name: "alpha", description: "", dir: "/h/.agents/skills/alpha", source: "agents", alsoIn: [] },
       { name: "beta", description: "", dir: "/h/.claude/skills/beta", source: "claude", alsoIn: [] },
     ];
-    expect(initialSkillChecks(items, undefined, foundSkills)).toEqual(new Set([3]));
+    expect(initialSkillChecks(items, undefined, foundSkills)).toEqual(new Set([1, 3]));
   });
 
   test("first run: the recommended skills are pre-checked wherever they were found", () => {
@@ -336,14 +336,15 @@ describe("wizard skills-step defaults (T26)", () => {
     expect(initialSkillChecks(items, ["other"], foundSkills)).toEqual(new Set([3]));
   });
 
-  test("first run: a recommended skill bruine ships is pre-checked too, and an ordinary shipped one is not", () => {
+  test("first run: every skill bruine ships is pre-checked, remotion apart", () => {
     const items: CheckItem[] = [
       { value: "#h", label: "Shipped with bruine", disabled: true },
       { value: "code-review", label: "code-review" },
       { value: "impeccable", label: "impeccable" },
       { value: "playwright-cli", label: "playwright-cli" },
+      { value: "remotion", label: "remotion" },
     ];
-    expect(initialSkillChecks(items, undefined, [])).toEqual(new Set([2, 3]));
+    expect(initialSkillChecks(items, undefined, [])).toEqual(new Set([1, 2, 3]));
   });
 
   test("a saved list pre-checks exactly that; headers never check", () => {
@@ -476,9 +477,11 @@ describe("bruine launch migration (T26b)", () => {
         expect(out).not.toContain("dependencies:");
         expect(out).toContain("kept your 1 skill from .agents/skills");
         const entries = await readInstalledSkills(join(bruineHome, "skills"));
-        expect(entries).toEqual([
-          { name: "kept", kind: "linked", source: join(userHome, ".agents", "skills", "kept") },
-        ]);
+        // The user's own skill stays a link to where it lives; the shipped ones start on beside it,
+        // remotion apart.
+        expect(entries).toContainEqual({ name: "kept", kind: "linked", source: join(userHome, ".agents", "skills", "kept") });
+        expect(entries.map((e) => e.name)).toContain("code-review");
+        expect(entries.map((e) => e.name)).not.toContain("remotion");
         expect((await lstat(join(bruineHome, "skills", "kept"))).isSymbolicLink()).toBe(true);
       } finally {
         const pid = child.pid;

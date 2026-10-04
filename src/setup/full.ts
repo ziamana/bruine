@@ -55,6 +55,7 @@ import {
   type Discovered, type TemplateCaps,
   type ScanOptions,
 } from "./discover.js";
+import { defaultSkills, NOT_BY_DEFAULT } from "./default-skills.js";
 import { readBundledSkills, scanFoundSkills, scanProjectSkills, SKILLS_MANIFEST, type FoundSkill, type SkillMeta } from "./skills.js";
 import {
   detectSearxng,
@@ -484,9 +485,12 @@ export function initialSkillChecks(
     if (item.disabled === true) return;
     if (saved !== undefined) {
       if (saved.includes(item.value)) checked.add(i);
-    } else if (item.value !== "remotion" && item.value !== "remotion-best-practices" &&
-      (RECOMMENDED_SKILLS.includes(item.value) || found.some((f) => f.name === item.value && f.source === "agents"))) {
-      checked.add(i);
+    } else if (!NOT_BY_DEFAULT.includes(item.value)) {
+      // Nothing saved yet: every skill bruine ships starts on, and so does what is found in
+      // the .agents/skills folder of the home or is a recommended name.
+      const foundRow = found.find((f) => f.name === item.value);
+      const shipped = !item.value.startsWith("#") && foundRow === undefined;
+      if (shipped || RECOMMENDED_SKILLS.includes(item.value) || foundRow?.source === "agents") checked.add(i);
     }
   });
   return checked;
@@ -742,6 +746,12 @@ export async function runFullSetup(
   async function drive(): Promise<"saved" | "simple" | "later" | "quit"> {
     const bundledRoot = opts.bundledSkillsRoot ?? bundledSkillsRoot();
     const bundled: SkillMeta[] = await readBundledSkills(bundledRoot);
+    // A first setup: the skills bruine ships are on from the start, so passing the step, skipping
+    // it or taking the simple route all end with them enabled; only an unchecked row turns one off.
+    if (flow.answers.skills.length === 0 &&
+      savedSkillsList(dshHome) === undefined && installedSkillsList(dshHome) === undefined) {
+      flow.answers.skills = defaultSkills(bundled);
+    }
 
     const showWelcome = async (): Promise<Outcome<true>> => {
       keyHelp = "Enter continue  ·  Ctrl+C quit";
@@ -1441,7 +1451,7 @@ export async function runFullSetup(
     const sel = await checkStep(
       saved !== undefined && saved.length > 0
         ? `Skills: Space toggles, Enter continues, s skips (keeps ${String(saved.length)} enabled)`
-        : "Skills: Space toggles, Enter continues, s skips (enables none)",
+        : "Skills: Space toggles, Enter continues, s skips (keeps the recommended ones)",
       items,
       checked,
     );

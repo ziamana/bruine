@@ -1,7 +1,9 @@
 import React from "react";
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { COLORS, FADE, VIDEO } from "../config";
-import { DROP_LANDS, hash01, LIGHTNING, SCENES, sec, transitions } from "../timeline.ts";
+import { DROP_LANDS, hash01, LIGHTNING, scenesOf, sec, transitions } from "../timeline.ts";
+import { useCut } from "../cut";
+import type { CutName } from "../config";
 
 /** Slow banks of lavender and sky mist drifting low across the night. */
 export const Fog: React.FC = () => {
@@ -23,8 +25,10 @@ export const Fog: React.FC = () => {
 };
 
 /** How bright the far lightning is at a frame: a sharp rise and a long fade, twice. */
-export function lightningAt(frame: number): number {
-  const e = SCENES.effort.from;
+export function lightningAt(frame: number, cut: CutName = "full"): number {
+  const effort = scenesOf(cut).effort;
+  if (effort === undefined) return 0;
+  const e = effort.from;
   const flash = (at: number, length: number, peak: number): number => {
     const t = frame - at;
     if (t < 0 || t > length) return 0;
@@ -48,7 +52,7 @@ function boltPath(seed: number, x0: number, y0: number, y1: number): string {
 /** The far storm behind everything: the sky lights up and a thin bolt shows for an instant. */
 export const LightningSky: React.FC = () => {
   const frame = useCurrentFrame();
-  const k = lightningAt(frame);
+  const k = lightningAt(frame, useCut());
   if (k <= 0.001) return null;
   return (
     <AbsoluteFill>
@@ -67,7 +71,7 @@ export const LightningSky: React.FC = () => {
 
 /** The whole frame brightens a little with the flash, over the scenes too. */
 export const LightningWash: React.FC = () => {
-  const k = lightningAt(useCurrentFrame());
+  const k = lightningAt(useCurrentFrame(), useCut());
   if (k <= 0.001) return null;
   return <AbsoluteFill style={{ background: `rgba(217,208,255,${0.07 * k})`, mixBlendMode: "screen" }} />;
 };
@@ -109,8 +113,9 @@ export const WIPE_EDGE = 140;
  */
 export const TransitionRings: React.FC = () => {
   const frame = useCurrentFrame();
+  const cut = useCut();
   const shapes: React.ReactNode[] = [];
-  for (const tr of transitions()) {
+  for (const tr of transitions(cut)) {
     const t = frame - tr.at;
     if (t < -sec(0.3) || t > FADE + 20) continue;
     if (t < 0) {

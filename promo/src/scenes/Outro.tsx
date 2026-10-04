@@ -9,7 +9,11 @@ import { OUTRO } from "../timeline.ts";
 const CELL = 42;
 const MARK_TOP = 132;
 
-/** The mark again, on wet ground, the two commands that start it, and the rain easing off. */
+/**
+ * The mark again, the two commands that start it, and then only those: the mark and the line
+ * step back, the commands rise to the middle, and the film ends on `$ bruine` in a drizzle,
+ * where the effort scene left a storm.
+ */
 export const Outro: React.FC<{ copy: Copy["outro"] }> = ({ copy }) => {
   const frame = useCurrentFrame();
   const fill = interpolate(frame, [OUTRO.fillStart, OUTRO.fillEnd], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "extend" });
@@ -19,14 +23,15 @@ export const Outro: React.FC<{ copy: Copy["outro"] }> = ({ copy }) => {
   const size = wordmarkSize(CELL);
   const pad = (size.height / 3) * 1.6;
   const ran = ease(frame, OUTRO.enter2, 12);
+  const calm = ease(frame, OUTRO.calm, sec(0.9), Easing.inOut(Easing.cubic));
   const cursor = (on: boolean): React.ReactNode =>
     on ? <span style={{ display: "inline-block", width: 15, height: 32, marginLeft: 2, verticalAlign: "-6px", background: COLORS.text, opacity: Math.floor(frame / 20) % 2 === 0 ? 0.9 : 0 }} /> : null;
   return (
     <Scene>
-      <div style={{ position: "absolute", left: (1920 - size.width) / 2, top: MARK_TOP - pad }}>
-        <Wordmark id="outro" cell={CELL} phase={fill} frame={frame} shimmer={frame / sec(10)} glow={1 + 0.8 * Math.max(0, 1 - Math.abs(frame - OUTRO.fillEnd) / sec(0.5))} sweep={sweep} reflect={ease(frame, OUTRO.fillStart + sec(0.4), sec(0.8))} />
+      <div style={{ position: "absolute", left: (1920 - size.width) / 2, top: MARK_TOP - pad, opacity: 1 - calm, filter: calm > 0 ? `blur(${calm * 8}px)` : undefined }}>
+        <Wordmark id="outro" cell={CELL} phase={fill} frame={frame} shimmer={frame / sec(10)} glow={1 + 0.8 * Math.max(0, 1 - Math.abs(frame - OUTRO.fillEnd) / sec(0.5))} sweep={sweep} />
       </div>
-      <AbsoluteFill style={{ alignItems: "center", top: 600 }}>
+      <AbsoluteFill style={{ alignItems: "center", top: 600, transform: `translateY(${-calm * 150}px)` }}>
         <Reveal at={OUTRO.box}>
           <div
             style={{
@@ -60,8 +65,10 @@ export const Outro: React.FC<{ copy: Copy["outro"] }> = ({ copy }) => {
             </div>
           </div>
         </Reveal>
-        <Words text={copy.line} at={OUTRO.line} stagger={3} style={{ fontSize: 46, fontWeight: 550, color: COLORS.text, marginTop: 58, letterSpacing: -0.5 }} />
-        <Reveal at={OUTRO.meta} style={{ marginTop: 22 }}>
+        <div style={{ opacity: 1 - calm }}>
+          <Words text={copy.line} at={OUTRO.line} stagger={3} style={{ fontSize: 46, fontWeight: 550, color: COLORS.text, marginTop: 58, letterSpacing: -0.5 }} />
+        </div>
+        <Reveal at={OUTRO.meta} style={{ marginTop: 22 - calm * 110 }}>
           <div style={{ fontSize: 26, color: COLORS.muted, textAlign: "center" }}>
             {copy.meta}
             <div style={{ fontFamily: FONTS.mono, color: COLORS.lavender, marginTop: 14, fontSize: 30, textShadow: "0 0 24px rgba(180,167,255,0.45)" }}>{copy.url}</div>

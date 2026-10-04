@@ -15,7 +15,8 @@
     "render:fr": "npm run audio && remotion render BruinePromo out/bruine-promo-fr.mp4 --props='{\"lang\":\"fr\"}'",
     "typecheck": "tsc --noEmit",
     "check:copy": "node scripts/check-copy.mjs",
-    "check": "npm run typecheck && npm run check:copy"
+    "check": "npm run typecheck && npm run check:copy",
+    "render:short": "npm run audio && remotion render BruineShort out/bruine-short.mp4"
   },
   "dependencies": {
     "@remotion/cli": "4.0.532",
@@ -24,6 +25,7 @@
     "remotion": "4.0.532"
   },
   "devDependencies": {
+    "@remotion/fonts": "^4.0.532",
     "@types/react": "19.3.0",
     "typescript": "5.9.3"
   },

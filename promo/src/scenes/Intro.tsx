@@ -7,7 +7,7 @@ import { ease, sec } from "../lib/motion";
 import { INTRO } from "../timeline.ts";
 
 const CELL = 58;
-const MARK_TOP = 214;
+const MARK_TOP = 290;
 const HIT: [number, number] = [960, 452];
 
 /** The first drop: it falls alone through the dark, lands, and the ground rings around it. */
@@ -63,13 +63,22 @@ export const Intro: React.FC<{ copy: Copy["intro"] }> = ({ copy }) => {
           style={{
             alignItems: "center",
             justifyContent: "center",
-            opacity: 1 - out,
-            filter: out > 0 ? `blur(${out * 14}px)` : undefined,
-            transform: `translateY(${-out * 30}px) scale(${1 + out * 0.04})`,
           }}
         >
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: -40 }}>
-            <div style={{ fontFamily: FONTS.mono, fontSize: 150, color: COLORS.lavender, letterSpacing: 6, textShadow: "0 0 40px rgba(180,167,255,0.45)" }}>
+            {/* The word does not leave: it swells into the place the mark forms, and the mark takes over. */}
+            <div
+              style={{
+                fontFamily: FONTS.mono,
+                fontSize: 150,
+                color: COLORS.lavender,
+                letterSpacing: 6,
+                textShadow: "0 0 40px rgba(180,167,255,0.45)",
+                opacity: 1 - out,
+                filter: out > 0 ? `blur(${out * 10}px)` : undefined,
+                transform: `translateY(${-out * 40}px) scale(${1 + out * 0.75})`,
+              }}
+            >
               {letters.map((ch, i) => {
                 const k = ease(frame, INTRO.word + i * 4, 18, Easing.out(Easing.cubic));
                 return (
@@ -79,21 +88,23 @@ export const Intro: React.FC<{ copy: Copy["intro"] }> = ({ copy }) => {
                 );
               })}
             </div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", opacity: 1 - Math.min(1, out * 2.2), transform: `translateY(${out * 24}px)` }}>
             <Words
               text={`${copy.phonetic}  ·  ${copy.kind}`}
               at={INTRO.phonetic}
               style={{ fontSize: 36, color: COLORS.muted, fontStyle: "italic", marginTop: 6, whiteSpace: "pre" }}
             />
             <Words text={copy.definition} at={INTRO.definition} stagger={4} style={{ fontSize: 58, color: COLORS.text, marginTop: 26, fontWeight: 500, letterSpacing: -0.5 }} />
+            </div>
           </div>
         </AbsoluteFill>
       ) : null}
       {fill > 0 ? (
         <div style={{ position: "absolute", left: (1920 - size.width) / 2, top: MARK_TOP - pad }}>
-          <Wordmark id="intro" cell={CELL} phase={fill} frame={frame} shimmer={frame / sec(14)} glow={bloom * (0.6 + 0.4 * Math.min(1, fill))} sweep={sweep} reflect={ease(frame, INTRO.fillStart + sec(0.6), sec(1))} />
+          <Wordmark id="intro" cell={CELL} phase={fill} frame={frame} shimmer={frame / sec(14)} glow={bloom * (0.6 + 0.4 * Math.min(1, fill))} sweep={sweep} />
         </div>
       ) : null}
-      <AbsoluteFill style={{ alignItems: "center", top: 772 }}>
+      <AbsoluteFill style={{ alignItems: "center", top: 712 }}>
         <Words text={copy.tagline} at={INTRO.tagline} stagger={3} style={{ fontSize: 62, fontWeight: 650, letterSpacing: -1, textAlign: "center" }} />
         <Words text={copy.sub} at={INTRO.sub} stagger={2} style={{ fontSize: 30, color: COLORS.muted, textAlign: "center", marginTop: 20, maxWidth: 1500 }} />
       </AbsoluteFill>

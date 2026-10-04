@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, interpolate, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
-import { COLORS, COPY, RIPPLE_ORIGIN, SCENE_ORDER, type Lang, type SceneName } from "./config";
+import { COLORS, COPY, CUTS, RIPPLE_ORIGIN, type CutName, type Lang, type SceneName } from "./config";
+import { CutContext } from "./cut";
 import { Backdrop, Rain, RainFront } from "./components/Rain";
 import { Fog, Grain, LightningSky, LightningWash, SceneShell, TransitionRings, Vignette } from "./components/Atmosphere";
 import { Intro } from "./scenes/Intro";
@@ -9,9 +10,9 @@ import { Demo } from "./scenes/Demo";
 import { Effort } from "./scenes/Effort";
 import { Promises } from "./scenes/Promises";
 import { Outro } from "./scenes/Outro";
-import { SCENES, sec } from "./timeline.ts";
+import { scenesOf, sec } from "./timeline.ts";
 
-export type PromoProps = { lang: Lang };
+export type PromoProps = { lang: Lang; cut?: CutName };
 
 /** The night comes in at the start and takes the frame back at the end. */
 const Night: React.FC = () => {
@@ -30,8 +31,10 @@ const Night: React.FC = () => {
  * all of it and a drop opens every scene, so the film reads as one take. The soundtrack is
  * synthesized from the same timeline (scripts/soundtrack.ts).
  */
-export const BruinePromo: React.FC<PromoProps> = ({ lang }) => {
+export const BruinePromo: React.FC<PromoProps> = ({ lang, cut = "full" }) => {
   const copy = COPY[lang] ?? COPY.en;
+  const scenes = scenesOf(cut);
+  const order = CUTS[cut].order;
   const scene = (name: SceneName): React.ReactNode => {
     switch (name) {
       case "intro":
@@ -49,16 +52,17 @@ export const BruinePromo: React.FC<PromoProps> = ({ lang }) => {
     }
   };
   return (
+    <CutContext.Provider value={cut}>
     <AbsoluteFill style={{ background: COLORS.night }}>
-      <Audio src={staticFile(`soundtrack-${lang}.wav`)} />
+      <Audio src={staticFile(cut === "full" ? `soundtrack-${lang}.wav` : `soundtrack-${cut}-${lang}.wav`)} />
       <Backdrop />
       <LightningSky />
       <Fog />
       <Rain />
-      {SCENE_ORDER.map((name, i) => {
-        const next = SCENE_ORDER[i + 1];
+      {order.map((name, i) => {
+        const next = order[i + 1];
         return (
-          <Sequence key={name} from={SCENES[name].from} durationInFrames={SCENES[name].duration} name={name}>
+          <Sequence key={name} from={scenes[name].from} durationInFrames={scenes[name].duration} name={name}>
             <SceneShell enter={i === 0 ? undefined : RIPPLE_ORIGIN[name]} exit={next === undefined ? undefined : RIPPLE_ORIGIN[next]}>
               {scene(name)}
             </SceneShell>
@@ -72,5 +76,6 @@ export const BruinePromo: React.FC<PromoProps> = ({ lang }) => {
       <Grain />
       <Night />
     </AbsoluteFill>
+    </CutContext.Provider>
   );
 };

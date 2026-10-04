@@ -2,6 +2,7 @@ import React from "react";
 import { AbsoluteFill, useCurrentFrame } from "remotion";
 import { COLORS, VIDEO } from "../config";
 import { clamp01, hash01, rainAt } from "../lib/motion";
+import { useCut } from "../cut";
 
 /** One terminal row in pixels: the rain falls in rows per second, as in the terminal. */
 const ROW = 24;
@@ -37,7 +38,7 @@ const RING_LIFE = 0.5;
  */
 export const Rain: React.FC<{ seed?: number }> = ({ seed = 7 }) => {
   const frame = useCurrentFrame();
-  const { level, phase } = rainAt(frame);
+  const { level, phase } = rainAt(frame, useCut());
   const stretch = 0.7 + 0.9 * level;
   const columns = Math.ceil(VIDEO.width / COLUMN);
   const rows = Math.ceil(VIDEO.height / ROW);
@@ -129,7 +130,7 @@ export const Rain: React.FC<{ seed?: number }> = ({ seed = 7 }) => {
  */
 export const RainFront: React.FC = () => {
   const frame = useCurrentFrame();
-  const { level, phase } = rainAt(frame);
+  const { level, phase } = rainAt(frame, useCut());
   const drops: React.ReactNode[] = [];
   for (let i = 0; i < 22; i += 1) {
     const presence = clamp01((level - 0.3 - hash01(i, 3, 1) * 0.7) / 0.08);

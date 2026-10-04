@@ -1073,10 +1073,18 @@ video {
     margin-bottom: 1.5rem;
   }
   .session-pin {
-    top: 0.5rem;
+    top: 0;
     z-index: 2;
-    padding-bottom: 0.75rem;
-    background: linear-gradient(180deg, var(--night) 85%, transparent);
+    padding: 0.5rem 0 0.75rem;
+    background: linear-gradient(180deg, var(--night) 88%, transparent);
+  }
+  /* The weather clip is 16:9: the window takes its shape rather than framing it with empty bands. */
+  .window[data-mode="weather"] .term-fit {
+    height: auto !important;
+    aspect-ratio: 16 / 9;
+  }
+  .window[data-mode="weather"] .window-body {
+    padding: 0;
   }
   .chapter-text {
     position: sticky;

@@ -1,0 +1,560 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-04T13:29:35+00:00",
+  "title": "Design System: bruine",
+  "extensions": {
+    "colorMeta": {
+      "lavender": {
+        "role": "primary",
+        "displayName": "Rain Lavender",
+        "canonical": "#b4a7ff",
+        "oklch": "oklch(77.3% 0.124 289.9)",
+        "tonalRamp": [
+          "oklch(15.0% 0.124 289.9)",
+          "oklch(26.4% 0.124 289.9)",
+          "oklch(37.9% 0.124 289.9)",
+          "oklch(49.3% 0.124 289.9)",
+          "oklch(60.7% 0.124 289.9)",
+          "oklch(72.1% 0.124 289.9)",
+          "oklch(83.6% 0.124 289.9)",
+          "oklch(95.0% 0.124 289.9)"
+        ]
+      },
+      "violet-light": {
+        "role": "primary",
+        "displayName": "Pale Violet",
+        "canonical": "#d9d0ff",
+        "oklch": "oklch(88.0% 0.065 293.8)",
+        "tonalRamp": [
+          "oklch(15.0% 0.065 293.8)",
+          "oklch(26.4% 0.065 293.8)",
+          "oklch(37.9% 0.065 293.8)",
+          "oklch(49.3% 0.065 293.8)",
+          "oklch(60.7% 0.065 293.8)",
+          "oklch(72.1% 0.065 293.8)",
+          "oklch(83.6% 0.065 293.8)",
+          "oklch(95.0% 0.065 293.8)"
+        ]
+      },
+      "sky": {
+        "role": "secondary",
+        "displayName": "Night Sky Blue",
+        "canonical": "#7dcfff",
+        "oklch": "oklch(82.0% 0.105 235.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.105 235.7)",
+          "oklch(26.4% 0.105 235.7)",
+          "oklch(37.9% 0.105 235.7)",
+          "oklch(49.3% 0.105 235.7)",
+          "oklch(60.7% 0.105 235.7)",
+          "oklch(72.1% 0.105 235.7)",
+          "oklch(83.6% 0.105 235.7)",
+          "oklch(95.0% 0.105 235.7)"
+        ]
+      },
+      "amber": {
+        "role": "tertiary",
+        "displayName": "Approval Amber",
+        "canonical": "#f2cf73",
+        "oklch": "oklch(86.6% 0.118 89.0)",
+        "tonalRamp": [
+          "oklch(15.0% 0.118 89.0)",
+          "oklch(26.4% 0.118 89.0)",
+          "oklch(37.9% 0.118 89.0)",
+          "oklch(49.3% 0.118 89.0)",
+          "oklch(60.7% 0.118 89.0)",
+          "oklch(72.1% 0.118 89.0)",
+          "oklch(83.6% 0.118 89.0)",
+          "oklch(95.0% 0.118 89.0)"
+        ]
+      },
+      "mint": {
+        "role": "tertiary",
+        "displayName": "Done Mint",
+        "canonical": "#8fe3a3",
+        "oklch": "oklch(84.6% 0.121 150.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.121 150.7)",
+          "oklch(26.4% 0.121 150.7)",
+          "oklch(37.9% 0.121 150.7)",
+          "oklch(49.3% 0.121 150.7)",
+          "oklch(60.7% 0.121 150.7)",
+          "oklch(72.1% 0.121 150.7)",
+          "oklch(83.6% 0.121 150.7)",
+          "oklch(95.0% 0.121 150.7)"
+        ]
+      },
+      "pink": {
+        "role": "tertiary",
+        "displayName": "Refusal Pink",
+        "canonical": "#ff9ed2",
+        "oklch": "oklch(81.3% 0.131 347.0)",
+        "tonalRamp": [
+          "oklch(15.0% 0.131 347.0)",
+          "oklch(26.4% 0.131 347.0)",
+          "oklch(37.9% 0.131 347.0)",
+          "oklch(49.3% 0.131 347.0)",
+          "oklch(60.7% 0.131 347.0)",
+          "oklch(72.1% 0.131 347.0)",
+          "oklch(83.6% 0.131 347.0)",
+          "oklch(95.0% 0.131 347.0)"
+        ]
+      },
+      "night": {
+        "role": "neutral",
+        "displayName": "Night",
+        "canonical": "#0b0d14",
+        "oklch": "oklch(16.0% 0.015 272.2)",
+        "tonalRamp": [
+          "oklch(15.0% 0.015 272.2)",
+          "oklch(26.4% 0.015 272.2)",
+          "oklch(37.9% 0.015 272.2)",
+          "oklch(49.3% 0.015 272.2)",
+          "oklch(60.7% 0.015 272.2)",
+          "oklch(72.1% 0.015 272.2)",
+          "oklch(83.6% 0.015 272.2)",
+          "oklch(95.0% 0.015 272.2)"
+        ]
+      },
+      "night-glow": {
+        "role": "neutral",
+        "displayName": "Night Glow",
+        "canonical": "#1a1830",
+        "oklch": "oklch(22.5% 0.046 285.9)",
+        "tonalRamp": [
+          "oklch(15.0% 0.046 285.9)",
+          "oklch(26.4% 0.046 285.9)",
+          "oklch(37.9% 0.046 285.9)",
+          "oklch(49.3% 0.046 285.9)",
+          "oklch(60.7% 0.046 285.9)",
+          "oklch(72.1% 0.046 285.9)",
+          "oklch(83.6% 0.046 285.9)",
+          "oklch(95.0% 0.046 285.9)"
+        ]
+      },
+      "window": {
+        "role": "neutral",
+        "displayName": "Terminal Window",
+        "canonical": "#11141e",
+        "oklch": "oklch(19.3% 0.021 271.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.021 271.4)",
+          "oklch(26.4% 0.021 271.4)",
+          "oklch(37.9% 0.021 271.4)",
+          "oklch(49.3% 0.021 271.4)",
+          "oklch(60.7% 0.021 271.4)",
+          "oklch(72.1% 0.021 271.4)",
+          "oklch(83.6% 0.021 271.4)",
+          "oklch(95.0% 0.021 271.4)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Raised Surface",
+        "canonical": "#1c2030",
+        "oklch": "oklch(24.7% 0.031 273.1)",
+        "tonalRamp": [
+          "oklch(15.0% 0.031 273.1)",
+          "oklch(26.4% 0.031 273.1)",
+          "oklch(37.9% 0.031 273.1)",
+          "oklch(49.3% 0.031 273.1)",
+          "oklch(60.7% 0.031 273.1)",
+          "oklch(72.1% 0.031 273.1)",
+          "oklch(83.6% 0.031 273.1)",
+          "oklch(95.0% 0.031 273.1)"
+        ]
+      },
+      "edge": {
+        "role": "neutral",
+        "displayName": "Edge",
+        "canonical": "#262c3f",
+        "oklch": "oklch(29.6% 0.036 270.6)",
+        "tonalRamp": [
+          "oklch(15.0% 0.036 270.6)",
+          "oklch(26.4% 0.036 270.6)",
+          "oklch(37.9% 0.036 270.6)",
+          "oklch(49.3% 0.036 270.6)",
+          "oklch(60.7% 0.036 270.6)",
+          "oklch(72.1% 0.036 270.6)",
+          "oklch(83.6% 0.036 270.6)",
+          "oklch(95.0% 0.036 270.6)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Text",
+        "canonical": "#e6e9f2",
+        "oklch": "oklch(93.4% 0.013 271.3)",
+        "tonalRamp": [
+          "oklch(15.0% 0.013 271.3)",
+          "oklch(26.4% 0.013 271.3)",
+          "oklch(37.9% 0.013 271.3)",
+          "oklch(49.3% 0.013 271.3)",
+          "oklch(60.7% 0.013 271.3)",
+          "oklch(72.1% 0.013 271.3)",
+          "oklch(83.6% 0.013 271.3)",
+          "oklch(95.0% 0.013 271.3)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "#9aa0b8",
+        "oklch": "oklch(70.9% 0.036 274.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.036 274.4)",
+          "oklch(26.4% 0.036 274.4)",
+          "oklch(37.9% 0.036 274.4)",
+          "oklch(49.3% 0.036 274.4)",
+          "oklch(60.7% 0.036 274.4)",
+          "oklch(72.1% 0.036 274.4)",
+          "oklch(83.6% 0.036 274.4)",
+          "oklch(95.0% 0.036 274.4)"
+        ]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint",
+        "canonical": "#858ba6",
+        "oklch": "oklch(64.1% 0.041 275.3)",
+        "tonalRamp": [
+          "oklch(15.0% 0.041 275.3)",
+          "oklch(26.4% 0.041 275.3)",
+          "oklch(37.9% 0.041 275.3)",
+          "oklch(49.3% 0.041 275.3)",
+          "oklch(60.7% 0.041 275.3)",
+          "oklch(72.1% 0.041 275.3)",
+          "oklch(83.6% 0.041 275.3)",
+          "oklch(95.0% 0.041 275.3)"
+        ]
+      },
+      "term-light-bg": {
+        "role": "neutral",
+        "displayName": "Light Terminal Ground",
+        "canonical": "#fafafa",
+        "oklch": "oklch(98.5% 0.000 89.9)",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 89.9)",
+          "oklch(26.4% 0.000 89.9)",
+          "oklch(37.9% 0.000 89.9)",
+          "oklch(49.3% 0.000 89.9)",
+          "oklch(60.7% 0.000 89.9)",
+          "oklch(72.1% 0.000 89.9)",
+          "oklch(83.6% 0.000 89.9)",
+          "oklch(95.0% 0.000 89.9)"
+        ]
+      },
+      "term-light-fg": {
+        "role": "neutral",
+        "displayName": "Light Terminal Ink",
+        "canonical": "#1f2330",
+        "oklch": "oklch(25.8% 0.025 271.3)",
+        "tonalRamp": [
+          "oklch(15.0% 0.025 271.3)",
+          "oklch(26.4% 0.025 271.3)",
+          "oklch(37.9% 0.025 271.3)",
+          "oklch(49.3% 0.025 271.3)",
+          "oklch(60.7% 0.025 271.3)",
+          "oklch(72.1% 0.025 271.3)",
+          "oklch(83.6% 0.025 271.3)",
+          "oklch(95.0% 0.025 271.3)"
+        ]
+      },
+      "term-light-edge": {
+        "role": "neutral",
+        "displayName": "Light Terminal Edge",
+        "canonical": "#d5d8e2",
+        "oklch": "oklch(88.3% 0.014 272.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.014 272.7)",
+          "oklch(26.4% 0.014 272.7)",
+          "oklch(37.9% 0.014 272.7)",
+          "oklch(49.3% 0.014 272.7)",
+          "oklch(60.7% 0.014 272.7)",
+          "oklch(72.1% 0.014 272.7)",
+          "oklch(83.6% 0.014 272.7)",
+          "oklch(95.0% 0.014 272.7)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The one-line offer in the hero; the same voice, larger, closes the page."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section titles, balanced; steps down inside the session stage and documents."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Chapter, promise and document subsection titles; FAQ questions."
+      },
+      "command": {
+        "displayName": "Command",
+        "purpose": "The install command inside the approval band, after a faint $."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running prose in Inter, capped at the 68ch measure."
+      },
+      "body-lead": {
+        "displayName": "Body Lead",
+        "purpose": "The muted paragraph under a section title."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Nav, hero facts, band title and keys, readings, table headers, table of contents."
+      },
+      "terminal": {
+        "displayName": "Terminal",
+        "purpose": "The recorded screen: 104 cells at 16px (56 on phones), scaled whole, ligatures off."
+      }
+    },
+    "shadows": [
+      {
+        "name": "band-glow",
+        "value": "0 14px 30px -18px rgba(242, 207, 115, 0.32), 0 2px 6px rgba(0, 0, 0, 0.35)",
+        "purpose": "The approval band at rest."
+      },
+      {
+        "name": "band-glow-done",
+        "value": "0 14px 30px -18px rgba(143, 227, 163, 0.34), 0 2px 6px rgba(0, 0, 0, 0.35)",
+        "purpose": "The band after the command is copied."
+      },
+      {
+        "name": "window-lift",
+        "value": "0 26px 40px -22px rgba(0, 0, 0, 0.85), 0 18px 36px -26px rgba(111, 95, 214, 0.45)",
+        "purpose": "The terminal window, for the session and the film."
+      },
+      {
+        "name": "night-glow",
+        "value": "radial-gradient(120% 60% at 50% -10%, #1a1830 0%, transparent 60%), #0b0d14",
+        "purpose": "The page ground (background, fixed attachment); not a shadow but the one ambient light."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Every transition on the site."
+      },
+      {
+        "name": "duration-hover",
+        "value": "160ms",
+        "purpose": "Link and band-choice colour and fill."
+      },
+      {
+        "name": "duration-move",
+        "value": "220ms",
+        "purpose": "Small transforms: band pointer slide, arrow nudge, FAQ chevron, play ring scale."
+      },
+      {
+        "name": "duration-state",
+        "value": "300ms",
+        "purpose": "Band done state, active chapter colour."
+      },
+      {
+        "name": "duration-mode",
+        "value": "500ms",
+        "purpose": "Terminal window mode change (dark, light, weather)."
+      },
+      {
+        "name": "scrub",
+        "value": "scroll-linked",
+        "purpose": "The pinned terminal plays the recording frame by frame with scroll; a chapter maps its stretch over the first 82% of its height."
+      },
+      {
+        "name": "rain",
+        "value": "intensity 0.16 at rest, 0.3 to 1 in the weather chapter",
+        "purpose": "Rain eases toward the target over ~420ms; holds still while bruine waits for an answer; lightning flashes (900ms) past 62% of the weather chapter."
+      },
+      {
+        "name": "ripple",
+        "value": "3 lavender rings",
+        "purpose": "The one ripple, when a command is copied, at the band."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "prefers-reduced-motion: reduce",
+        "purpose": "Transitions and animations drop to 0.01ms; the rain is drawn once and never moves."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "narrow",
+        "value": "860px",
+        "purpose": "Session stacks; terminal pins to the top; 56-column recording; one-column reading layout."
+      },
+      {
+        "name": "phone",
+        "value": "520px",
+        "purpose": "Nav drops a link; band choices 44px; window title hidden."
+      }
+    ],
+    "cssVariables": {
+      "note": "Tokens are live as custom properties on :root in site/app/globals.css; component CSS references them by name.",
+      "map": {
+        "night": "--night",
+        "night-glow": "--night-glow",
+        "window": "--window",
+        "edge": "--edge",
+        "surface": "--surface",
+        "sky": "--sky",
+        "lavender": "--lavender",
+        "violet-light": "--violet-light",
+        "pink": "--pink",
+        "mint": "--mint",
+        "amber": "--amber",
+        "text": "--text",
+        "muted": "--muted",
+        "faint": "--faint",
+        "mono": "--mono",
+        "sans": "--sans",
+        "gutter": "--gutter",
+        "column": "--column",
+        "measure": "--measure",
+        "step": "--step",
+        "ease": "--ease"
+      }
+    }
+  },
+  "components": [
+    {
+      "name": "Install Band",
+      "kind": "custom",
+      "refersTo": "install-band",
+      "description": "The signature: the install command asked as the TUI asks, amber frame with title and keys cut into the border.",
+      "html": "<div class=\"ds-band\"><div class=\"ds-band-title\"><span>─</span> Allow bash</div><div class=\"ds-band-body\"><code class=\"ds-band-command\">npm install -g bruine</code><ul class=\"ds-band-choices\"><li><button type=\"button\" class=\"ds-band-choice\" aria-current=\"true\"><span class=\"ds-band-pointer\">›</span><kbd>y</kbd><span>Copy the command</span></button></li><li><button type=\"button\" class=\"ds-band-choice\"><span class=\"ds-band-pointer\">›</span><kbd>a</kbd><span>Use pnpm instead</span></button></li><li><button type=\"button\" class=\"ds-band-choice\"><span class=\"ds-band-pointer\">›</span><kbd>n</kbd><span>Not yet: read the guide</span></button></li></ul></div><div class=\"ds-band-foot\">y · a · n <span>──</span></div></div>",
+      "css": ".ds-band{--band:var(--amber);position:relative;max-width:40rem;border:1px solid var(--band);border-radius:10px;background:linear-gradient(180deg,rgba(242,207,115,.07),rgba(242,207,115,.02)),rgba(11,13,20,.86);box-shadow:0 14px 30px -18px rgba(242,207,115,.32),0 2px 6px rgba(0,0,0,.35);font-family:var(--mono);color:var(--text);transition:border-color 300ms var(--ease),box-shadow 300ms var(--ease)}.ds-band:focus-within{--band:var(--amber)}.ds-band-title,.ds-band-foot{position:absolute;padding:0 .5rem;background:var(--night);color:var(--band);font-size:.8125rem;font-weight:700;line-height:1}.ds-band-title{top:-.45rem;left:.9rem}.ds-band-foot{bottom:-.45rem;right:.9rem;font-weight:400;color:var(--muted)}.ds-band-foot span{color:var(--band)}.ds-band-body{padding:1.25rem clamp(1rem,2.4vw,1.6rem) 1.1rem;display:grid;gap:.7rem}.ds-band-command{font-size:clamp(1.05rem,2.6vw,1.5rem)}.ds-band-command::before{content:\"$ \";color:var(--faint)}.ds-band-choices{list-style:none;margin:0;padding:0;display:grid;gap:.1rem}.ds-band-choice{display:inline-flex;align-items:center;gap:.75rem;min-height:40px;padding:.2rem .65rem .2rem .25rem;border:0;border-radius:6px;background:none;color:var(--muted);font:inherit;font-size:.9375rem;cursor:pointer;transition:background 160ms var(--ease),color 160ms var(--ease)}.ds-band-choice kbd{font-family:inherit;color:var(--band);font-weight:700}.ds-band-pointer{width:1ch;color:var(--band);opacity:0;transform:translateX(-4px);transition:opacity 160ms var(--ease),transform 220ms var(--ease)}.ds-band-choice[aria-current=\"true\"],.ds-band-choice:hover{color:var(--text);background:rgba(242,207,115,.08)}.ds-band-choice[aria-current=\"true\"] .ds-band-pointer,.ds-band-choice:hover .ds-band-pointer{opacity:1;transform:none}.ds-band-choice:active{background:rgba(242,207,115,.16)}.ds-band-choice:focus-visible{outline:2px solid var(--sky);outline-offset:3px}"
+    },
+    {
+      "name": "Install Band, copied",
+      "kind": "custom",
+      "refersTo": "install-band",
+      "description": "The same band after y: mint frame and glow, a mint status line.",
+      "html": "<div class=\"ds-band-done\"><div class=\"ds-band-done-title\">─ Allow bash</div><code class=\"ds-band-done-command\">npm install -g bruine</code><p class=\"ds-band-done-status\"><span>✓</span> Copied. Paste it in a terminal, then type bruine: the first launch finds your model.</p></div>",
+      "css": ".ds-band-done{position:relative;max-width:40rem;padding:1.25rem 1.6rem 1.1rem;display:grid;gap:.7rem;border:1px solid var(--mint);border-radius:10px;background:rgba(11,13,20,.86);box-shadow:0 14px 30px -18px rgba(143,227,163,.34),0 2px 6px rgba(0,0,0,.35);font-family:var(--mono);color:var(--text)}.ds-band-done-title{position:absolute;top:-.45rem;left:.9rem;padding:0 .5rem;background:var(--night);color:var(--mint);font-size:.8125rem;font-weight:700;line-height:1}.ds-band-done-command{font-size:1.25rem}.ds-band-done-command::before{content:\"$ \";color:var(--faint)}.ds-band-done-status{margin:0;font-family:var(--sans);font-size:.875rem;color:var(--mint)}.ds-band-done-status span{font-family:var(--mono)}"
+    },
+    {
+      "name": "Terminal Window",
+      "kind": "card",
+      "refersTo": "terminal-window",
+      "description": "The frame for every recorded screen and the film: window fill, edge, 12px radius, lift with a violet glow.",
+      "html": "<figure class=\"ds-window\"><figcaption class=\"ds-window-bar\"><span class=\"ds-window-title\">bruine · ~/code/api</span><span class=\"ds-window-stamp\">0:12.4</span></figcaption><pre class=\"ds-window-body\">› \n\n  ask · ↯ 53.6 tok/s · cache 95.9%</pre></figure>",
+      "css": ".ds-window{margin:0;max-width:40rem;border:1px solid var(--edge);border-radius:12px;background:var(--window);box-shadow:0 26px 40px -22px rgba(0,0,0,.85),0 18px 36px -26px rgba(111,95,214,.45);overflow:hidden;transition:background 500ms var(--ease),border-color 500ms var(--ease)}.ds-window-bar{display:grid;grid-template-columns:1fr auto;gap:1rem;padding:.6rem .85rem;border-bottom:1px solid rgba(38,44,63,.7);font-family:var(--mono);font-size:.75rem;color:var(--faint)}.ds-window-title{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.ds-window-stamp{font-variant-numeric:tabular-nums;color:var(--lavender);text-align:right}.ds-window-body{margin:0;padding:14px 18px;font-family:var(--mono);font-size:14px;line-height:1.32;color:var(--text);font-variant-ligatures:none;white-space:pre}"
+    },
+    {
+      "name": "Readings",
+      "kind": "chip",
+      "refersTo": "reading",
+      "description": "Status-line chips; colour is the job: sky measured, mint kept, amber asks.",
+      "html": "<div class=\"ds-readings\"><span class=\"ds-reading\">↯ 53.6 tok/s</span><span class=\"ds-reading ds-reading-kept\">cache 95.9%</span><span class=\"ds-reading ds-reading-ask\">ask</span><span class=\"ds-release-tag\">latest</span></div>",
+      "css": ".ds-readings{display:flex;flex-wrap:wrap;gap:.75rem;align-items:baseline}.ds-reading{font-family:var(--mono);font-size:.875rem;color:var(--sky);padding:.15rem .5rem;border-radius:4px;background:var(--window);border:1px solid var(--edge)}.ds-reading-kept{color:var(--mint)}.ds-reading-ask{color:var(--amber)}.ds-release-tag{font-family:var(--mono);font-size:.8125rem;color:var(--mint);border:1px solid rgba(143,227,163,.4);border-radius:999px;padding:.05rem .6rem}"
+    },
+    {
+      "name": "Links",
+      "kind": "button",
+      "refersTo": "link",
+      "description": "Sky links with a 40% underline, violet-light on hover; the mono more-link with a moving arrow; sky focus ring.",
+      "html": "<p class=\"ds-prose\">llama.cpp, any /v1 server, or <a class=\"ds-link\" href=\"#\">about thirty cloud providers</a>.</p><a class=\"ds-more\" href=\"#\">See the full comparison <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 8h10M9 4l4 4-4 4\"/></svg></a>",
+      "css": ".ds-prose{margin:0 0 1rem;font-family:var(--sans);font-size:1.0625rem;line-height:1.65;color:var(--muted)}.ds-link,.ds-more{color:var(--sky);text-decoration-color:rgba(125,207,255,.4);text-underline-offset:.22em;text-decoration-thickness:1px;transition:color 160ms var(--ease),text-decoration-color 160ms var(--ease)}.ds-link:hover,.ds-more:hover{color:var(--violet-light);text-decoration-color:currentColor}.ds-link:focus-visible,.ds-more:focus-visible{outline:2px solid var(--sky);outline-offset:3px;border-radius:4px}.ds-more{display:inline-flex;align-items:center;gap:.5rem;min-height:44px;font-family:var(--mono);font-size:.9375rem}.ds-more svg{transition:transform 220ms var(--ease)}.ds-more:hover svg{transform:translateX(3px)}"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "One mono row: raindrop and wordmark left, muted links right, a bordered language switch.",
+      "html": "<header class=\"ds-nav\"><a class=\"ds-nav-home\" href=\"#\"><span class=\"ds-nav-drop\"></span>bruine</a><ul class=\"ds-nav-links\"><li><a href=\"#\" aria-current=\"page\">Guide</a></li><li><a href=\"#\">Compare</a></li><li><a href=\"#\">Changelog</a></li><li><a class=\"ds-nav-lang\" href=\"#\">en <span class=\"ds-nav-sep\">/</span> <span class=\"ds-nav-other\">fr</span></a></li></ul></header>",
+      "css": ".ds-nav{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1.1rem 0;font-family:var(--mono);font-size:.875rem}.ds-nav-home{display:inline-flex;align-items:center;gap:.55rem;color:var(--text);text-decoration:none;font-weight:700;font-size:1.05rem;letter-spacing:-.01em}.ds-nav-drop{width:9px;height:14px;background:linear-gradient(180deg,var(--sky),var(--lavender));border-radius:50% 50% 50% 50%/62% 62% 38% 38%;transform:rotate(180deg)}.ds-nav-links{display:flex;align-items:center;gap:1.5rem;list-style:none;margin:0;padding:0}.ds-nav-links a{display:inline-flex;align-items:center;gap:.25rem;min-height:44px;color:var(--muted);text-decoration:none;transition:color 160ms var(--ease)}.ds-nav-links a:hover,.ds-nav-links a[aria-current=\"page\"]{color:var(--text)}.ds-nav-links a:focus-visible{outline:2px solid var(--sky);outline-offset:3px;border-radius:4px}.ds-nav-links .ds-nav-lang{min-height:32px;padding:0 .55rem;border:1px solid var(--edge);border-radius:6px}.ds-nav-sep{color:var(--faint)}.ds-nav-other{color:var(--lavender)}"
+    },
+    {
+      "name": "Hairline Rows",
+      "kind": "custom",
+      "refersTo": "reading",
+      "description": "Grouped facts as rows between 1px edge hairlines: a promise row and an FAQ item.",
+      "html": "<div class=\"ds-rows\"><div class=\"ds-row\"><div class=\"ds-row-head\"><span class=\"ds-row-title\">The numbers are measured.</span><span class=\"ds-row-reading\">↯ 53.6 tok/s</span></div><p class=\"ds-row-body\">Speed, prefill and cache hits come from bruine's own clock.</p></div><details class=\"ds-faq\"><summary>Does it send my code anywhere?</summary><p>Only to the model route you configured.</p></details></div>",
+      "css": ".ds-rows{max-width:46rem;border-top:1px solid var(--edge)}.ds-row{display:grid;gap:.75rem;padding:1.5rem 0;border-bottom:1px solid var(--edge)}.ds-row-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem .9rem}.ds-row-title{font-family:var(--mono);font-weight:700;font-size:1.25rem;letter-spacing:-.01em;color:var(--text)}.ds-row-reading{font-family:var(--mono);font-size:.875rem;color:var(--sky);padding:.15rem .5rem;border-radius:4px;background:var(--window);border:1px solid var(--edge)}.ds-row-body{margin:0;font-family:var(--sans);color:var(--muted);line-height:1.65}.ds-faq{border-bottom:1px solid var(--edge)}.ds-faq summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:1rem;padding:1.15rem 0;font-family:var(--mono);font-weight:700;font-size:1.0625rem;color:var(--text);transition:color 160ms var(--ease)}.ds-faq summary::-webkit-details-marker{display:none}.ds-faq summary::after{content:\"›\";color:var(--lavender);font-weight:400;transition:transform 220ms var(--ease)}.ds-faq[open] summary::after{transform:rotate(90deg)}.ds-faq summary:hover{color:var(--violet-light)}.ds-faq summary:focus-visible{outline:2px solid var(--sky);outline-offset:3px;border-radius:4px}.ds-faq p{margin:0;padding:0 0 1.35rem;font-family:var(--sans);color:var(--muted)}"
+    },
+    {
+      "name": "Code",
+      "kind": "card",
+      "refersTo": "code-block",
+      "description": "Inline code on the raised surface in violet-light; blocks on the window fill.",
+      "html": "<p class=\"ds-code-prose\">Config lives in <code class=\"ds-code-inline\">~/.bruine/</code>.</p><pre class=\"ds-code-block\"><code>npm install -g bruine\nbruine</code></pre>",
+      "css": ".ds-code-prose{margin:0 0 1rem;font-family:var(--sans);color:var(--text);line-height:1.65}.ds-code-inline{font-family:var(--mono);font-size:.9em;background:var(--surface);border:1px solid var(--edge);border-radius:4px;padding:.05em .35em;color:var(--violet-light)}.ds-code-block{margin:0;max-width:40rem;padding:1rem 1.15rem;background:var(--window);border:1px solid var(--edge);border-radius:8px;overflow-x:auto;font-family:var(--mono);font-size:.875rem;line-height:1.6;color:var(--text)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "A Terminal Under Fine Rain",
+    "overview": "The site is the terminal app's own world brought to page scale. A night ground holds a faint pastel rain that falls behind everything and never takes a click; on top of it sit the TUI's own framed boxes, set in JetBrains Mono, with Inter carrying the prose between them. The page does not describe bruine from outside: it frames the real thing (a recorded session, the stills, the film) and asks the visitor in the same amber frame bruine uses when it asks before acting.\n\nDensity is calm and columnar. One centred column (1180px plus gutters) carries everything; content groups are divided by 1px hairlines rather than boxed into cards; the only framed objects are the approval band, the terminal window, and small terminal readings. Colour is rationed by job: each pastel means one thing, and amber means only \"this asks you\". Motion is the weather: the scroll scrubs the recording, the rain follows how hard the model is thinking, and a copied command lands as a ring in the rain.\n\nThe theme is dark only, deliberately: the readers are terminal developers, often at night, and the brand is night rain. Light appears only inside the terminal window, when the session shows the TUI's light theme.",
+    "keyCharacteristics": [
+      "Night ground with a violet glow at the top and pastel rain drawn on a fixed canvas behind the page.",
+      "JetBrains Mono for every heading, label, command and terminal; Inter only for running prose.",
+      "Rounded 1px frames with their title set into the border, as the TUI draws them.",
+      "Hairline-divided lists instead of card grids.",
+      "Amber reserved for asking; mint for done; pink for what bruine refuses.",
+      "Motion that is weather: scrub, rain intensity, one ripple."
+    ],
+    "rules": [
+      {
+        "name": "The Amber Asks Rule",
+        "body": "Amber appears only where something asks for a decision: the install band and the Ask permission mode. A heading, a highlight or a warning that does not ask is never amber.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Job Rule",
+        "body": "Each pastel keeps its job across every page: sky is a link or focus, lavender is the interactive accent, mint is done, pink is refusal. A new element takes the colour of its job, not a colour for variety.",
+        "section": "colors"
+      },
+      {
+        "name": "The Night Only Rule",
+        "body": "The page is dark only (`color-scheme: dark`, theme colour night). Light exists only inside the terminal window when the recording shows the light theme.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mono Speaks Rule",
+        "body": "Every heading, label, key, command and reading is set in JetBrains Mono; Inter is for paragraphs a person reads. No heading is ever set in Inter.",
+        "section": "typography"
+      },
+      {
+        "name": "The Real Grid Rule",
+        "body": "The terminal is never reflowed or re-set at a smaller font: it is laid out at 16px on its own cell grid and scaled as one block, so every column of the recording lands where the app drew it.",
+        "section": "typography"
+      },
+      {
+        "name": "The Hairline List Rule",
+        "body": "Grouped facts (promises, FAQ, fit tables, releases) are rows divided by 1px `edge` hairlines, top and bottom, never a grid of equal bordered cards.",
+        "section": "layout"
+      },
+      {
+        "name": "The Two Frames Rule",
+        "body": "Only the approval band and the terminal window cast a shadow. Lists, tables, code blocks, readings and the table of contents stay flat on hairlines.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Border Title Rule",
+        "body": "A frame that asks names itself in its top border: the title (`─ Allow bash`) sits on a night patch cut into the top-left edge, and the key hint (`y · a · n ──`) into the bottom-right edge, exactly as the TUI's approval box.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do keep amber for asking: the install band and the Ask permission mode only.",
+      "Do set every heading, label, command and reading in JetBrains Mono, and prose in Inter at the 68ch measure.",
+      "Do draw frames as the TUI does: 1px line, rounded corners, the title cut into the top border.",
+      "Do divide grouped content with 1px `edge` hairlines.",
+      "Do fill every terminal window with output recorded from the running app, laid out on its own cell grid and scaled whole.",
+      "Do let motion be weather: the scroll scrub, rain intensity that follows the session (drizzle at 0.16, still while bruine waits for an answer, storm and lightning in the weather chapter), and one ripple on copy, all easing on `cubic-bezier(0.16, 1, 0.3, 1)`.",
+      "Do stop all of it under reduced motion: the rain is drawn once and never moves."
+    ],
+    "donts": [
+      "Don't add a light page theme; light lives only inside the terminal window.",
+      "Don't use amber for emphasis, warnings or decoration that does not ask.",
+      "Don't set a heading in Inter or a paragraph of prose in mono.",
+      "Don't lay grouped facts out as a grid of equal bordered cards.",
+      "Don't put a shadow on anything but the install band and the terminal window.",
+      "Don't set text dimmer than `faint`.",
+      "Don't let the rain take input or sit in front of content: it is fixed, behind, and `pointer-events: none`."
+    ]
+  }
+}

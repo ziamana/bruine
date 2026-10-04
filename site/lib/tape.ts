@@ -41,15 +41,16 @@ export class Screen {
   constructor(
     host: HTMLElement,
     private readonly tape: Tape,
+    rows = tape.rows,
   ) {
     host.replaceChildren();
-    this.#rows = Array.from({ length: tape.rows }, () => {
+    this.#rows = Array.from({ length: rows }, () => {
       const row = document.createElement("div");
       row.className = "term-row";
       host.append(row);
       return row;
     });
-    this.#shown = Array(tape.rows).fill(-1);
+    this.#shown = Array(rows).fill(-1);
   }
 
   draw(rows: number[]): void {

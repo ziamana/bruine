@@ -14,3 +14,19 @@ export function Arrow() {
     </svg>
   );
 }
+
+export function Chevron() {
+  return (
+    <svg className="icon-chevron" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 3l4 4-4 4" />
+    </svg>
+  );
+}
+
+export function Cross() {
+  return (
+    <svg className="icon-cross" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M3 3l6 6M9 3l-6 6" />
+    </svg>
+  );
+}

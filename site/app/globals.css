@@ -265,21 +265,18 @@ video {
   justify-items: center;
   gap: 1.25rem;
   margin: 0 auto;
-  padding: clamp(1.5rem, 5vh, 4rem) 0 clamp(2.5rem, 6vh, 4.5rem);
+  padding: clamp(1.5rem, 6vh, 4.5rem) 0 clamp(2.5rem, 6vh, 4.5rem);
   text-align: center;
 }
-.hero-mark {
-  width: clamp(150px, 15vw, 190px);
-}
 .hero h1 {
-  font-size: clamp(2rem, min(4.2vw, 6vh), 3.3rem);
+  font-size: clamp(2rem, min(3.6vw, 6vh), 3.1rem);
   letter-spacing: -0.035em;
-  max-width: 21ch;
+  max-width: 30ch;
 }
 .hero-lead {
   color: var(--muted);
   font-size: clamp(1.02rem, 1.25vw, 1.125rem);
-  max-width: 60ch;
+  max-width: 64ch;
 }
 .button {
   display: inline-flex;
@@ -391,11 +388,15 @@ video {
 .window-film {
   position: relative;
 }
+/* The film clip takes the same box as a 56 x 16 terminal, on the clip's own dark ground. */
+.window-clip-body {
+  background: #0d1019;
+}
 .window-clip {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
+  aspect-ratio: 33.6 / 21.12;
+  object-fit: contain;
 }
 
 /* For developers: two ways in, each one command to copy. */
@@ -621,7 +622,7 @@ video {
 }
 .session-stage {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr);
   grid-template-areas:
     "pin head"
     "pin chapters";
@@ -934,12 +935,12 @@ video {
 .behind-list li {
   display: grid;
   grid-template-columns: 1.5rem 1fr;
+  align-items: baseline;
   font-size: 1.125rem;
 }
-.behind-list li::before {
-  content: "×";
-  font-family: var(--mono);
+.icon-cross {
   color: var(--pink);
+  transform: translateY(1px);
 }
 .behind-fit {
   color: var(--muted);
@@ -989,13 +990,13 @@ video {
 .faq summary::-webkit-details-marker {
   display: none;
 }
-.faq summary::after {
-  content: "›";
+.faq summary .icon-chevron {
+  flex: none;
+  align-self: center;
   color: var(--lavender);
-  font-weight: 400;
   transition: transform 220ms var(--ease);
 }
-.faq details[open] summary::after {
+.faq details[open] summary .icon-chevron {
   transform: rotate(90deg);
 }
 .faq summary:hover {
@@ -1158,11 +1159,16 @@ video {
   font-size: 0.875rem;
   color: var(--muted);
 }
+/* A table wider than the screen scrolls in its frame, with a shadow on the side that has more. */
 .table-wrap {
   overflow-x: auto;
   margin: 0 0 1.5rem;
   border: 1px solid var(--edge);
   border-radius: 8px;
+  background:
+    linear-gradient(to left, var(--night) 40%, rgba(11, 13, 20, 0)) right / 3rem 100% no-repeat local,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0)) right / 1.25rem 100% no-repeat scroll,
+    var(--night);
 }
 .prose table {
   border-collapse: collapse;
@@ -1305,9 +1311,6 @@ video {
   }
   .nav-links {
     gap: 0.8rem;
-  }
-  .hero-mark {
-    margin-left: -0.6rem;
   }
   .band-choice {
     font-size: 0.875rem;

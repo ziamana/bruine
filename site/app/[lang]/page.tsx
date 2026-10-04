@@ -3,10 +3,10 @@ import { CopyCommand } from "@/components/CopyCommand";
 import { Film } from "@/components/Film";
 import { Go } from "@/components/Go";
 import { HeroTerminal } from "@/components/HeroTerminal";
-import { Arrow, GitHubMark } from "@/components/Icons";
+import { Arrow, Chevron, Cross, GitHubMark } from "@/components/Icons";
 import { InstallBand } from "@/components/InstallBand";
 import { Session } from "@/components/Session";
-import { asset, DICTS, isLang, REPO, type Lang } from "@/lib/i18n";
+import { DICTS, isLang, REPO, type Lang } from "@/lib/i18n";
 
 export default async function Home({ params }: { params: Promise<{ lang: string }> }) {
   const { lang: raw } = await params;
@@ -15,7 +15,6 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
   return (
     <main>
       <section className="hero" aria-labelledby="hero-title">
-        <img className="hero-mark" src={asset("/media/wordmark-dark.svg")} alt="bruine" width="528" height="232" />
         <h1 id="hero-title">{t.hero.title}</h1>
         <p className="hero-lead">{t.hero.lead}</p>
         <a className="button button-primary" href="#install">
@@ -91,7 +90,10 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
         </header>
         <ul className="behind-list">
           {t.behind.items.map((item) => (
-            <li key={item}>{item}</li>
+            <li key={item}>
+              <Cross />
+              <span>{item}</span>
+            </li>
           ))}
         </ul>
         <p className="behind-fit">{t.behind.fit}</p>
@@ -105,7 +107,10 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
         <div className="faq-list">
           {t.faq.items.map((item) => (
             <details key={item.q}>
-              <summary>{item.q}</summary>
+              <summary>
+                {item.q}
+                <Chevron />
+              </summary>
               <p>{item.a}</p>
             </details>
           ))}

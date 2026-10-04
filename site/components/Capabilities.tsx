@@ -8,6 +8,10 @@ import { TermWindow, type TermHandle } from "./TermWindow";
 
 type Still = "retry" | "image" | "light";
 
+/** Every card shows 16 rows: the part of each still that carries its point, so the demos line up. */
+const ROWS = 16;
+const SLICE: Record<Still, number> = { retry: 9, image: 1, light: 4 };
+
 /** One capability, shown by a still of the real terminal (56 columns, recorded for small windows). */
 function StillWindow({ still }: { still: Still }) {
   const ref = useRef<TermHandle>(null);
@@ -16,17 +20,20 @@ function StillWindow({ still }: { still: Still }) {
     void loadTape(asset("/tape/session-narrow.json")).then((tape) => {
       const host = ref.current?.host;
       if (cancelled || !host) return;
-      new Screen(host, tape).draw(tape.stills[still]);
+      new Screen(host, tape, ROWS).draw(tape.stills[still].slice(SLICE[still], SLICE[still] + ROWS));
       ref.current?.fit();
     });
     return () => {
       cancelled = true;
     };
   }, [still]);
-  return <TermWindow ref={ref} cols={56} title="bruine · ~/code/report" stamp={null} mode={still === "light" ? "light" : "dark"} />;
+  return <TermWindow ref={ref} cols={56} rows={ROWS} title="bruine · ~/code/report" stamp={null} mode={still === "light" ? "light" : "dark"} />;
 }
 
-/** The weather card: the prompt box from the film climbing to max, and the page's rain with it. */
+/**
+ * The weather card: the prompt box from the film at max effort, its frame running every colour,
+ * and the page's rain turning to a storm while the card is on screen.
+ */
 function WeatherWindow() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -43,7 +50,7 @@ function WeatherWindow() {
     };
   }, []);
   return (
-    <figure ref={ref} className="window window-film" data-mode="weather">
+    <figure ref={ref} className="window window-film">
       <figcaption className="window-bar">
         <span className="window-lights" aria-hidden="true">
           <i />
@@ -55,7 +62,9 @@ function WeatherWindow() {
         </span>
         <span className="window-stamp" aria-hidden="true" />
       </figcaption>
-      <img className="window-clip" src={asset("/media/effort.webp")} alt="" loading="lazy" decoding="async" width="960" height="540" />
+      <div className="window-body window-clip-body">
+        <img className="window-clip" src={asset("/media/effort-max.webp")} alt="" loading="lazy" decoding="async" width="760" height="299" />
+      </div>
     </figure>
   );
 }

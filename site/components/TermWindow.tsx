@@ -15,8 +15,8 @@ export interface TermHandle {
  */
 export const TermWindow = forwardRef<
   TermHandle,
-  { cols: number; title: string; stamp?: ReactNode; mode?: "dark" | "light" | "weather"; className?: string; children?: ReactNode }
->(function TermWindow({ cols, title, stamp, mode = "dark", className, children }, ref) {
+  { cols: number; rows?: number; title: string; stamp?: ReactNode; mode?: "dark" | "light"; className?: string; children?: ReactNode }
+>(function TermWindow({ cols, rows = 26, title, stamp, mode = "dark", className, children }, ref) {
   const fitRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<HTMLDivElement>(null);
 
@@ -38,7 +38,7 @@ export const TermWindow = forwardRef<
     void document.fonts.ready.then(fit);
     fit();
     return () => watch.disconnect();
-  }, [cols]);
+  }, [cols, rows]);
 
   return (
     <figure className={`window${className ? ` ${className}` : ""}`} data-mode={mode}>
@@ -57,7 +57,7 @@ export const TermWindow = forwardRef<
       </figcaption>
       <div className="window-body">
         <div ref={fitRef} className="term-fit">
-          <div ref={termRef} className="term" style={{ width: `${cols}ch` }} aria-hidden="true" translate="no" />
+          <div ref={termRef} className="term" style={{ width: `${cols}ch`, height: `${rows * 1.32}em` }} aria-hidden="true" translate="no" />
         </div>
         {children}
       </div>

@@ -72,8 +72,7 @@ const en: Dict = {
   nav: { guide: "Guide", compare: "Compare", changelog: "Changelog", github: "GitHub", skip: "Skip to the content", language: "Language", other: "Français" },
   hero: {
     title: "A coding agent for your terminal that runs your own models.",
-    lead:
-      "Point it at llama.cpp on your machine, at about thirty cloud providers, or at anything that speaks the OpenAI-compatible /v1 API. It reads and edits your code, runs your commands, and asks before anything risky. There is no account, and nothing goes anywhere you did not point it at.",
+    lead: "Point it at llama.cpp, any /v1 server or about thirty cloud providers. It edits, runs, and asks before anything risky.",
     said: "bruine (French, /bʁɥin/): a fine, steady rain.",
     facts: ["MIT", "Node 22+", "Windows · macOS · Linux", `v${VERSION}`],
     cta: "Install bruine",
@@ -233,8 +232,7 @@ const fr: Dict = {
   nav: { guide: "Guide", compare: "Comparer", changelog: "Nouveautés", github: "GitHub", skip: "Aller au contenu", language: "Langue", other: "English" },
   hero: {
     title: "Un agent de code pour ton terminal, avec tes propres modèles.",
-    lead:
-      "Branche-le sur llama.cpp sur ta machine, sur une trentaine de fournisseurs cloud, ou sur tout ce qui parle l'API /v1 compatible OpenAI. Il lit et modifie ton code, lance tes commandes, et demande avant tout ce qui est risqué. Pas de compte, et rien ne part ailleurs que là où tu l'as dirigé.",
+    lead: "Branche-le sur llama.cpp, un serveur /v1 ou une trentaine de fournisseurs cloud. Il modifie, lance, et demande avant tout ce qui est risqué.",
     said: "bruine (nom féminin) : une pluie fine et régulière.",
     facts: ["MIT", "Node 22+", "Windows · macOS · Linux", `v${VERSION}`],
     cta: "Installer bruine",

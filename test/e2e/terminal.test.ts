@@ -1524,6 +1524,35 @@ test("errors: 401 then 404 print the exact two lines (T33b)", async () => {
   );
 }, 90_000);
 
+test("a light terminal gets dark ink everywhere, tool cards included (one palette per process)", async () => {
+  // The plugins are bundled separately; the tool cards are painted by another copy of the
+  // palette than the shell that learns the background. Its ink used to stay the dark-theme one.
+  await serverScenario(
+    "light-ink",
+    [toolScript("read", { file_path: "note.txt" }), textScript("LIGHT_DONE")],
+    async (h) => {
+      await h.prompt("Read the note");
+      await h.waitFor("LIGHT_DONE");
+      const buffer = h.term.buffer.active;
+      const cell = buffer.getNullCell();
+      let ink: number | undefined;
+      for (let y = 0; y < h.term.rows && ink === undefined; y += 1) {
+        const line = buffer.getLine(buffer.viewportY + y);
+        const text = line?.translateToString(true) ?? "";
+        const at = text.indexOf("read ");
+        if (at < 0 || !text.includes("note.txt")) continue;
+        line!.getCell(at, cell);
+        if (cell.isFgRGB()) ink = cell.getFgColor();
+      }
+      expect(ink).toBeDefined();
+      const [r, g, b] = [(ink! >> 16) & 255, (ink! >> 8) & 255, ink! & 255];
+      // Dark enough to read on #fafafa: well under mid-gray.
+      expect((r + g + b) / 3).toBeLessThan(110);
+    },
+    { env: { BRUINE_COLOR: "truecolor", COLORTERM: "truecolor" }, background: "#fafafa", files: { "note.txt": "hello\n" } },
+  );
+}, 90_000);
+
 test("a model that goes quiet is retried, and the retry says so (adaptive silence)", async () => {
   // The first answer starts, then the server goes silent for half a minute; the silence budget
   // (scaled down here) runs out first, dsh retries, and the second request answers.

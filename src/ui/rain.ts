@@ -1,3 +1,4 @@
+import { sharedState } from "../shared-state.js";
 /**
  * Rain: the one motion the interface is built around.
  *
@@ -129,22 +130,22 @@ export function effortIsStorm(effort: string | undefined): boolean {
   return name === "max" || name === "maximum";
 }
 
-let currentLevel = 0.45;
-let currentEffort: string | undefined;
+/** The effort in use, one per process: the shell sets it, every plugin's copy reads it. */
+const effortState = sharedState("effort", () => ({ level: 0.45, effort: undefined as string | undefined }));
 
 /** The footer says the effort changed; the waiting labels (and the prompt's glow) follow it. */
 export function setRainLevel(effort: string | undefined): void {
-  currentLevel = effortToRain(effort);
-  currentEffort = effort;
+  effortState.level = effortToRain(effort);
+  effortState.effort = effort;
 }
 
 /** The effort in use, as the footer last said it; undefined until it said. */
 export function currentEffortName(): string | undefined {
-  return currentEffort;
+  return effortState.effort;
 }
 
 export function rainLevel(): number {
-  return currentLevel;
+  return effortState.level;
 }
 
 const DROP_DOTS = ["⠁", "⠂", "⠄", "⡀"] as const;

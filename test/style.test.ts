@@ -95,7 +95,7 @@ describe("style (T24.1)", () => {
       bin: Record<string, string>;
       keywords?: string[];
     };
-    expect(pkg.name).toBe("bruine");
+    expect(pkg.name).toBe("@ziamana/bruine");
     expect(pkg.bin.bruine).toBe("dist/bin.js");
     expect(pkg.license).toBe("MIT");
     expect(pkg.repository.type).toBe("git");

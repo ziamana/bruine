@@ -3,7 +3,7 @@ import { appEnv, runtimeHome, configReadPath, configWritePath } from "./compat.j
  * T30 — update check + `bruine update`.
  *
  * At launch bruine fires a background check (never delays the UI): at most
- * once per 24 h a plain `GET https://registry.npmjs.org/bruine/latest`
+ * once per 24 h a plain `GET https://registry.npmjs.org/@ziamana%2Fbruine/latest`
  * (2 s timeout), the result cached in `$DSH_HOME/update-check.json` as
  * `{ checkedAt, latest }`. When the cached `latest` is newer than the
  * running version, the session shows one notice line above the editor
@@ -22,7 +22,9 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path, { join } from "node:path";
 
-export const REGISTRY_LATEST = "https://registry.npmjs.org/bruine/latest";
+/** The npm name: the unscoped "bruine" is refused by npm (too close to "byline"). */
+export const NPM_PACKAGE = "@ziamana/bruine";
+export const REGISTRY_LATEST = `https://registry.npmjs.org/${NPM_PACKAGE.replace("/", "%2F")}/latest`;
 export const UPDATE_CACHE_FILE = "update-check.json";
 export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -233,7 +235,7 @@ export function detectInstallKind(realPath: string): InstallKind {
   if (has("/.pnpm/") || has("/.pnpm-global/") || has("/pnpm/global/") || has("/pnpm/node_modules/")) {
     return "pnpm";
   }
-  if (has("/node_modules/bruine/") || has("/node_modules/kumo-code/")) return "npm";
+  if (has("/node_modules/@ziamana/bruine/") || has("/node_modules/bruine/") || has("/node_modules/kumo-code/")) return "npm";
   return "developer";
 }
 
@@ -259,11 +261,11 @@ export async function setUpdateCheck(dshHome: string, value: boolean): Promise<v
 export function updateCommand(kind: InstallKind): string[] | undefined {
   switch (kind) {
     case "npm":
-      return ["npm", "install", "-g", "bruine@latest"];
+      return ["npm", "install", "-g", `${NPM_PACKAGE}@latest`];
     case "pnpm":
-      return ["pnpm", "add", "-g", "bruine@latest"];
+      return ["pnpm", "add", "-g", `${NPM_PACKAGE}@latest`];
     case "bun":
-      return ["bun", "add", "-g", "bruine@latest"];
+      return ["bun", "add", "-g", `${NPM_PACKAGE}@latest`];
     case "developer":
       return undefined;
   }

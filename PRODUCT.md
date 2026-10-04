@@ -33,7 +33,7 @@ bruine is a coding agent for the terminal that runs your own models. It reads an
 
 ## Operating Context
 
-Terminal (Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal), Node 22+, `npm install -g bruine`, then `bruine`. A setup wizard finds a local server or asks for API keys. Config in `~/.bruine/`.
+Terminal (Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal), Node 22+, `npm install -g @ziamana/bruine`, then `bruine`. A setup wizard finds a local server or asks for API keys. Config in `~/.bruine/`.
 
 ## Capabilities and Constraints
 

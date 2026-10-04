@@ -20,7 +20,7 @@ export const pagePath = (path: string): string => {
 
 export type Installer = "npm" | "pnpm" | "bun";
 export const INSTALL: Record<Installer, string> = {
-  npm: "npm install -g bruine",
+  npm: "npm install -g @ziamana/bruine",
   pnpm: "pnpm add -g bruine",
   bun: "bun add -g bruine",
 };
@@ -144,7 +144,7 @@ const en: Dict = {
     copy: "Copy",
     copied: "Copied",
     cards: [
-      { title: "Start with one command", body: "Install Node 22 or newer, then:", command: "npm install -g bruine\nbruine" },
+      { title: "Start with one command", body: "Install Node 22 or newer, then:", command: "npm install -g @ziamana/bruine\nbruine" },
       { title: "Build from source", body: "Clone the repository, build it, and link the command.", command: "git clone https://github.com/ziamana/bruine\ncd bruine && pnpm install && pnpm build\nnpm link" },
     ],
   },
@@ -304,7 +304,7 @@ const fr: Dict = {
     copy: "Copier",
     copied: "Copié",
     cards: [
-      { title: "Une commande pour commencer", body: "Installe Node 22 ou plus récent, puis :", command: "npm install -g bruine\nbruine" },
+      { title: "Une commande pour commencer", body: "Installe Node 22 ou plus récent, puis :", command: "npm install -g @ziamana/bruine\nbruine" },
       { title: "Depuis les sources", body: "Clone le dépôt, construis-le, et relie la commande.", command: "git clone https://github.com/ziamana/bruine\ncd bruine && pnpm install && pnpm build\nnpm link" },
     ],
   },

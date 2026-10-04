@@ -44,7 +44,7 @@ TypeScript directly). A single frame:
 3. **Demo** (14.6 s). The real bruine, recorded in a terminal and drawn large enough for a phone, a caption at a time: reasoning, a second prompt queued while it works, the edit as a diff behind the approval band (`y`, then `a` for `npm test`), the tests, the measured readings, the queued prompt going out.
 4. **Effort** (5.8 s). The harder it thinks, the harder it rains: `ctrl+e` from `low` to `max`, the frame glows as in the terminal, the storm comes.
 5. **Promises** (5.6 s). One: the prompt cache survives, the same bytes every turn.
-6. **Outro** (6.8 s). The mark, `npm install -g bruine`, `bruine`; then only the commands and the address are left, in a drizzle.
+6. **Outro** (6.8 s). The mark, `npm install -g @ziamana/bruine`, `bruine`; then only the commands and the address are left, in a drizzle.
 
 The short cut is the intro, the effort and the outro (6.0 + 5.2 + 5.2 s, 15 s with the overlaps).
 

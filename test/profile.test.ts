@@ -38,7 +38,7 @@ describe("ensureProfile", () => {
     expect(packageJson.name).toBe("dsh-profile-bruine");
     expect(packageJson.dsh.profile.bundles).toEqual([
       "@deepseek-ai/dsh-base",
-      "bruine",
+      "@ziamana/bruine",
     ]);
     expect(packageJson.dsh.profile.patchReload).toBe("startup");
 
@@ -114,7 +114,7 @@ describe("ensureProfile migration (T20.3)", () => {
 
     const manifest = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
     expect(manifest.dependencies[legacyName]).toBeUndefined();
-    expect(Object.keys(manifest.dependencies)).toEqual(["bruine"]);
+    expect(Object.keys(manifest.dependencies)).toEqual(["@ziamana/bruine"]);
     await expect(stat(join(dir, "node_modules"))).rejects.toThrow(); // old install gone
     expect(await readFile(join(home, "settings.yaml"), "utf8")).toBe(SETTINGS);
     expect(await readFile(join(home, ".env"), "utf8")).toBe("X=1\n");

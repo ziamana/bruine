@@ -71,5 +71,5 @@ test("legacy environment values reach the renamed launcher and renderers", async
   expect(iconsFor(env)).toBe(ASCII_ICONS);
   expect(iconsFor({ ...env, BRUINE_ASCII: "0", LANG: "en_US.UTF-8" })).toBe(UNICODE_ICONS);
   expect(detectInstallKind("/prefix/node_modules/kumo-code/dist/bin.js")).toBe("npm");
-  expect(updateCommand("npm")).toEqual(["npm", "install", "-g", "bruine@latest"]);
+  expect(updateCommand("npm")).toEqual(["npm", "install", "-g", "@ziamana/bruine@latest"]);
 });

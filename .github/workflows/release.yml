@@ -46,7 +46,7 @@ jobs:
           if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
             echo "tag ${GITHUB_REF_NAME} but package.json says $version"; exit 1
           fi
-          if npm view "bruine@$version" version >/dev/null 2>&1; then echo "on_npm=true" >> "$GITHUB_OUTPUT"; else echo "on_npm=false" >> "$GITHUB_OUTPUT"; fi
+          if npm view "@ziamana/bruine@$version" version >/dev/null 2>&1; then echo "on_npm=true" >> "$GITHUB_OUTPUT"; else echo "on_npm=false" >> "$GITHUB_OUTPUT"; fi
           if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then echo "tagged=true" >> "$GITHUB_OUTPUT"; else echo "tagged=false" >> "$GITHUB_OUTPUT"; fi
       - name: Nothing to do
         if: steps.v.outputs.on_npm == 'true' && steps.v.outputs.tagged == 'true'

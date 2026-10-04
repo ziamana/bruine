@@ -153,6 +153,7 @@ export async function linkBundles(profileDir: string, repoRoot: string): Promise
   await mkdir(join(modules, "@deepseek-ai"), { recursive: true });
   const type = process.platform === "win32" ? "junction" : "dir";
   const own = (require(join(repoRoot, "package.json")) as { name: string }).name;
+  await mkdir(dirname(join(modules, own)), { recursive: true });
   await symlink(repoRoot, join(modules, own), type);
   const dshRequire = createRequire(require.resolve("@deepseek-ai/dsh/package.json", { paths: [repoRoot] }));
   const dshBase = dirname(dshRequire.resolve("@deepseek-ai/dsh-base/package.json"));

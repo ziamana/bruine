@@ -155,7 +155,9 @@ export class Harness {
       const modules = join(dir, "node_modules");
       await mkdir(join(modules, "@deepseek-ai"), { recursive: true });
       const dshRequire = createRequire(require.resolve("@deepseek-ai/dsh/package.json"));
-      await symlink(root, join(modules, (require(join(root, "package.json")) as { name: string }).name), process.platform === "win32" ? "junction" : "dir");
+      const ownLink = join(modules, (require(join(root, "package.json")) as { name: string }).name);
+      await mkdir(dirname(ownLink), { recursive: true });
+      await symlink(root, ownLink, process.platform === "win32" ? "junction" : "dir");
       await symlink(dirname(dshRequire.resolve("@deepseek-ai/dsh-base/package.json")), join(modules, "@deepseek-ai", "dsh-base"), process.platform === "win32" ? "junction" : "dir");
       const env: Record<string, string> = {};
       // Preserve OS/runtime variables, but prevent model credentials and inherited

@@ -1,4 +1,4 @@
-import { appEnv } from "bruine/compat";
+import { appEnv } from "@ziamana/bruine/compat";
 /**
  * T36 — a fake bruine for the runner's unit tests: same argv and environment as
  * the real launcher, but it "solves" the task the way the test asks it to and

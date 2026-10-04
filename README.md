@@ -28,7 +28,7 @@ the OpenAI-compatible `/v1` API. It reads and edits your code, runs your command
 anything risky. There is no account, and nothing is sent anywhere you did not point it at.
 
 ```
-npm install -g bruine
+npm install -g @ziamana/bruine
 bruine
 ```
 

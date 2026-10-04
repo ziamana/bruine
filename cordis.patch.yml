@@ -115,44 +115,44 @@
 
 - insert:
     - id: bruine-startup
-      name: 'bruine/startup'
+      name: '@ziamana/bruine/startup'
 
     - id: bruine-repl
-      name: 'bruine/repl'
+      name: '@ziamana/bruine/repl'
       inject: [bruineStartup]
       disabled: !!js process.env.BRUINE_HEADLESS === '1'
 
     - id: bruine-headless
-      name: 'bruine/headless'
+      name: '@ziamana/bruine/headless'
       inject: [bruineStartup]
       disabled: !!js process.env.BRUINE_HEADLESS !== '1'
 
     - id: bruine-render
-      name: 'bruine/render'
+      name: '@ziamana/bruine/render'
 
     - id: bruine-herdr
-      name: 'bruine/herdr'
+      name: '@ziamana/bruine/herdr'
       disabled: !!js process.env.BRUINE_HEADLESS === '1'
 
     - id: bruine-approval
-      name: 'bruine/approval'
+      name: '@ziamana/bruine/approval'
 
     - id: bruine-modes
-      name: 'bruine/modes'
+      name: '@ziamana/bruine/modes'
 
     - id: bruine-web-search
-      name: 'bruine/web-search'
+      name: '@ziamana/bruine/web-search'
 
     # MCP servers as tools (mcpServers in bruine.json, and the project's approved
     # .mcp.json): one dsh MCP client per server, all connected before the first
     # turn so the tools array never changes inside a session.
     - id: bruine-mcp
-      name: 'bruine/mcp'
+      name: '@ziamana/bruine/mcp'
 
     # An adaptive silence budget on every model stream: longer while the model thinks hard or
     # writes a large file, longer on every retry, and a retryable TIMEOUT when it runs out.
     - id: bruine-silence
-      name: 'bruine/silence'
+      name: '@ziamana/bruine/silence'
 
     - id: tool-ask-user
       name: '@deepseek-ai/dsh-tool-ask-user'

@@ -193,6 +193,7 @@ describe("update notice text (T30)", () => {
 describe("detectInstallKind (T30)", () => {
   test("accepted: npm / pnpm / bun / developer, posix and win32", () => {
     expect(detectInstallKind("/usr/local/lib/node_modules/bruine/dist/bin.js")).toBe("npm");
+    expect(detectInstallKind("/usr/local/lib/node_modules/@ziamana/bruine/dist/bin.js")).toBe("npm");
     expect(
       detectInstallKind("C:\\Users\\x\\AppData\\Roaming\\npm\\node_modules\\bruine\\dist\\bin.js"),
     ).toBe("npm");
@@ -219,9 +220,9 @@ describe("detectInstallKind (T30)", () => {
   });
 
   test("updateCommand is exact per kind; developer runs nothing", () => {
-    expect(updateCommand("npm")).toEqual(["npm", "install", "-g", "bruine@latest"]);
-    expect(updateCommand("pnpm")).toEqual(["pnpm", "add", "-g", "bruine@latest"]);
-    expect(updateCommand("bun")).toEqual(["bun", "add", "-g", "bruine@latest"]);
+    expect(updateCommand("npm")).toEqual(["npm", "install", "-g", "@ziamana/bruine@latest"]);
+    expect(updateCommand("pnpm")).toEqual(["pnpm", "add", "-g", "@ziamana/bruine@latest"]);
+    expect(updateCommand("bun")).toEqual(["bun", "add", "-g", "@ziamana/bruine@latest"]);
     expect(updateCommand("developer")).toBeUndefined();
   });
 });
@@ -327,7 +328,7 @@ describe("/update inside a session", () => {
       check: fetched("0.2.0"),
       install: async (cmd) => (ran.push([...cmd]), { ok: true, code: 0, output: "" }),
     });
-    expect(ran).toEqual([["npm", "install", "-g", "bruine@latest"]]);
+    expect(ran).toEqual([["npm", "install", "-g", "@ziamana/bruine@latest"]]);
     expect(notices).toEqual(["Checking for a new version of bruine…", "Updating bruine to 0.2.0…"]);
     expect(answer).toBe("Updated to bruine 0.2.0. This session keeps running 0.1.0: restart to use it (ctrl+d, then bruine).");
   });
@@ -340,7 +341,7 @@ describe("/update inside a session", () => {
     expect(await runUpdateCommand({ current: "0.2.0", kind: "npm", ui: yes, check: fetched("0.2.0"), install })).toBe("bruine 0.2.0 is the latest version.");
     expect(await runUpdateCommand({ current: "0.1.0", kind: "developer", ui: yes, check: fetched("0.2.0"), install })).toMatch(/git pull && pnpm build/);
     expect(await runUpdateCommand({ current: "0.1.0", kind: "pnpm", check: fetched("0.2.0"), install })).toBe(
-      "bruine 0.2.0 is available (you have 0.1.0). To install it: pnpm add -g bruine@latest",
+      "bruine 0.2.0 is available (you have 0.1.0). To install it: pnpm add -g @ziamana/bruine@latest",
     );
   });
 
@@ -352,7 +353,7 @@ describe("/update inside a session", () => {
       check: fetched("0.2.0"),
       install: async () => ({ ok: false, code: 243, output: "npm error code EACCES\nnpm error permission denied\n" }),
     });
-    expect(answer).toBe("The update failed (exit 243): npm error permission denied. Run it yourself: npm install -g bruine@latest");
+    expect(answer).toBe("The update failed (exit 243): npm error permission denied. Run it yourself: npm install -g @ziamana/bruine@latest");
     expect(await runUpdateCommand({ current: "0.1.0", kind: "npm", ui: yes, check: async () => ({ ran: "failed" as const }) })).toMatch(/^Could not reach the npm registry/);
   });
 

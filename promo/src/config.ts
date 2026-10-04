@@ -257,7 +257,7 @@ const en: Copy = {
     cache: { turn: "turn", system: "system", tools: "tools", same: "same bytes, every turn" },
   },
   outro: {
-    install: "npm install -g bruine",
+    install: "npm install -g @ziamana/bruine",
     run: "bruine",
     line: "Calm, precise, and running on your models.",
     meta: "MIT  ·  Node 22+  ·  Windows, macOS, Linux",
@@ -344,7 +344,7 @@ const fr: Copy = {
     cache: { turn: "tour", system: "system", tools: "tools", same: "mêmes octets, à chaque tour" },
   },
   outro: {
-    install: "npm install -g bruine",
+    install: "npm install -g @ziamana/bruine",
     run: "bruine",
     line: "Calme, précis, et sur vos propres modèles.",
     meta: "MIT  ·  Node 22+  ·  Windows, macOS, Linux",

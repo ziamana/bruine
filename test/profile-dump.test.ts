@@ -42,12 +42,12 @@ describe("profile composition (T15)", () => {
       expect(out).toContain("Your working directory is");
     // Plugins
     for (const needle of [
-      "bruine/startup",
-      "bruine/repl",
-      "bruine/render",
-      "bruine/approval",
-      "bruine/modes",
-      "bruine/web-search",
+      "@ziamana/bruine/startup",
+      "@ziamana/bruine/repl",
+      "@ziamana/bruine/render",
+      "@ziamana/bruine/approval",
+      "@ziamana/bruine/modes",
+      "@ziamana/bruine/web-search",
     ]) {
       expect(out).toContain(needle);
     }

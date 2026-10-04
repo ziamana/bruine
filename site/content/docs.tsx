@@ -58,7 +58,7 @@ const en: DocSection[] = [
       <>
         <p>bruine needs Node 22 or newer, on Windows, macOS or Linux.</p>
         <pre>
-          <code>{"npm install -g bruine\nbruine"}</code>
+          <code>{"npm install -g @ziamana/bruine\nbruine"}</code>
         </pre>
         <p>
           <code>pnpm add -g bruine</code> and <code>bun add -g bruine</code> work too; bruine remembers which one installed it and updates through the same.
@@ -240,7 +240,7 @@ const fr: DocSection[] = [
       <>
         <p>bruine demande Node 22 ou plus récent, sous Windows, macOS ou Linux.</p>
         <pre>
-          <code>{"npm install -g bruine\nbruine"}</code>
+          <code>{"npm install -g @ziamana/bruine\nbruine"}</code>
         </pre>
         <p>
           <code>pnpm add -g bruine</code> et <code>bun add -g bruine</code> marchent aussi ; bruine se souvient de l'installateur utilisé et se met à jour avec lui.

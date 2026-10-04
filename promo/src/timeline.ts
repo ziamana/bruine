@@ -5,7 +5,7 @@
  *
  * Pure data and pure functions only (no React, no Remotion): Node runs this file as it is.
  */
-import { COPY, FADE, RIPPLE_ORIGIN, SCENE_ORDER, sceneFrames, VIDEO, type Lang, type SceneName } from "./config.ts";
+import { COPY, CUTS, FADE, RIPPLE_ORIGIN, sceneFrames, VIDEO, type CutName, type Lang, type SceneName } from "./config.ts";
 import { TERMINAL } from "./data/terminal.ts";
 
 export const sec = (s: number): number => Math.round(s * VIDEO.fps);
@@ -42,6 +42,11 @@ export function keyFrames(length: number, start: number, cps: number): number[] 
 }
 
 export const SCENES = sceneFrames();
+const cutScenes: Partial<Record<CutName, ReturnType<typeof sceneFrames>>> = {};
+/** The scenes of a cut, in frames (the full film's are SCENES). */
+export function scenesOf(cut: CutName = "full"): ReturnType<typeof sceneFrames> {
+  return (cutScenes[cut] ??= sceneFrames(cut));
+}
 
 /** Cues inside each scene, in frames from that scene's start. */
 export const INTRO = {
@@ -66,7 +71,8 @@ export const MODELS = {
   mcp: sec(2.15),
   more: sec(2.35),
   compat: sec(2.85),
-  footnote: sec(3.55),
+  /** Promoted to the subtitle: what matters most about where the model runs. */
+  footnote: sec(0.55),
 } as const;
 
 /**
@@ -119,12 +125,9 @@ export const LIGHTNING = [EFFORT.steps[4] + sec(0.22), EFFORT.steps[4] + sec(0.4
 
 export const PROMISES = {
   title: sec(0.3),
-  cards: [sec(0.6), sec(1.5), sec(2.4)],
-  countFrom: sec(0.5),
-  countTo: sec(1.3),
-  strike: sec(0.75),
-  row: (card: number, i: number): number => [sec(0.6), sec(1.5), sec(2.4)][card]! + sec(0.45) + i * 8,
-  bracket: sec(2.4) + sec(1.2),
+  body: sec(0.65),
+  row: (i: number): number => sec(1.05) + i * 9,
+  bracket: sec(2.2),
 } as const;
 
 export const OUTRO = {
@@ -140,56 +143,65 @@ export const OUTRO = {
   enter2: sec(3.2),
   line: sec(3.45),
   meta: sec(3.9),
+  /** Everything but the commands and the address steps back; the rain eases to a drizzle. */
+  calm: sec(5.0),
 } as const;
 
 /** Frames after the next scene's start at which its drop lands and the ripple starts. */
 export const DROP_LANDS = 2;
 
 /** The scene a transition opens, the frame its drop lands on, and where. */
-export function transitions(): Array<{ scene: SceneName; at: number; x: number; y: number }> {
-  return SCENE_ORDER.slice(1).map((scene) => ({ scene, at: SCENES[scene].from + DROP_LANDS, x: RIPPLE_ORIGIN[scene][0], y: RIPPLE_ORIGIN[scene][1] }));
+export function transitions(cut: CutName = "full"): Array<{ scene: SceneName; at: number; x: number; y: number }> {
+  const scenes = scenesOf(cut);
+  return CUTS[cut].order.slice(1).map((scene) => ({ scene, at: scenes[scene].from + DROP_LANDS, x: RIPPLE_ORIGIN[scene][0], y: RIPPLE_ORIGIN[scene][1] }));
 }
 
 /**
  * The weather of the whole film: [frame, level] keys the rain eases between. The effort scene
  * drives it step by step, so the rain there is the one the product shows.
  */
-export function rainKeys(): Array<[number, number]> {
-  const s = SCENES;
-  const e = s.effort.from;
-  const levels = [0.28, 0.5, 0.75, 1, 1];
-  return [
-    [0, 0],
-    [s.intro.from + INTRO.dropHit, 0.04],
-    [s.intro.from + sec(2.2), 0.3],
-    [s.intro.from + INTRO.fillStart + sec(0.3), 0.66],
-    [s.intro.from + INTRO.fillEnd + sec(0.4), 0.42],
-    [s.models.from + FADE, 0.28],
-    [s.demo.from + FADE, 0.13],
-    [s.demo.from + s.demo.duration - sec(0.8), 0.13],
-    [e + EFFORT.steps[0], 0.08],
-    ...EFFORT.steps.map((step, i): [number, number] => [e + step + sec(0.35), levels[i]!]),
-    [e + s.effort.duration - sec(0.5), 1],
-    [s.promises.from + sec(0.9), 0.22],
-    [s.outro.from + sec(1), 0.36],
-    [s.outro.from + s.outro.duration - sec(1.7), 0],
-  ];
+export function rainKeys(cut: CutName = "full"): Array<[number, number]> {
+  const s = scenesOf(cut);
+  const keys: Array<[number, number]> = [[0, 0]];
+  if (s.intro !== undefined) {
+    keys.push(
+      [s.intro.from + INTRO.dropHit, 0.04],
+      [s.intro.from + sec(2.2), 0.3],
+      [s.intro.from + INTRO.fillStart + sec(0.3), 0.66],
+      [s.intro.from + INTRO.fillEnd + sec(0.4), 0.42],
+    );
+  }
+  if (s.models !== undefined) keys.push([s.models.from + FADE, 0.28]);
+  if (s.demo !== undefined) keys.push([s.demo.from + FADE, 0.13], [s.demo.from + s.demo.duration - sec(0.8), 0.13]);
+  if (s.effort !== undefined) {
+    const e = s.effort.from;
+    const levels = [0.28, 0.5, 0.75, 1, 1];
+    keys.push([e + EFFORT.steps[0], 0.08], ...EFFORT.steps.map((step, i): [number, number] => [e + step + sec(0.35), levels[i]!]), [e + s.effort.duration - sec(0.5), 1]);
+  }
+  if (s.promises !== undefined) keys.push([s.promises.from + sec(0.9), 0.22]);
+  if (s.outro !== undefined) {
+    keys.push([s.outro.from + sec(1), 0.36]);
+    // The full film ends calm, in a drizzle; the short one ends on the commands, still raining.
+    if (OUTRO.calm + sec(0.9) < s.outro.duration) keys.push([s.outro.from + OUTRO.calm + sec(0.9), 0.1]);
+  }
+  return keys.sort((x, y) => x[0] - y[0]);
 }
 
-const KEYS = rainKeys();
+const KEYS: Partial<Record<CutName, Array<[number, number]>>> = {};
 
 /** How hard it rains at a frame, 0 to 1, eased between the keys. */
-export function rainLevelAt(frame: number): number {
-  if (frame <= KEYS[0]![0]) return KEYS[0]![1];
-  for (let i = 1; i < KEYS.length; i += 1) {
-    const [f1, v1] = KEYS[i]!;
+export function rainLevelAt(frame: number, cut: CutName = "full"): number {
+  const keys = (KEYS[cut] ??= rainKeys(cut));
+  if (frame <= keys[0]![0]) return keys[0]![1];
+  for (let i = 1; i < keys.length; i += 1) {
+    const [f1, v1] = keys[i]!;
     if (frame <= f1) {
-      const [f0, v0] = KEYS[i - 1]!;
+      const [f0, v0] = keys[i - 1]!;
       const t = (frame - f0) / Math.max(1, f1 - f0);
       return v0 + (v1 - v0) * (0.5 - 0.5 * Math.cos(Math.PI * t));
     }
   }
-  return KEYS[KEYS.length - 1]![1];
+  return keys[keys.length - 1]![1];
 }
 
 /** How fast the rain falls at a level (src/ui/rain.ts rainSpeed). */

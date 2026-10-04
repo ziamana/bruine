@@ -8,8 +8,8 @@ import type { Span } from "../data/terminal";
 import { blendHex, ease } from "../lib/motion";
 import { EFFORT, LIGHTNING } from "../timeline.ts";
 
-const FONT = 22;
-const COLS = 100;
+const FONT = 34;
+const COLS = 70;
 /** The colour of the input box's border when the effort asks for no glow (as recorded). */
 const REST = "#b4a7ff";
 
@@ -36,7 +36,7 @@ const PromptStrip: React.FC<{ prompt: string; level: string; mode: GlowMode; pre
   };
   const line = (from: number, chars: string): Span[] => [...chars].map((ch, i) => [from + i, ch, border(from + i), null, 0]);
   const inner = COLS - 6;
-  const route = `(local) Qwen3 Coder 30B`;
+  const route = `(local) Qwen3 Coder`;
   const routeEnd = COLS - 2;
   const routeFrom = routeEnd - (route.length + 3 + level.length);
   const blink = Math.floor(frame / 24) % 2 === 0;
@@ -93,27 +93,34 @@ export const Effort: React.FC<{ copy: Copy["effort"] }> = ({ copy }) => {
   const heat = step < 0 ? 0 : (step + mix) / steps.length;
   return (
     <Scene>
-      <AbsoluteFill style={{ alignItems: "center", top: 230, transform: `translate(${sx}px, ${sy}px)` }}>
+      <AbsoluteFill style={{ alignItems: "center", top: 250, transform: `translate(${sx}px, ${sy}px)` }}>
         <Words text={copy.title} at={EFFORT.title} stagger={3} style={{ fontSize: 70, fontWeight: 650, letterSpacing: -1, textAlign: "center" }} />
-        <Words text={copy.sub} at={EFFORT.sub} stagger={1} style={{ fontSize: 28, color: COLORS.muted, textAlign: "center", marginTop: 22 }} />
-        <div style={{ marginTop: 64, opacity: boxIn, transform: `translateY(${(1 - boxIn) * 20}px) scale(${1 + 0.008 * pulse})` }}>
-          <PromptStrip prompt={copy.prompt} level={step < 0 ? "auto" : level} mode={mode} previous={previous} mix={mix} frame={frame} heat={heat} />
+        <Words text={copy.sub} at={EFFORT.sub} stagger={1} style={{ fontSize: 30, color: COLORS.muted, textAlign: "center", marginTop: 22, maxWidth: 1500 }} />
+        <div style={{ position: "relative", marginTop: 64, opacity: boxIn, transform: `translateY(${(1 - boxIn) * 20}px) scale(${1 + 0.008 * pulse})` }}>
+          <PromptStrip prompt={copy.prompt} level={step < 0 ? "effort auto" : level} mode={mode} previous={previous} mix={mix} frame={frame} heat={heat} />
+          {/* The keys, beside the box they change. */}
+          {steps.map((at, i) => (
+            <div key={i} style={{ position: "absolute", left: COLS * cellOf(FONT).w + 28, top: cellOf(FONT).h * 1.5, transform: "translateY(-50%)", display: "flex", gap: 12, alignItems: "center" }}>
+              <KeyCap label={copy.keys[0]!} at={at} hold={14} size={30} />
+              <KeyCap label={copy.keys[1]!} at={at} hold={14} size={30} />
+            </div>
+          ))}
         </div>
-        <div style={{ display: "flex", marginTop: 46, fontFamily: FONTS.mono, fontSize: 27, opacity: ease(frame, EFFORT.box + 6, 16) }}>
+        <div style={{ display: "flex", marginTop: 50, fontFamily: FONTS.mono, fontSize: 34, opacity: ease(frame, EFFORT.box + 6, 16) }}>
           {copy.levels.map((name, i) => {
             const on = i === step;
             const done = i < step;
             const k = on ? ease(frame, steps[i]!, 10) : 0;
             return (
-              <div key={name} style={{ width: 210, display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+              <div key={name} style={{ width: 230, display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
                 <span style={{ color: on ? COLORS.text : done ? COLORS.muted : COLORS.faint, transform: `scale(${1 + 0.12 * k * pulse})` }}>{name}</span>
                 <div style={{ display: "flex", gap: 6, height: 40, alignItems: "flex-end" }}>
                   {Array.from({ length: i + 1 }, (_, d) => (
                     <div
                       key={d}
                       style={{
-                        width: 3,
-                        height: 12 + d * 6,
+                        width: 4,
+                        height: 14 + d * 7,
                         borderRadius: 2,
                         background: on || done ? COLORS.lavender : COLORS.faint,
                         opacity: on ? 0.5 + 0.5 * k : done ? 0.6 : 0.35,
@@ -129,21 +136,15 @@ export const Effort: React.FC<{ copy: Copy["effort"] }> = ({ copy }) => {
         <div
           style={{
             fontFamily: FONTS.mono,
-            fontSize: 27,
+            fontSize: 30,
             color: COLORS.muted,
-            marginTop: 70,
+            marginTop: 56,
             opacity: interpolate(frame, [EFFORT.weather, EFFORT.weather + 14], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
           }}
         >
           {copy.weather}
         </div>
       </AbsoluteFill>
-      {steps.map((at, i) => (
-        <div key={i} style={{ position: "absolute", right: 150, top: 110, display: "flex", gap: 10, alignItems: "center" }}>
-          <KeyCap label={copy.keys[0]!} at={at} hold={14} size={22} />
-          <KeyCap label={copy.keys[1]!} at={at} hold={14} size={22} />
-        </div>
-      ))}
     </Scene>
   );
 };

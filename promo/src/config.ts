@@ -21,7 +21,7 @@ export const TIMING = {
     models: 6.2,
     demo: 14.6,
     effort: 5.8,
-    promises: 7.2,
+    promises: 5.6,
     outro: 6.8,
   },
 } as const;
@@ -49,6 +49,17 @@ export const AUDIO = {
 } as const;
 
 export const SCENE_ORDER: SceneName[] = ["intro", "models", "demo", "effort", "promises", "outro"];
+
+/**
+ * The two films made from the same scenes: the full presentation, and a fifteen-second cut for
+ * Shorts and feeds (the name, the rain that follows the effort, the command that starts it).
+ * A scene keeps its own cues in either; a shorter scene only ends sooner.
+ */
+export type CutName = "full" | "short";
+export const CUTS: Record<CutName, { id: string; order: SceneName[]; seconds: Partial<Record<SceneName, number>> }> = {
+  full: { id: VIDEO.id, order: SCENE_ORDER, seconds: TIMING.scenes },
+  short: { id: "BruineShort", order: ["intro", "effort", "outro"], seconds: { intro: 6.0, effort: 5.2, outro: 5.2 } },
+};
 
 /** Bruine's "Nuage" palette (src/ui/palette.ts), plus the video's own backdrop. */
 export const COLORS = {
@@ -81,7 +92,7 @@ export const COLORS = {
 export const LOGO_STOPS = ["#7dcfff", "#b4a7ff", "#ff9ed2", "#7dcfff"] as const;
 export const SPECTRUM = ["#7dcfff", "#b4a7ff", "#ff9ed2", "#ffd27d", "#a6e3a1", "#7dcfff"] as const;
 
-/** System stacks only: nothing is fetched. */
+/** Inter and JetBrains Mono, shipped in public/fonts and loaded by src/fonts.ts; nothing is fetched. */
 export const FONTS = {
   sans: '"Inter", "SF Pro Display", "Segoe UI", "Helvetica Neue", "Liberation Sans", "DejaVu Sans", Arial, sans-serif',
   mono: '"JetBrains Mono", "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Menlo, Consolas, monospace',
@@ -114,6 +125,8 @@ export interface Copy {
     footnote: string;
   };
   demo: {
+    title: string;
+    titleBody: string;
     project: string;
     hints: string;
     prompt: string;
@@ -146,9 +159,7 @@ export interface Copy {
   };
   promises: {
     title: string;
-    cards: Array<{ title: string; body: string }>;
-    speed: { quoted: string; measured: string; unit: string; quotedLabel: string; measuredLabel: string };
-    rules: Array<{ command: string; verdict: "allow" | "ask" | "deny"; label: string }>;
+    body: string;
     cache: { turn: string; system: string; tools: string; same: string };
   };
   outro: {
@@ -180,11 +191,13 @@ const en: Copy = {
     mcpDetail: "tools behind the same permission gate",
     cloudLabel: "Cloud",
     providers: ["DeepSeek", "Anthropic", "OpenAI", "Google", "OpenRouter", "Groq", "Mistral", "xAI"],
-    more: "and about twenty more",
-    compat: "or anything that speaks the OpenAI compatible /v1 API",
+    more: "about 30 providers in all",
+    compat: "or anything that speaks the OpenAI-compatible /v1 API",
     footnote: "No account. Nothing is sent anywhere you did not point it at.",
   },
   demo: {
+    title: "A real session.",
+    titleBody: "Recorded in a terminal, cell by cell. Nothing here is mocked up.",
     project: "~/code/api",
     hints: "escape interrupt · ctrl+c clear · ctrl+d exit · / commands",
     prompt: "Add a retry with backoff to fetchJson, then run the tests",
@@ -225,8 +238,8 @@ const en: Copy = {
       { title: "Thinking, live", body: "The reasoning streams word by word, then folds into one line." },
       { title: "Keep typing", body: "A prompt sent while it works waits, then goes out when the turn ends." },
       { title: "Every edit, as a diff", body: "Shown before it is written, so you approve what you read." },
-      { title: "It asks first", body: "Ask, Auto or Full access, from a rule table you can read." },
-      { title: "Measured, live", body: "Context, tok/s and cache hits, timed by Bruine itself." },
+      { title: "It asks first", body: "y allows it once. a remembers that one command. Esc says no." },
+      { title: "Measured, live", body: "Context, speed and cache, timed by bruine itself." },
     ],
   },
   effort: {
@@ -239,18 +252,8 @@ const en: Copy = {
     weather: "Or pick the weather yourself:  /effect bruine · pluie · foudre",
   },
   promises: {
-    title: "Three promises.",
-    cards: [
-      { title: "Measured, not quoted.", body: "The speed in the footer comes from Bruine's own clock, not from the harness." },
-      { title: "One permission gate.", body: "A rule table you can read and test. Nothing risky is guessed about." },
-      { title: "Your cache survives.", body: "System prompt and tools stay byte-identical for the whole session. A test asserts it." },
-    ],
-    speed: { quoted: "79", measured: "60", unit: "tok/s", quotedLabel: "reported", measuredLabel: "measured" },
-    rules: [
-      { command: "npm test", verdict: "allow", label: "allow" },
-      { command: "git push --force", verdict: "ask", label: "ask" },
-      { command: "cat ../.env", verdict: "deny", label: "outside" },
-    ],
+    title: "Your cache survives.",
+    body: "The system prompt and the tools stay byte-identical for the whole session, so every turn starts from the cache. A test asserts it.",
     cache: { turn: "turn", system: "system", tools: "tools", same: "same bytes, every turn" },
   },
   outro: {
@@ -282,11 +285,13 @@ const fr: Copy = {
     mcpDetail: "des outils derrière la même barrière",
     cloudLabel: "Cloud",
     providers: ["DeepSeek", "Anthropic", "OpenAI", "Google", "OpenRouter", "Groq", "Mistral", "xAI"],
-    more: "et une vingtaine d'autres",
+    more: "une trentaine de fournisseurs en tout",
     compat: "ou toute API compatible OpenAI /v1",
     footnote: "Aucun compte. Rien ne part ailleurs que là où vous l'avez dirigé.",
   },
   demo: {
+    title: "Une vraie session.",
+    titleBody: "Enregistrée dans un terminal, cellule par cellule. Rien n'est maquetté.",
     project: "~/code/api",
     hints: "escape interrupt · ctrl+c clear · ctrl+d exit · / commands",
     prompt: "Ajoute un retry avec backoff à fetchJson, puis lance les tests",
@@ -320,8 +325,8 @@ const fr: Copy = {
       { title: "La réflexion, en direct", body: "Le raisonnement s'écrit mot à mot, puis se replie en une ligne." },
       { title: "Continuez à écrire", body: "Un prompt envoyé pendant le travail attend, puis part à la fin du tour." },
       { title: "Chaque modification en diff", body: "Montrée avant d'être écrite : vous approuvez ce que vous lisez." },
-      { title: "Il demande d'abord", body: "Ask, Auto ou Full access, selon une table de règles lisible." },
-      { title: "Mesuré, en direct", body: "Contexte, tok/s et cache, chronométrés par Bruine lui-même." },
+      { title: "Il demande d'abord", body: "y autorise une fois. a retient cette commande-là. Échap refuse." },
+      { title: "Mesuré, en direct", body: "Contexte, vitesse et cache, chronométrés par bruine lui-même." },
     ],
   },
   effort: {
@@ -334,18 +339,8 @@ const fr: Copy = {
     weather: "Ou choisissez la météo :  /effect bruine · pluie · foudre",
   },
   promises: {
-    title: "Trois promesses.",
-    cards: [
-      { title: "Mesuré, pas recopié.", body: "La vitesse affichée vient de l'horloge de Bruine, pas de celle du harness." },
-      { title: "Une seule barrière.", body: "Une table de règles lisible et testée. Rien de risqué n'est deviné." },
-      { title: "Votre cache survit.", body: "Prompt système et outils restent identiques à l'octet près. Un test le vérifie." },
-    ],
-    speed: { quoted: "79", measured: "60", unit: "tok/s", quotedLabel: "annoncé", measuredLabel: "mesuré" },
-    rules: [
-      { command: "npm test", verdict: "allow", label: "allow" },
-      { command: "git push --force", verdict: "ask", label: "ask" },
-      { command: "cat ../.env", verdict: "deny", label: "outside" },
-    ],
+    title: "Votre cache survit.",
+    body: "Le prompt système et les outils restent identiques à l'octet près toute la session : chaque tour repart du cache. Un test le vérifie.",
     cache: { turn: "tour", system: "system", tools: "tools", same: "mêmes octets, à chaque tour" },
   },
   outro: {
@@ -359,21 +354,25 @@ const fr: Copy = {
 
 export const COPY: Record<Lang, Copy> = { en, fr };
 
-/** Where every scene starts and how long it lasts, in frames. */
-export function sceneFrames(): Record<SceneName, { from: number; duration: number }> {
+/**
+ * Where every scene of a cut starts and how long it lasts, in frames. A scene the cut leaves out
+ * is absent; the full film has them all.
+ */
+export function sceneFrames(cut: CutName = "full"): Record<SceneName, { from: number; duration: number }> {
   const overlap = Math.round(TIMING.overlap * VIDEO.fps);
   const out = {} as Record<SceneName, { from: number; duration: number }>;
   let from = 0;
-  for (const name of SCENE_ORDER) {
-    const duration = Math.round(TIMING.scenes[name] * VIDEO.fps);
+  for (const name of CUTS[cut].order) {
+    const duration = Math.round(CUTS[cut].seconds[name]! * VIDEO.fps);
     out[name] = { from, duration };
     from += duration - overlap;
   }
   return out;
 }
 
-export function totalFrames(): number {
-  const last = sceneFrames()[SCENE_ORDER[SCENE_ORDER.length - 1]!];
+export function totalFrames(cut: CutName = "full"): number {
+  const order = CUTS[cut].order;
+  const last = sceneFrames(cut)[order[order.length - 1]!];
   return last.from + last.duration;
 }
 

@@ -1,5 +1,5 @@
 import { Easing, interpolate } from "remotion";
-import { VIDEO } from "../config";
+import { VIDEO, type CutName } from "../config";
 import { clamp01, rainLevelAt, rainSpeed } from "../timeline.ts";
 
 export { clamp01, hash01, sec } from "../timeline.ts";
@@ -32,23 +32,24 @@ export function blendHex(from: string, to: string, t: number): string {
   return `#${[16, 8, 0].map((s) => ch(s).toString(16).padStart(2, "0")).join("")}`;
 }
 
-let phases: Float64Array | undefined;
+const phasesOf: Partial<Record<CutName, Float64Array>> = {};
 
 /**
  * Rain level and the rain's own clock at every frame. The clock is the sum of the time that
  * passed, each slice scaled by the speed it passed at (src/ui/rain.ts Weather), so slowing the
  * rain slows the drops already falling instead of jumping them.
  */
-export function rainAt(frame: number): { level: number; phase: number } {
+export function rainAt(frame: number, cut: CutName = "full"): { level: number; phase: number } {
+  let phases = phasesOf[cut];
   if (phases === undefined) {
     const n = 4000;
-    phases = new Float64Array(n);
+    phases = phasesOf[cut] = new Float64Array(n);
     let acc = 0;
     for (let f = 0; f < n; f += 1) {
       phases[f] = acc;
-      acc += (1000 / VIDEO.fps) * rainSpeed(rainLevelAt(f));
+      acc += (1000 / VIDEO.fps) * rainSpeed(rainLevelAt(f, cut));
     }
   }
   const f = Math.max(0, Math.min(phases.length - 1, Math.floor(frame)));
-  return { level: rainLevelAt(f), phase: phases[f]! };
+  return { level: rainLevelAt(f, cut), phase: phases[f]! };
 }

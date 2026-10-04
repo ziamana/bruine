@@ -5,8 +5,8 @@ import type { Span } from "../data/terminal";
 export const TERM_FG = "#d5d9e4";
 export const TERM_BG = "#0e1018";
 
-/** The cell of a monospace font at `font` pixels: 0.602 em wide, 1.2 em tall. */
-export const cellOf = (font: number): { w: number; h: number } => ({ w: font * 0.602, h: Math.round(font * 1.2) });
+/** The cell of JetBrains Mono at `font` pixels: 0.6 em wide, 1.2 em tall. */
+export const cellOf = (font: number): { w: number; h: number } => ({ w: font * 0.6, h: Math.round(font * 1.2) });
 
 /**
  * One row of a terminal screen, cell for cell: every run of cells drawn where it was, in the

@@ -5,20 +5,23 @@ import { Scene, Words } from "../components/Scene";
 import { ease, sec } from "../lib/motion";
 import { MODELS } from "../timeline.ts";
 
-const HUB: [number, number] = [960, 540];
+/**
+ * The local server is the hero: it sits on the left, large and lit, the way most people will
+ * run bruine. The cloud is the quieter grid on the right, there if you want it.
+ */
+const HUB: [number, number] = [960, 560];
 const HUB_SIZE = { width: 250, height: 92 };
-const RING = { rx: 590, ry: 262 };
-const CHIP = { width: 186, height: 66 };
-const LOCAL = { width: 360, height: 210 };
+const CHIP = { width: 200, height: 60 };
+const LOCAL = { width: 500, height: 280 };
+const GRID = { x: [1415, 1645], y0: 430, dy: 82 };
 
-/** Where the i-th cloud provider sits on the right half of the ring around the hub. */
-function chipAt(i: number, n: number): [number, number] {
-  const angle = ((-72 + (144 * i) / (n - 1)) * Math.PI) / 180;
-  return [HUB[0] + RING.rx * Math.cos(angle), HUB[1] + RING.ry * Math.sin(angle)];
+/** Where the i-th cloud provider sits: two quiet columns on the right. */
+function chipAt(i: number): [number, number] {
+  return [GRID.x[i % 2]!, GRID.y0 + Math.floor(i / 2) * GRID.dy];
 }
-const LOCAL_AT: [number, number] = [HUB[0] - RING.rx, HUB[1]];
-const MCP_AT: [number, number] = [HUB[0] - RING.rx + 10, HUB[1] + 262];
-const MCP_SIZE = { width: 380, height: 100 };
+const LOCAL_AT: [number, number] = [430, 520];
+const MCP_AT: [number, number] = [430, 780];
+const MCP_SIZE = { width: 500, height: 110 };
 
 /** A line from the hub out to a model, drawn as it lands, with drops running in along it. */
 const Route: React.FC<{ to: [number, number]; at: number; frame: number; color: string; seed: number }> = ({ to, at, frame, color, seed }) => {
@@ -100,14 +103,16 @@ const chipStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: 29,
+  fontSize: 28,
   color: COLORS.text,
   boxSizing: "border-box",
 };
 
+/** A cloud provider: the same chip, a step back. */
+const cloudStyle: React.CSSProperties = { ...chipStyle, background: "rgba(22,25,38,0.85)", color: COLORS.muted, fontSize: 26 };
+
 export const Models: React.FC<{ copy: Copy["models"] }> = ({ copy }) => {
   const frame = useCurrentFrame();
-  const n = copy.providers.length;
   const scan = (frame % sec(1.6)) / sec(1.6);
   const hub = ease(frame, MODELS.hub, 18, Easing.out(Easing.back(1.4)));
   const breathe = 0.5 + 0.5 * Math.sin(frame / 9);
@@ -117,11 +122,12 @@ export const Models: React.FC<{ copy: Copy["models"] }> = ({ copy }) => {
         <Route to={LOCAL_AT} at={MODELS.local} frame={frame} color={COLORS.sky} seed={9} />
         <Route to={MCP_AT} at={MODELS.mcp} frame={frame} color={COLORS.mint} seed={5} />
         {copy.providers.map((name, i) => (
-          <Route key={name} to={chipAt(i, n)} at={MODELS.chip(i)} frame={frame} color={COLORS.lavender} seed={i} />
+          <Route key={name} to={chipAt(i)} at={MODELS.chip(i)} frame={frame} color={COLORS.faint} seed={i} />
         ))}
       </svg>
-      <AbsoluteFill style={{ alignItems: "center", top: 92 }}>
+      <AbsoluteFill style={{ alignItems: "center", top: 70 }}>
         <Words text={copy.title} at={MODELS.title} stagger={3} style={{ fontSize: 70, fontWeight: 650, letterSpacing: -1 }} />
+        <Words text={copy.footnote} at={MODELS.footnote} stagger={2} style={{ fontSize: 34, color: COLORS.text, marginTop: 18, opacity: 0.9 }} />
       </AbsoluteFill>
       <div
         style={{
@@ -148,8 +154,8 @@ export const Models: React.FC<{ copy: Copy["models"] }> = ({ copy }) => {
         <span style={{ color: COLORS.sky, marginRight: 14 }}>›</span>bruine
       </div>
       <Landing at={MODELS.local} frame={frame} x={LOCAL_AT[0]} y={LOCAL_AT[1]} width={LOCAL.width} height={LOCAL.height} ring={COLORS.sky}>
-        <div style={{ ...chipStyle, flexDirection: "column", gap: 10, border: "1px solid rgba(125,207,255,0.45)", boxShadow: "0 20px 60px rgba(0,0,0,0.45)" }}>
-          <div style={{ fontFamily: FONTS.mono, fontSize: 17, letterSpacing: 3, color: COLORS.sky, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ ...chipStyle, flexDirection: "column", gap: 12, border: "1.5px solid rgba(125,207,255,0.6)", boxShadow: "0 20px 60px rgba(0,0,0,0.45), 0 0 60px rgba(125,207,255,0.16)" }}>
+          <div style={{ fontFamily: FONTS.mono, fontSize: 24, letterSpacing: 3, color: COLORS.sky, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 12 }}>
             <span style={{ position: "relative", width: 22, height: 22, display: "inline-block" }}>
               {[0, 0.5].map((o) => {
                 const k = (scan + o) % 1;
@@ -164,49 +170,51 @@ export const Models: React.FC<{ copy: Copy["models"] }> = ({ copy }) => {
             </span>
             {copy.localLabel}
           </div>
-          <div style={{ fontFamily: FONTS.mono, fontSize: 40, color: COLORS.text }}>{copy.localName}</div>
-          <div style={{ fontFamily: FONTS.mono, fontSize: 22, color: COLORS.sky }}>{copy.localAddress}</div>
-          <div style={{ fontSize: 20, color: COLORS.muted }}>{copy.localDetail}</div>
+          <div style={{ fontFamily: FONTS.mono, fontSize: 54, color: COLORS.text }}>{copy.localName}</div>
+          <div style={{ fontFamily: FONTS.mono, fontSize: 30, color: COLORS.sky }}>{copy.localAddress}</div>
+          <div style={{ fontSize: 26, color: COLORS.muted }}>{copy.localDetail}</div>
         </div>
       </Landing>
       <Landing at={MODELS.mcp} frame={frame} x={MCP_AT[0]} y={MCP_AT[1]} width={MCP_SIZE.width} height={MCP_SIZE.height} ring={COLORS.mint}>
-        <div style={{ ...chipStyle, flexDirection: "column", gap: 4, border: "1px solid rgba(143,227,163,0.45)" }}>
-          <div style={{ fontSize: 27 }}>
-            <span style={{ fontFamily: FONTS.mono, fontSize: 17, letterSpacing: 3, color: COLORS.mint, marginRight: 14 }}>{copy.mcpLabel}</span>
+        <div style={{ ...chipStyle, flexDirection: "column", gap: 6, border: "1px solid rgba(143,227,163,0.45)" }}>
+          <div style={{ fontSize: 30 }}>
+            <span style={{ fontFamily: FONTS.mono, fontSize: 24, letterSpacing: 3, color: COLORS.mint, marginRight: 14 }}>{copy.mcpLabel}</span>
             {copy.mcpName}
           </div>
-          <div style={{ fontSize: 19, color: COLORS.muted }}>{copy.mcpDetail}</div>
+          <div style={{ fontSize: 24, color: COLORS.muted }}>{copy.mcpDetail}</div>
         </div>
       </Landing>
       {copy.providers.map((name, i) => {
-        const [x, y] = chipAt(i, n);
+        const [x, y] = chipAt(i);
         return (
-          <Landing key={name} at={MODELS.chip(i)} frame={frame} x={x} y={y} width={CHIP.width} height={CHIP.height}>
-            <div style={chipStyle}>{name}</div>
+          <Landing key={name} at={MODELS.chip(i)} frame={frame} x={x} y={y} width={CHIP.width} height={CHIP.height} ring={COLORS.faint}>
+            <div style={cloudStyle}>{name}</div>
           </Landing>
         );
       })}
       <div
         style={{
           position: "absolute",
-          left: HUB[0] + RING.rx - 160,
-          top: HUB[1] + RING.ry + 58,
-          width: 400,
+          left: (GRID.x[0]! + GRID.x[1]!) / 2 - 250,
+          top: GRID.y0 + 4 * GRID.dy - 10,
+          width: 500,
           textAlign: "center",
-          fontSize: 23,
+          fontSize: 26,
           color: COLORS.muted,
           opacity: ease(frame, MODELS.more, 16),
         }}
       >
-        + {copy.more}
+        {copy.more}
       </div>
       <div
         style={{
           position: "absolute",
-          left: HUB[0] + 18,
-          top: HUB[1] - RING.ry - 50,
+          left: (GRID.x[0]! + GRID.x[1]!) / 2 - 250,
+          width: 500,
+          textAlign: "center",
+          top: GRID.y0 - 82,
           fontFamily: FONTS.mono,
-          fontSize: 17,
+          fontSize: 24,
           letterSpacing: 3,
           color: COLORS.lavender,
           textTransform: "uppercase",
@@ -215,11 +223,11 @@ export const Models: React.FC<{ copy: Copy["models"] }> = ({ copy }) => {
       >
         {copy.cloudLabel}
       </div>
-      <AbsoluteFill style={{ alignItems: "center", top: 902 }}>
+      <AbsoluteFill style={{ alignItems: "center", top: 930 }}>
         <div
           style={{
             fontFamily: FONTS.mono,
-            fontSize: 25,
+            fontSize: 28,
             color: COLORS.text,
             background: "rgba(28,32,48,0.9)",
             border: `1px solid ${COLORS.windowEdge}`,
@@ -232,7 +240,6 @@ export const Models: React.FC<{ copy: Copy["models"] }> = ({ copy }) => {
           <span style={{ color: COLORS.lavender }}>{"> "}</span>
           {copy.compat}
         </div>
-        <Words text={copy.footnote} at={MODELS.footnote} stagger={2} style={{ fontSize: 27, color: COLORS.muted, marginTop: 26 }} />
       </AbsoluteFill>
     </Scene>
   );

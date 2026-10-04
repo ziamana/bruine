@@ -50,3 +50,25 @@ describe("@ files without fd (UI polish 2026-09-26)", () => {
     expect(s[0]).toMatchObject({ value: "@src/math.ts", label: "math.ts" });
   });
 });
+
+describe("!cmd on Windows runs in PowerShell, like the agent's commands", () => {
+  const on = (found: string[]) => (p: string): boolean => found.includes(p);
+  const env = { PATH: ["C:\\Program Files\\PowerShell\\7", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0"].join(";") };
+
+  test("pwsh first, then Windows PowerShell, with no profile and the policy bypassed for this run", async () => {
+    const { shellInvocation } = await import("../src/plugins/shell.js");
+    const pwsh = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+    const ps = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+    const withPwsh = shellInvocation("ls", "win32", env, on([pwsh, ps]));
+    expect(withPwsh.file).toBe(pwsh);
+    expect(withPwsh.args).toEqual(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "ls"]);
+    expect(withPwsh.shell).toBe(false);
+    expect(shellInvocation("ls", "win32", env, on([ps])).file).toBe(ps);
+  });
+
+  test("no PowerShell at all: cmd.exe, through Node's shell; elsewhere the user's shell", async () => {
+    const { shellInvocation } = await import("../src/plugins/shell.js");
+    expect(shellInvocation("dir", "win32", env, on([]))).toEqual({ file: "dir", args: [], shell: true });
+    expect(shellInvocation("ls", "linux", env, on([]))).toEqual({ file: "ls", args: [], shell: true });
+  });
+});

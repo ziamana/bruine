@@ -1,5 +1,6 @@
 import { appEnv } from "../compat.js";
 import { visibleWidth } from "@earendil-works/pi-tui";
+import { release as osRelease } from "node:os";
 /**
  * bruine's palette ("Nuage"): soft sky blues and lavender. 24-bit color when the
  * terminal says so, a 256-color approximation otherwise, and the classic 16 ANSI
@@ -18,7 +19,11 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 
 export type ColorDepth = "truecolor" | "256" | "basic" | "none";
 
-export function detectColorDepth(env: NodeJS.ProcessEnv = process.env): ColorDepth {
+export function detectColorDepth(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  release: string = osRelease(),
+): ColorDepth {
   const forced = appEnv("COLOR", env);
   if (forced === "truecolor" || forced === "256" || forced === "basic" || forced === "none") return forced;
   if (env.NO_COLOR !== undefined && env.NO_COLOR !== "") return "none";
@@ -28,6 +33,13 @@ export function detectColorDepth(env: NodeJS.ProcessEnv = process.env): ColorDep
   // Windows Terminal and VS Code always render 24-bit color.
   if (env.WT_SESSION !== undefined || env.TERM_PROGRAM === "vscode") return "truecolor";
   if ((env.TERM ?? "").includes("256color")) return "256";
+  // The classic Windows console (conhost, no TERM at all) renders 24-bit color since Windows 10
+  // build 14931, and 256 colors since 10586; older consoles get the 16 ANSI colors.
+  if (platform === "win32" && env.TERM === undefined) {
+    const [major, , build] = release.split(".").map(Number);
+    if ((major ?? 0) >= 10 && (build ?? 0) >= 14931) return "truecolor";
+    if ((major ?? 0) >= 10 && (build ?? 0) >= 10586) return "256";
+  }
   return "basic";
 }
 

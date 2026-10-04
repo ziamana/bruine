@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { configReadPath, configWritePath } from "../compat.js";
 import { visibleWidth, type Component } from "@earendil-works/pi-tui";
-import { Weather, hash01, rainGrid, rainIntoBlanks, type RainInk } from "./rain.js";
+import { Weather, currentEffortName, effortIsStorm, hash01, rainGrid, rainIntoBlanks, rainLevel, type RainInk } from "./rain.js";
 import { terminalMotionAllowed } from "./logo-motion.js";
 import { ansi } from "./theme.js";
 import { colorDepth } from "./palette.js";
@@ -13,7 +13,7 @@ export const WEATHER_EFFECTS: Array<{ value: WeatherEffect; label: string; descr
   { value: "bruine", label: "Bruine", description: "A few slow, quiet drops" },
   { value: "pluie", label: "Pluie", description: "Steady rain" },
   { value: "foudre", label: "Foudre", description: "Heavy rain and distant lavender lightning" },
-  { value: "auto", label: "Auto", description: "Drizzle at rest, rain while working (also on)" },
+  { value: "auto", label: "Auto", description: "Drizzle at rest; while working, as hard as the effort, with lightning at max (also on)" },
   { value: "off", label: "Off", description: "No weather" },
 ];
 
@@ -49,8 +49,22 @@ export async function saveWeatherEffect(home: string, effect: WeatherEffect): Pr
   } finally { await rm(temp, { force: true }); }
 }
 
-export function weatherLevel(effect: WeatherEffect, busy: boolean): number {
-  return effect === "off" ? 0 : effect === "bruine" ? 0.15 : effect === "pluie" ? 0.55 : effect === "foudre" ? 1 : busy ? 0.65 : 0.15;
+/**
+ * How hard the chat weather rains. The manual effects keep their level; `auto` is a drizzle at rest
+ * and, while the agent works, rains as hard as the effort it was asked for (`effortRain`, from
+ * effortToRain), so low, medium, high, xhigh and max each have their own weather.
+ */
+export function weatherLevel(effect: WeatherEffect, busy: boolean, effortRain: number = rainLevel()): number {
+  if (effect === "off") return 0;
+  if (effect === "bruine") return 0.15;
+  if (effect === "pluie") return 0.55;
+  if (effect === "foudre") return 1;
+  return busy ? 0.2 + 0.8 * Math.max(0, Math.min(1, effortRain)) : 0.15;
+}
+
+/** Whether the weather is a storm (wind, violet drops, distant lightning): foudre, or auto at max while working. */
+export function weatherIsStorm(effect: WeatherEffect, busy: boolean, effort: string | undefined = currentEffortName()): boolean {
+  return effect === "foudre" || (effect === "auto" && busy && effortIsStorm(effort));
 }
 
 const QUIET_INK: RainInk = { far: ansi.faint, mid: ansi.faint, near: ansi.gray };
@@ -108,7 +122,7 @@ export class WeatherBackdrop implements Component {
     const from = Math.max(0, lines.length - rows);
     const height = Math.min(rows, lines.length);
     const controlsFrom = this.options.decorateRows();
-    const storm = this.effect === "foudre";
+    const storm = weatherIsStorm(this.effect, this.options.busy());
     const grid = rainGrid({ width, height, time, density: 0.06 + 0.42 * this.#weather.level, seed: 31 });
     if (storm) {
       for (let y = 0; y < height; y += 1) {
@@ -126,6 +140,8 @@ export class WeatherBackdrop implements Component {
         }
       }
     }
+    // From xhigh up the near drops turn violet; the wind and the lightning are the storm's alone.
+    const ink = storm || this.#weather.level >= 0.85 ? STORM_INK : QUIET_INK;
     const out = [...lines];
     for (let y = 0; y < height; y += 1) {
       const row = from + y;
@@ -134,7 +150,7 @@ export class WeatherBackdrop implements Component {
       // Cards are opaque, and the original control band stays clear of the weather.
       if (hasBackground(line)) continue;
       const padded = line + " ".repeat(Math.max(0, width - visibleWidth(line)));
-      out[from + y] = rainIntoBlanks(padded, grid[y]!, storm ? STORM_INK : QUIET_INK, "\x1b[7m");
+      out[from + y] = rainIntoBlanks(padded, grid[y]!, ink, "\x1b[7m");
     }
     return out;
   }

@@ -17,8 +17,7 @@ import {
   copyTextToClipboard,
   osc52Sequence,
   type ClipboardWriter,
-  type CopyOutcome,
-} from "../src/ui/clipboard-write.js";
+  type CopyOutcome, writerInput } from "../src/ui/clipboard-write.js";
 import { ToastHost } from "../src/ui/toast.js";
 import { BruineUi } from "../src/ui/bruine-ui.js";
 import { MOUSE_OFF_NOTICE, MOUSE_ON_NOTICE, MouseFeature, mouseTrace, mouseSelectionAllowed } from "../src/ui/mouse.js";
@@ -315,6 +314,15 @@ describe("the clipboard (T56)", () => {
   test("macOS and Windows have exactly one writer each", () => {
     expect(clipboardWriters("darwin", {}).map((w) => w.cmd)).toEqual(["pbcopy"]);
     expect(clipboardWriters("win32", {}).map((w) => w.cmd)).toEqual(["clip"]);
+  });
+
+  test("Windows' clip gets UTF-16 with a byte order mark, so accents and arrows survive", () => {
+    const [clip] = clipboardWriters("win32", {});
+    const bytes = writerInput(clip!, "é › ✓") as Buffer;
+    expect([...bytes.subarray(0, 2)]).toEqual([0xff, 0xfe]);
+    expect(bytes.subarray(2).toString("utf16le")).toBe("é › ✓");
+    const [pbcopy] = clipboardWriters("darwin", {});
+    expect(writerInput(pbcopy!, "é")).toBe("é");
   });
 
   const writer = (cmd: string): ClipboardWriter => ({ cmd, args: [], install: `install ${cmd}` });

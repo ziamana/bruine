@@ -120,6 +120,12 @@ describe("openInEditor", () => {
     expect(calls.map((c) => c.args)).toEqual([[files[0]], [files[1]]]);
   });
 
+  test("Notepad gets one file per call too: it ignores every file after the first", async () => {
+    const { spawner, calls } = fakeSpawner("spawn");
+    await openInEditor({ command: "notepad", args: [], source: "system" }, ["C:\\a.yaml", "C:\\b.json"], spawner, "win32");
+    expect(calls.map((c) => c.args)).toEqual([['"C:\\a.yaml"'], ['"C:\\b.json"']]);
+  });
+
   test("a program that is not there says so, in words", async () => {
     const { spawner } = fakeSpawner({ code: "ENOENT" });
     const result = await openInEditor({ command: "kate", args: [], source: "BRUINE_EDITOR" }, files, spawner, "linux");

@@ -69,7 +69,7 @@ describe("paintRainRow", () => {
 
 describe("effort and the rain", () => {
   test("a higher effort is a harder rain, and an unknown one is middling", () => {
-    const ladder = ["off", "low", "medium", "high", "max"].map(effortToRain);
+    const ladder = ["off", "low", "medium", "high", "xhigh", "max"].map(effortToRain);
     expect(ladder).toEqual([...ladder].sort((a, b) => a - b));
     expect(new Set(ladder).size).toBe(ladder.length);
     expect(effortToRain(undefined)).toBeGreaterThan(0);
@@ -100,6 +100,16 @@ describe("dropSpinner", () => {
       return n;
     };
     expect(lit(0.1)).toBeLessThan(lit(1));
+  });
+
+  test("high, xhigh and max each fall at their own rhythm", () => {
+    const pattern = (effort: string): string => {
+      let out = "";
+      for (let t = 0; t < 4000; t += 20) out += dropSpinner(t, effortToRain(effort));
+      return out;
+    };
+    const seen = new Set(["high", "xhigh", "max"].map(pattern));
+    expect(seen.size).toBe(3);
   });
 
   test("ASCII is ASCII", () => {

@@ -8,6 +8,16 @@ import { dim } from "../render/reasoning.js";
 import { askJudge, judgePrompt, JUDGE_MAX_COMMAND_CHARS, type JudgeLlm, type JudgeRoute, type JudgeVerdict } from "../gate/judge.js";
 import { decide, parseArgs, ruleKey, type PermissionMode } from "../gate/rules.js";
 import type { DshContext, BruineRepl } from "./ctx.js";
+import { BRUINE_MCP_SERVICE, type BruineMcpService } from "./mcp.js";
+import { toolPrefix } from "../mcp/config.js";
+
+/** The gate's view of an MCP tool: is its server read-only, is the tool on its alwaysAllow list. */
+export function mcpPolicy(service: BruineMcpService | undefined, tool: string): { readOnly: boolean; allowed: boolean } | undefined {
+  const server = service?.serverOf(tool);
+  if (server === undefined) return undefined;
+  const raw = tool.slice(toolPrefix(server.id).length);
+  return { readOnly: server.readOnly, allowed: server.alwaysAllow.includes(raw) || server.alwaysAllow.includes(tool) };
+}
 
 /** Stable Cordis plugin name. */
 export const name = "bruine-modes";
@@ -204,7 +214,7 @@ export class Modes implements BruineModesService {
 }
 
 function execSummary(toolName: string, args: Record<string, unknown>): string {
-  if (toolName === "bash") return String(args.command ?? args.cmd ?? "");
+  if (toolName === "bash" || toolName === "pwsh") return String(args.command ?? args.cmd ?? "");
   if (typeof args.path === "string") return args.path;
   if (typeof args.file_path === "string") return args.file_path;
   return JSON.stringify(args).slice(0, 160);
@@ -367,6 +377,7 @@ export function apply(ctx: DshContext): void {
       plan: modes.plan,
       sessionAllowed: modes.sessionAllowed,
       projectDir: process.cwd(),
+      mcp: (tool) => mcpPolicy(ctx.get(BRUINE_MCP_SERVICE) as BruineMcpService | undefined, tool),
     });
 
     let decision:

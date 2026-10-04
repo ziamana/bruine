@@ -178,16 +178,18 @@ describe("Repl", () => {
     expect(h.exits).toEqual([]);
   });
 
-  test("lines typed during a turn are ignored", async () => {
+  test("a line typed during a turn waits for it, then goes out (prompt-queue.test.ts has the rest)", async () => {
     const h = harness();
     await h.repl.run();
     h.lines.emitLine("one");
     await tick();
     h.lines.emitLine("two");
+    expect(h.followups).toEqual(["one"]);
+    expect(h.repl.queued).toEqual(["two"]);
     h.idle.resolve();
     await tick();
     await tick();
-    expect(h.followups).toEqual(["one"]);
+    expect(h.followups).toEqual(["one", "two"]);
   });
 
   test("EOF during a turn waits for the turn before exiting", async () => {
@@ -208,13 +210,13 @@ describe("Repl", () => {
 });
 
 describe("slash palette source of truth (T31.1)", () => {
-  test("bruine commands: 17 items incl. new/compact/config/tasks/reload/mouse/effect/help/exit", async () => {
+  test("bruine commands: 18 items incl. new/compact/config/tasks/reload/mouse/effect/help/exit", async () => {
     const { BRUINE_COMMANDS, mergeCommands } = await import("../src/plugins/repl.js");
     // T56 added /mouse: taking the mouse costs the wheel, so the choice has to
     // be reachable without restarting.
-    expect(BRUINE_COMMANDS).toHaveLength(17);
+    expect(BRUINE_COMMANDS).toHaveLength(18);
     const names = BRUINE_COMMANDS.map((c) => c.name);
-    for (const n of ["/new", "/compact", "/plan", "/permissions", "/auto", "/ask", "/full", "/skills", "/config", "/tasks", "/reload", "/mouse", "/effect", "/help", "/exit"]) {
+    for (const n of ["/new", "/compact", "/plan", "/permissions", "/auto", "/ask", "/full", "/skills", "/config", "/tasks", "/reload", "/mouse", "/effect", "/mcp", "/help", "/exit"]) {
       expect(names).toContain(n);
     }
     const merged = mergeCommands([
@@ -263,7 +265,8 @@ describe("a plugin that already said it is not echoed again", () => {
     } finally {
       if (saved === undefined) delete process.env.DSH_HOME;
       else process.env.DSH_HOME = saved;
-      await rm(home, { recursive: true, force: true });
+      // The effort is remembered in bruine.json in the background: retry while that write lands.
+      await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 20 });
     }
   });
 });

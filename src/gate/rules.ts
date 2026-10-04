@@ -193,6 +193,11 @@ export interface DecisionContext {
   sessionAllowed: ReadonlySet<string>;
   /** Absolute project dir. */
   projectDir: string;
+  /**
+   * What the user said about the MCP server a tool comes from, when it is one (`mcp__<server>__…`):
+   * `readOnly` servers only read, `allowed` is a tool on the server's `alwaysAllow` list.
+   */
+  mcp?: (name: string) => { readOnly: boolean; allowed: boolean } | undefined;
 }
 
 export function parseArgs(raw: string): Record<string, unknown> {
@@ -211,10 +216,61 @@ export function parseArgs(raw: string): Record<string, unknown> {
  * command (T18.6): remembering `rm -rf build` must not cover `rm -rf ~`.
  */
 export function ruleKey(name: string, args: Record<string, unknown>): string {
-  if (name === "bash") {
-    return `bash:${String(args.command ?? args.cmd ?? "").trim()}`;
+  if (SHELL_TOOLS.has(name)) {
+    return `${name}:${String(args.command ?? args.cmd ?? "").trim()}`;
   }
   return name;
+}
+
+/**
+ * The tools that run a command line: `bash` everywhere dsh finds a POSIX shell, `pwsh` on
+ * Windows (dsh mounts tool-pwsh instead of tool-bash there). Both are analysed command by
+ * command; an "Always" on one command never covers another.
+ */
+export const SHELL_TOOLS: ReadonlySet<string> = new Set(["bash", "pwsh"]);
+
+/** PowerShell cmdlets (and their usual aliases) that only read, when they are one simple command. */
+export const READONLY_PWSH: ReadonlySet<string> = new Set([
+  "get-childitem", "gci", "ls", "dir",
+  "get-content", "gc", "cat", "type",
+  "get-location", "gl", "pwd",
+  "select-string", "sls",
+  "test-path", "get-item", "gi", "resolve-path", "rvpa", "split-path", "join-path",
+  "get-command", "gcm", "get-help", "where.exe",
+  "get-date", "get-host", "hostname", "whoami",
+  "write-output", "echo", "write-host",
+  "measure-object", "get-filehash", "compare-object", "get-process", "ps",
+]);
+
+/** A PowerShell command that is never simple: chaining, pipelines, redirects, scripts, subexpressions. */
+const PWSH_NOT_SIMPLE = /[;&|<>`{}]|\$\(|@\(|\n/;
+
+/** PowerShell shapes that always ask, whatever the mode's rules say (Windows twins of ALWAYS_ASK_PATTERNS). */
+export const PWSH_ALWAYS_ASK: readonly RegExp[] = [
+  /\b(remove-item|ri|rm|rmdir|rd|del|erase)\b[^\n]*-(r|recurse)\b/i,
+  /\b(remove-item|ri|del|erase)\b[^\n]*-force\b/i,
+  /\b(invoke-expression|iex)\b/i,
+  /\b(start-process|saps|start)\b[^\n]*-verb\s+runas\b/i,
+  /\bset-executionpolicy\b/i,
+  /\b(stop-process|spps|kill|taskkill)\b/i,
+  /\b(restart-computer|stop-computer|shutdown)\b/i,
+  /\b(format-volume|clear-disk|initialize-disk|remove-partition)\b/i,
+  /\b(set-itemproperty|new-itemproperty|remove-itemproperty)\b[^\n]*\b(hklm|hkcu|registry::)/i,
+  /\breg(\.exe)?\s+(add|delete|import)\b/i,
+  /\b(schtasks|sc(\.exe)?\s+(create|delete|config)|netsh|icacls|takeown|bcdedit)\b/i,
+  /\b(invoke-webrequest|iwr|invoke-restmethod|irm|curl|wget)\b[^\n]*\|\s*(iex|invoke-expression|pwsh|powershell)\b/i,
+  /\b(install-module|install-package|winget\s+install|choco\s+install|scoop\s+install)\b/i,
+  /\b(set-content|add-content|out-file|new-item|copy-item|move-item|rename-item)\b[^\n]*\$(env:)?(profile|home)\b/i,
+];
+
+/** One simple read-only PowerShell command. Exported for tests. */
+export function isReadonlyPwsh(command: string): boolean {
+  const trimmed = command.trim();
+  if (trimmed === "" || PWSH_NOT_SIMPLE.test(trimmed)) return false;
+  const words = trimmed.split(/\s+/);
+  const first = (words[0] ?? "").toLowerCase();
+  if (first === "git" || first === "git.exe") return isReadonlyBash(["git", ...words.slice(1)].join(" "));
+  return READONLY_PWSH.has(first);
 }
 
 /** One simple read-only command (T18.1 + T18.2). Exported for tests. */
@@ -228,9 +284,9 @@ export function isReadonlyBash(command: string): boolean {
 }
 
 /** An environment variable whose value is probably a secret. */
-const SECRET_VAR = /\$\{?[A-Za-z_]*(KEY|TOKEN|SECRET|PASS|PASSWORD|PASSWD|AUTH|CREDENTIAL|COOKIE|SESSION)[A-Za-z0-9_]*\}?/i;
+const SECRET_VAR = /\$\{?(?:env:)?[A-Za-z_]*(KEY|TOKEN|SECRET|PASS|PASSWORD|PASSWD|AUTH|CREDENTIAL|COOKIE|SESSION)[A-Za-z0-9_]*\}?/i;
 /** Whole-environment dumps. */
-const ENV_DUMP = /\/proc\/[^\s/]+\/environ\b|\benviron\b/;
+const ENV_DUMP = /\/proc\/[^\s/]+\/environ\b|\benviron\b|\b(get-childitem|gci|ls|dir)\s+env:|\[environment\]::getenvironmentvariables/i;
 
 function expandHome(word: string): string {
   if (word === "~") return homedir();
@@ -251,7 +307,9 @@ export function bashLeaks(command: string, projectDir: string): boolean {
   for (const raw of words) {
     const w = raw.replace(/^['"]|['"]$/g, "");
     if (w === "" || w.startsWith("-")) continue;
-    const looksLikePath = w.startsWith("/") || w.startsWith("~") || w.startsWith("..") || w.includes("/");
+    const looksLikePath = w.startsWith("/") || w.startsWith("~") || w.startsWith("..") || w.includes("/") ||
+      // Windows: a drive (C:\…), a UNC share (\\host\…) or any backslash path.
+      /^[A-Za-z]:[\\/]/.test(w) || w.includes("\\");
     if (!looksLikePath && !existsSync(path.resolve(projectDir, w))) continue;
     const target = expandHome(w);
     if (isSensitiveTarget(target, projectDir)) return true;
@@ -339,26 +397,35 @@ export function decide(
   ctx: DecisionContext,
 ): Rule {
   const isBash = name === "bash";
-  const command = isBash ? String(execArgs.command ?? execArgs.cmd ?? "") : "";
+  const isPwsh = name === "pwsh";
+  const isShell = isBash || isPwsh;
+  const command = isShell ? String(execArgs.command ?? execArgs.cmd ?? "") : "";
+  const readonly = isBash ? isReadonlyBash(command) : isPwsh ? isReadonlyPwsh(command) : false;
 
   // 1. Plan mode refuses mutations in EVERY permission mode; simple
   // read-only commands keep working without interruption.
   // Read-only in Plan, but a read-only command can still leak a secret: ask then.
-  if (ctx.plan && isBash && isReadonlyBash(command)) return bashLeaks(command, ctx.projectDir) ? "ask" : "allow";
-  if (ctx.plan && (WRITE_TOOLS.has(name) || isBash)) {
+  if (ctx.plan && isShell && readonly) return bashLeaks(command, ctx.projectDir) ? "ask" : "allow";
+  if (ctx.plan && (WRITE_TOOLS.has(name) || isShell)) {
     return "deny";
   }
+  // An MCP tool is an action on someone else's system (an issue filed, a row written) unless the
+  // user declared its server read-only: Plan mode refuses it like any other change.
+  const mcp = name.startsWith("mcp__") ? ctx.mcp?.(name) ?? { readOnly: false, allowed: false } : undefined;
+  if (ctx.plan && mcp !== undefined && !mcp.readOnly) return "deny";
 
   // 2. Full access asks for nothing.
   if (ctx.mode === "full") return "allow";
 
-  // 3. Danger that no session rule may cover.
+  // 3. Danger that no session rule may cover. The bash patterns read PowerShell too (git push,
+  // npm install, rm -r are the same words there); PowerShell adds its own cmdlets.
   if (
-    isBash &&
+    isShell &&
     (ALWAYS_ASK_PATTERNS.some((re) => re.test(command)) ||
       isDangerousGit(command) ||
       FIND_DANGEROUS.test(command) ||
       PIPE_TO_INTERPRETER.test(command) ||
+      (isPwsh && PWSH_ALWAYS_ASK.some((re) => re.test(command))) ||
       isSensitive(command))
   ) {
     return "ask";
@@ -373,17 +440,18 @@ export function decide(
   }
   // BOS review 2026-09-26: secrets and outside reads that a "read-only" command
   // still leaks into the model's context (and so to a cloud provider).
-  if (isBash && bashLeaks(command, ctx.projectDir)) return "ask";
+  if (isShell && bashLeaks(command, ctx.projectDir)) return "ask";
 
   // 4. "Always for this session" rules.
   if (ctx.sessionAllowed.has(ruleKey(name, execArgs))) return "allow";
 
-  // 5. Read-only tools.
+  // 5. Read-only tools, and the MCP tools the user let run on their own.
   if (READ_ONLY_TOOLS.has(name)) return "allow";
+  if (mcp !== undefined && (mcp.readOnly || mcp.allowed)) return "allow";
 
-  if (isBash) {
+  if (isShell) {
     if (ctx.mode === "ask") return "ask";
-    return isReadonlyBash(command) ? "allow" : "judge";
+    return readonly ? "allow" : "judge";
   }
 
   if (WRITE_TOOLS.has(name)) {

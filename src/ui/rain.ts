@@ -95,7 +95,8 @@ export function paintRainRow(row: ReadonlyArray<RainCell | undefined>, ink: Rain
 
 /**
  * How hard it rains, from the effort the model is asked to think at: a low effort is a drizzle,
- * the highest a downpour. An effort nobody named is a middling rain, never none.
+ * the highest a downpour. Every named effort has its own level, so stepping from high to xhigh to
+ * max is always seen. An effort nobody named is a middling rain, never none.
  */
 export function effortToRain(effort: string | undefined): number {
   switch ((effort ?? "").toLowerCase()) {
@@ -109,14 +110,23 @@ export function effortToRain(effort: string | undefined): number {
     case "med":
       return 0.5;
     case "high":
-      return 0.75;
+      return 0.7;
     case "xhigh":
+    case "extra-high":
+    case "extra_high":
+      return 0.86;
     case "max":
     case "maximum":
       return 1;
     default:
       return 0.45;
   }
+}
+
+/** The effort that brings the storm: the chat weather adds its distant lightning at this level. */
+export function effortIsStorm(effort: string | undefined): boolean {
+  const name = (effort ?? "").toLowerCase();
+  return name === "max" || name === "maximum";
 }
 
 let currentLevel = 0.45;
@@ -156,8 +166,10 @@ const DROP_REST_ASCII = ".";
 export function dropSpinner(elapsed: number, level: number, ascii = false): string {
   const lv = Math.max(0, Math.min(1, level));
   const fall = 4;
-  const cycle = fall + Math.round((1 - lv) * 6);
-  const step = Math.floor(Math.max(0, elapsed) / (lv >= 0.75 ? 90 : 120));
+  // The wait between drops shrinks and the drops quicken as the rain gets heavier, on a
+  // continuous scale, so every effort level has its own rhythm.
+  const cycle = fall + Math.round((1 - lv) * 7);
+  const step = Math.floor(Math.max(0, elapsed) / (140 - 60 * lv));
   const frames = ascii ? DROP_ASCII : DROP_DOTS;
   let out = "";
   for (let cell = 0; cell < 3; cell += 1) {

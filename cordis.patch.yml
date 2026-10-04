@@ -1,5 +1,5 @@
 # The bruine bundle patch: an interactive terminal agent over dsh-base.
-# Inserts the bruine plugins (startup, repl, render, approval, web-search) and
+# Inserts the bruine plugins (startup, repl, render, approval, web-search, mcp) and
 # the extra tool rows. Cache rule (ARCHITECTURE section 0): the system prompt
 # and the tools array are byte-identical all session long — modes are a
 # bruine-side gate + appended messages, never a prompt/tool swap.
@@ -142,6 +142,12 @@
 
     - id: bruine-web-search
       name: 'bruine/web-search'
+
+    # MCP servers as tools (mcpServers in bruine.json, and the project's approved
+    # .mcp.json): one dsh MCP client per server, all connected before the first
+    # turn so the tools array never changes inside a session.
+    - id: bruine-mcp
+      name: 'bruine/mcp'
 
     - id: tool-ask-user
       name: '@deepseek-ai/dsh-tool-ask-user'

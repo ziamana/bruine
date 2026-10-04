@@ -342,8 +342,29 @@ describe("bench session metrics", () => {
     expect(metrics.errors).toEqual(["error:server_overloaded"]);
   });
 
+  test("edit calls and the ones the tool refused are counted, other tools' errors are not", () => {
+    const result = (id: string, isError: boolean) => ({
+      type: "tool/result",
+      data: { message: { content: [{ type: "tool-result", toolCallId: id, isError }] } },
+    });
+    const metrics = metricsFromRows([
+      { type: "tool/call", data: { callId: "e1", name: "edit" } },
+      { type: "tool/call", data: { callId: "e2", name: "edit" } },
+      { type: "tool/call", data: { callId: "r1", name: "read_image" } },
+      { type: "tool/call", data: { callId: "b1", name: "bash" } },
+      result("e1", false),
+      result("e2", true),
+      result("r1", true),
+      result("b1", true),
+    ]);
+    expect(metrics.editCalls).toBe(2);
+    expect(metrics.editErrors).toBe(1);
+    expect(metrics.toolCalls).toBe(4);
+  });
+
   test("a log the run never wrote yields nulls, never zeros", () => {
     const metrics = metricsFromRows([]);
+    expect(metrics.editCalls).toBeNull();
     expect(metrics.outputTokens).toBeNull();
     expect(metrics.toolCalls).toBeNull();
   });
@@ -506,6 +527,17 @@ describe("bench summary", () => {
     expect(stats.spread).toBe(0);
     expect(stats.broken).toBe(0);
     expect(stats.passRate).toBe(1);
+  });
+
+  test("refused edits are summed over the runs that counted them, old result rows are left out", () => {
+    const stats = variantStats(header, [
+      run({ editCalls: 10, editErrors: 2 }),
+      run({ repeat: 2, editCalls: 5, editErrors: 0 }),
+      run({ task: "b" }),
+    ]);
+    expect(stats.editFails).toEqual({ errors: 2, calls: 15 });
+    expect(variantStats(header, [run({})]).editFails).toBeNull();
+    expect(summaryTable([stats])).toContain("2/15");
   });
 
   test("timeouts are neither passes nor plain failures", () => {

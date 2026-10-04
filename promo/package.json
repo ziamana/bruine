@@ -1,0 +1,33 @@
+{
+  "name": "bruine-promo",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Bruine's presentation video, made with Remotion",
+  "type": "module",
+  "scripts": {
+    "audio": "node scripts/soundtrack.ts",
+    "prestudio": "npm run audio",
+    "studio": "remotion studio",
+    "prestill": "npm run audio",
+    "still": "remotion still BruinePromo",
+    "prerender": "npm run audio",
+    "render": "remotion render BruinePromo out/bruine-promo.mp4",
+    "render:fr": "npm run audio && remotion render BruinePromo out/bruine-promo-fr.mp4 --props='{\"lang\":\"fr\"}'",
+    "typecheck": "tsc --noEmit",
+    "check:copy": "node scripts/check-copy.mjs",
+    "check": "npm run typecheck && npm run check:copy"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.532",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.532"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

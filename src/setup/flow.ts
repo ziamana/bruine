@@ -359,6 +359,7 @@ export class SetupFlow {
             name: pick.model,
             ...(contextWindow !== undefined ? { contextWindow } : {}),
             ...(reasoning.compat !== undefined ? { compat: reasoning.compat } : {}),
+            ...(d.input !== undefined ? { input: [...d.input] } : {}),
             reasoningEfforts: reasoning.reasoningEfforts,
           });
         }

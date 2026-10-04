@@ -24,6 +24,8 @@ export interface VariantStats {
   medianWallSec: number | null;
   /** Median output tokens over the runs that reported usage. */
   medianTokens: number | null;
+  /** Refused `edit` calls over all `edit` calls, from the runs that counted them; null when none did. */
+  editFails: { errors: number; calls: number } | null;
   /** Timeouts and boot errors — not passes, not fails either. */
   broken: number;
   errors: string[];
@@ -78,6 +80,14 @@ export function variantStats(header: HeaderRow, runs: RunRow[]): VariantStats {
         .map((run) => run.outputTokens)
         .filter((value): value is number => typeof value === "number"),
     ),
+    editFails: (() => {
+      const counted = runs.filter((run) => typeof run.editCalls === "number");
+      if (counted.length === 0) return null;
+      return {
+        errors: counted.reduce((sum, run) => sum + (run.editErrors ?? 0), 0),
+        calls: counted.reduce((sum, run) => sum + (run.editCalls ?? 0), 0),
+      };
+    })(),
     broken,
     errors,
   };
@@ -98,7 +108,7 @@ function tokens(value: number | null): string {
 
 /** Fixed-width table; the first column is the variant name. */
 export function summaryTable(rows: VariantStats[]): string {
-  const header = ["variant", "route", "pass rate", "spread", "median time", "median tokens", "runs", "broken"];
+  const header = ["variant", "route", "pass rate", "spread", "median time", "median tokens", "edit fails", "runs", "broken"];
   const body = rows.map((row) => [
     row.variant,
     row.route,
@@ -106,6 +116,7 @@ export function summaryTable(rows: VariantStats[]): string {
     `±${String(Math.round(row.spread * 1000) / 10)}pp`,
     seconds(row.medianWallSec),
     tokens(row.medianTokens),
+    row.editFails === null ? "-" : `${String(row.editFails.errors)}/${String(row.editFails.calls)}`,
     `${String(row.passes)}/${String(row.runs)}`,
     row.broken === 0 ? "-" : String(row.broken),
   ]);

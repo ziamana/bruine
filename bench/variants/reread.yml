@@ -1,0 +1,10 @@
+# Edit failures: 42 of 332 `edit` calls were refused in real sessions, half because the file had
+# changed since it was read (a shell command rewrote it), half because the old text no longer matched.
+# Measured 2026-10-04 on space-bunny-free, 12 scored tasks x 3 repeats: no gain on these small repos
+# (0/47 refused edits for dsh, 2/56 for reread; median tokens 650 vs 840). The failure needs a long
+# session on a big file that a shell command also rewrites, which no task here reproduces.
+# Not shipped in the persona.
+name: reread
+note: read a file again right before editing it, and again after a refused edit
+add:
+  - "Read a file again right before you edit it, and after any shell command that may have changed it. If an edit is refused, read the file again and copy the exact text; do not guess."

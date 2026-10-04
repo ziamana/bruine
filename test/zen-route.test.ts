@@ -44,7 +44,8 @@ describe("addSpaceBunnyToHome", () => {
     const r = await route(h);
     expect(r).toMatchObject({ displayName: "OpenCode Zen", api: "openai-completions", baseURL: "https://opencode.ai/zen/v1", headers: { Authorization: "Bearer public" } });
     expect(r.apiKeyEnv).toBeUndefined();
-    expect(r.models[0]).toMatchObject({ id: "space-bunny-free", contextWindow: 1_000_000 });
+    expect(r.models[0]).toMatchObject({ id: "space-bunny-free", contextWindow: 1_000_000, input: ["text", "image"] });
+    expect(r.streamIdleTimeoutMs).toBeUndefined();
     expect(r.models[0].reasoningEfforts).toEqual({ off: "minimal", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" });
     // Nothing is written to .env: there is no key variable.
     expect(existsSync(join(h, ".env"))).toBe(false);
@@ -116,15 +117,53 @@ describe("repairSpaceBunnyRoute: the first version of the route", () => {
     expect(await readFile(join(h, "settings.yaml"), "utf8")).toBe(after);
   });
 
-  test("a route the user changed on purpose is left exactly as it is", async () => {
+  test("a route the user changed on purpose keeps every choice, and only learns that the model takes images", async () => {
     const h = await home();
     const mine = OLD.replace("apiKeyEnv: BRUINE_ZEN_API_KEY", "apiKeyEnv: MY_OWN_KEY").replace(
       "          reasoningEfforts:\n            off: null\n            low: low\n",
       "          reasoningEfforts:\n            off: null\n            low: low\n            ultra: max\n",
     );
     await writeFile(join(h, "settings.yaml"), mine);
+    expect(await repairSpaceBunnyRoute(h)).toBe(true);
+    const r = await route(h);
+    expect(r.apiKeyEnv).toBe("MY_OWN_KEY");
+    expect(r.models[0].reasoningEfforts).toEqual({ off: null, low: "low", ultra: "max" });
+    expect(r.models[0].input).toEqual(["text", "image"]);
+  });
+
+  test("a route written without inputs, which the harness reads as text only, takes images after the repair", async () => {
+    const h = await home();
+    await addSpaceBunnyToHome(h);
+    const text = await readFile(join(h, "settings.yaml"), "utf8");
+    await writeFile(join(h, "settings.yaml"), text.replace(/\n\s+input:\n(\s+- \w+\n)+/, "\n"));
+    expect((await route(h)).models[0].input).toBeUndefined();
+    expect(await repairSpaceBunnyRoute(h)).toBe(true);
+    expect((await route(h)).models[0].input).toEqual(["text", "image"]);
     expect(await repairSpaceBunnyRoute(h)).toBe(false);
-    expect(await readFile(join(h, "settings.yaml"), "utf8")).toBe(mine);
+  });
+
+  test("the two-minute stream timeout an earlier version wrote is removed, any other value is kept", async () => {
+    const h = await home();
+    await addSpaceBunnyToHome(h);
+    const text = await readFile(join(h, "settings.yaml"), "utf8");
+    await writeFile(join(h, "settings.yaml"), text.replace("headers:", "streamIdleTimeoutMs: 120000\n      headers:"));
+    expect((await route(h)).streamIdleTimeoutMs).toBe(120_000);
+    expect(await repairSpaceBunnyRoute(h)).toBe(true);
+    expect((await route(h)).streamIdleTimeoutMs).toBeUndefined();
+    expect(await repairSpaceBunnyRoute(h)).toBe(false);
+    const again = await readFile(join(h, "settings.yaml"), "utf8");
+    await writeFile(join(h, "settings.yaml"), again.replace("headers:", "streamIdleTimeoutMs: 45000\n      headers:"));
+    expect(await repairSpaceBunnyRoute(h)).toBe(false);
+    expect((await route(h)).streamIdleTimeoutMs).toBe(45_000);
+  });
+
+  test("an input list the user wrote is not overridden", async () => {
+    const h = await home();
+    await addSpaceBunnyToHome(h);
+    const text = await readFile(join(h, "settings.yaml"), "utf8");
+    await writeFile(join(h, "settings.yaml"), text.replace(/input:\n(\s+- \w+\n)+/, "input:\n          - text\n"));
+    expect(await repairSpaceBunnyRoute(h)).toBe(false);
+    expect((await route(h)).models[0].input).toEqual(["text"]);
   });
 
   test("no file, no route, or an unreadable file: nothing to do and no error", async () => {

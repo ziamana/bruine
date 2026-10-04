@@ -104,7 +104,11 @@ persona section (the profile patch), never by editing dsh:
 | `verify` | "Before saying a task is done, run the project's tests or the closest check, and report the result." |
 | `plan` | "For work with 3+ steps, keep a todo_write list and update it as you go." |
 | `style` | "Match the existing code style and structure; change only what the task needs." |
+| `reread` | "Read a file again right before you edit it, and after any shell command that may have changed it. If an edit is refused, read the file again and copy the exact text; do not guess." |
 | `all` | the three together |
+
+Every run also records how many `edit` calls the tool refused (`edit fails` in the summary, `3/41` =
+3 refused out of 41). In real sessions it was 42 of 332.
 
 ## The tasks
 

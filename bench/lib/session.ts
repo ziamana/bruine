@@ -17,6 +17,9 @@ export interface RunMetrics {
   inputTokens: number | null;
   /** Every `tool/call` in the log (todo_write included: it is a real call). */
   toolCalls: number | null;
+  /** Calls to the `edit` tool, and how many of them the tool refused (old_string not found, file changed since read). */
+  editCalls: number | null;
+  editErrors: number | null;
   /** Turn errors, by kind; empty when the run was clean. */
   errors: string[];
   /** Number of log rows read. */
@@ -29,6 +32,8 @@ const EMPTY: RunMetrics = {
   outputTokens: null,
   inputTokens: null,
   toolCalls: null,
+  editCalls: null,
+  editErrors: null,
   errors: [],
   events: 0,
 };
@@ -87,6 +92,9 @@ export function metricsFromRows(rows: Row[]): RunMetrics {
   let input = 0;
   let sawUsage = false;
   let toolCalls = 0;
+  let editCalls = 0;
+  let editErrors = 0;
+  const editIds = new Set<string>();
   for (const row of rows) {
     out.events += 1;
     const type = row?.type;
@@ -104,7 +112,21 @@ export function metricsFromRows(rows: Row[]): RunMetrics {
         sawUsage = true;
       }
     }
-    if (type === "tool/call") toolCalls += 1;
+    if (type === "tool/call") {
+      toolCalls += 1;
+      if (data?.name === "edit") {
+        editCalls += 1;
+        if (typeof data?.callId === "string") editIds.add(data.callId);
+      }
+    }
+    if (type === "tool/result") {
+      const parts: unknown = data?.message?.content;
+      if (Array.isArray(parts)) {
+        for (const part of parts) {
+          if (part?.isError === true && editIds.has(part?.toolCallId)) editErrors += 1;
+        }
+      }
+    }
     if (type === "turn/end") {
       const reason = data?.reason;
       if (reason?.kind !== undefined && reason.kind !== "completed") {
@@ -116,6 +138,8 @@ export function metricsFromRows(rows: Row[]): RunMetrics {
   out.outputTokens = sawUsage ? output : null;
   out.inputTokens = sawUsage ? input : null;
   out.toolCalls = out.events === 0 ? null : toolCalls;
+  out.editCalls = out.events === 0 ? null : editCalls;
+  out.editErrors = out.events === 0 ? null : editErrors;
   return out;
 }
 

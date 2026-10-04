@@ -108,6 +108,8 @@ function rowFor(
     outputTokens: metrics.outputTokens,
     inputTokens: metrics.inputTokens,
     toolCalls: metrics.toolCalls,
+    editCalls: metrics.editCalls,
+    editErrors: metrics.editErrors,
     errors,
     checkExit: check.exitCode,
     checkMode: check.mode,

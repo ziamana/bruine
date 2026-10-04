@@ -40,6 +40,8 @@ export interface Discovered {
   headers?: Record<string, string>;
   /** The thinking levels this route takes, when it has its own vocabulary. */
   reasoningEfforts?: Record<string, string | null>;
+  /** What the route's models take in, when known (`text`, `image`); absent leaves the harness default. */
+  input?: string[];
 }
 
 /** Which thinking knobs a chat template understands (T34). */

@@ -5,6 +5,7 @@ import { QuestionCallComponent } from "../ui/question-call-component.js";
 import type { QuestionAnswer } from "../ui/questions.js";
 import { ansi } from "../ui/theme.js";
 import { ToolCallComponent, type ChatToolCall } from "../ui/tool-call-component.js";
+import { stripReminders } from "./ui-skills.js";
 
 /** Project-scoped choices for the REPL's resume picker. */
 export interface RecentSession {
@@ -109,7 +110,7 @@ export function replaySession(session: { snapshotEvents?(): unknown }, ui: Repla
         break;
       case "user/message": {
         if (data.source?.kind !== "user") break;
-        const text = textOf(data.content);
+        const text = stripReminders(textOf(data.content));
         if (text !== "") ui.addUserPrompt(text);
         break;
       }

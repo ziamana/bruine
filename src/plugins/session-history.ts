@@ -95,7 +95,7 @@ export function replaySession(session: { snapshotEvents?(): unknown }, ui: Repla
   const starts = events.flatMap((e, i) => (e.type === "turn/start" ? [i] : []));
   const first = starts.length > turns ? starts[starts.length - turns]! : 0;
   const skipped = Math.max(0, starts.length - turns);
-  if (skipped > 0) ui.addChat(new Text(ansi.faint(`${skipped} earlier turn${skipped === 1 ? "" : "s"} not shown`), 1, 0));
+  if (skipped > 0) ui.addChat(new Text(ansi.gray(`${skipped} earlier turn${skipped === 1 ? "" : "s"} not shown`), 1, 0));
 
   const calls = new Map<string, { comp: ChatToolCall; clock: { t: number }; name: string }>();
   let turnTools: Array<{ tool: string; comp: ChatToolCall }> = [];

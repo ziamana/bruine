@@ -16,6 +16,8 @@ import { appEnv, runtimeHome, configReadPath, configWritePath } from "./compat.j
  * anything without an explicit yes, and a developer (git/link) install is
  * never touched at all.
  */
+import { spawn } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path, { join } from "node:path";
@@ -85,9 +87,9 @@ export function compareSemver(a: string, b: string): number | null {
   return 0;
 }
 
-/** The exact notice text (T24 notice style, one line). */
+/** The exact notice text (T24 notice style, one line): what is new, and the one thing to type. */
 export function formatUpdateNotice(latest: string, current: string): string {
-  return `bruine ${latest} is available (you have ${current}). Run: bruine update`;
+  return `bruine ${latest} is available (you have ${current}). Type /update to install it.`;
 }
 
 /** The notice to show at startup, or undefined when nothing newer is known. */
@@ -155,6 +157,8 @@ export async function checkForUpdate(opts: {
   pathMod?: typeof path;
   /** Skip reading bruine.json (caller resolved `updateCheck` already). */
   doc?: Record<string, unknown>;
+  /** Ask the registry even when the cached answer is fresh (`/update`). */
+  force?: boolean;
 }): Promise<CheckOutcome> {
   const pathMod = opts.pathMod ?? path;
   const now = opts.now?.() ?? Date.now();
@@ -169,7 +173,7 @@ export async function checkForUpdate(opts: {
     return { ran: "disabled" };
   }
   const cached = await readUpdateCache(opts.dshHome, pathMod);
-  if (cached !== undefined && now - cached.checkedAt < CHECK_INTERVAL_MS) {
+  if (opts.force !== true && cached !== undefined && now - cached.checkedAt < CHECK_INTERVAL_MS) {
     return { ran: "cached", cache: cached };
   }
   try {
@@ -187,6 +191,31 @@ export async function checkForUpdate(opts: {
   } catch {
     return { ran: "failed" };
   }
+}
+
+/** Where the launch's check is kept, so the session can wait for it (one process, any module copy). */
+const PENDING_CHECK = Symbol.for("bruine.updateCheck");
+
+/**
+ * The launch's background check, remembered: the session shows its answer the moment it lands,
+ * on the very first launch too, instead of only the next day from the cache.
+ */
+export function startUpdateCheck(opts: Parameters<typeof checkForUpdate>[0]): Promise<CheckOutcome> {
+  const check = checkForUpdate(opts).catch((): CheckOutcome => ({ ran: "failed" }));
+  (globalThis as Record<symbol, unknown>)[PENDING_CHECK] = check;
+  return check;
+}
+
+/** The check the launcher started, if it did. */
+export function pendingUpdateCheck(): Promise<CheckOutcome> | undefined {
+  return (globalThis as Record<symbol, unknown>)[PENDING_CHECK] as Promise<CheckOutcome> | undefined;
+}
+
+/** The newer version an outcome knows of, if any. */
+export function newerVersion(outcome: CheckOutcome | undefined, current: string): string | undefined {
+  if (outcome === undefined || !("cache" in outcome)) return undefined;
+  const cmp = compareSemver(outcome.cache.latest, current);
+  return cmp !== null && cmp > 0 ? outcome.cache.latest : undefined;
 }
 
 /** How bruine was installed, from the real path of the running entry script. */
@@ -240,3 +269,49 @@ export function updateCommand(kind: InstallKind): string[] | undefined {
   }
 }
 
+
+/** How the running bruine was installed, from its entry script's real path. */
+export function installKindOf(entry: string | undefined = process.argv[1]): InstallKind {
+  if (entry === undefined) return "developer";
+  let real = entry;
+  try {
+    real = realpathSync(entry);
+  } catch {
+    // already a real path, or unreadable: detect from what we have
+  }
+  return detectInstallKind(real);
+}
+
+/** What the installer printed, and whether it worked. */
+export interface InstallResult {
+  ok: boolean;
+  code: number | null;
+  output: string;
+}
+
+/**
+ * Run the installer command quietly (the session's screen is not a place for npm's progress),
+ * and keep what it said for the failure message.
+ */
+export function runInstaller(cmd: readonly string[]): Promise<InstallResult> {
+  return new Promise((resolve) => {
+    let output = "";
+    let child;
+    try {
+      child = spawn(cmd[0] as string, cmd.slice(1), { shell: process.platform === "win32", stdio: ["ignore", "pipe", "pipe"] });
+    } catch (error) {
+      resolve({ ok: false, code: null, output: (error as Error).message });
+      return;
+    }
+    child.stdout?.on("data", (d: Buffer) => (output += d.toString()));
+    child.stderr?.on("data", (d: Buffer) => (output += d.toString()));
+    child.on("error", (error) => resolve({ ok: false, code: null, output: error.message }));
+    child.on("close", (code) => resolve({ ok: code === 0, code, output }));
+  });
+}
+
+/** The last meaningful line of an installer's output, for a one-line failure. */
+export function lastLine(output: string): string {
+  const lines = output.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "");
+  return lines.at(-1) ?? "";
+}

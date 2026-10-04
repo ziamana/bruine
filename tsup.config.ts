@@ -13,6 +13,7 @@ export default defineConfig({
     "plugins/modes": "src/plugins/modes.ts",
     "plugins/web-search": "src/plugins/web-search.ts",
     "plugins/mcp": "src/plugins/mcp.ts",
+    "plugins/silence": "src/plugins/silence.ts",
   },
   format: ["esm"],
   clean: true,

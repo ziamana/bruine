@@ -21,6 +21,8 @@ import { TaskPanel, taskItems, type TaskItem } from "../ui/task-panel.js";
 import { readSettingsRoute } from "../ui/bruine-ui.js";
 import { appendErrorLog, describeLlmError, fetchAvailableModels, formatK } from "../ui/errors.js";
 import type { DshContext, BruineRepl } from "./ctx.js";
+import { retryCount, retryLine, type RetryEvent } from "../ui/retry.js";
+import { BRUINE_SILENCE_SERVICE, type BruineSilenceService } from "./silence.js";
 
 /** Stable Cordis plugin name. */
 export const name = "bruine-render";
@@ -142,6 +144,8 @@ export function attachTui(
   };
 
   const hideWorking = (): void => {
+    // The model is talking again: a retry that was under way has worked.
+    ui.activity?.setNote(undefined);
     if (ui.activity?.state === "Waiting for model") ui.activity.setState("Working");
     ui.requestRender();
   };
@@ -271,6 +275,19 @@ export function attachTui(
       return agent;
     }
   };
+
+  // The live silence of the conversation's stream, for the working label (bruine-silence).
+  (ui as unknown as { setSilenceProbe?: (probe: () => { quietMs: number; budgetMs: number } | undefined) => void }).setSilenceProbe?.(() => {
+    let silence: BruineSilenceService | undefined;
+    try {
+      silence = ctx.get(BRUINE_SILENCE_SERVICE) as BruineSilenceService | undefined;
+    } catch {
+      return undefined;
+    }
+    const id = liveAgent().session?.id;
+    const reading = silence?.reading(id === undefined ? undefined : String(id));
+    return reading === undefined ? undefined : { quietMs: Date.now() - reading.quietSince, budgetMs: reading.budget };
+  });
 
   let subagentCount = 0;
   const refreshSubagents = (): void => {
@@ -502,6 +519,21 @@ export function attachTui(
         if (tasks !== undefined) setUiTasks(tasks);
         return;
       }
+      case "llm/retry": {
+        // dsh is about to try the request again: say why, which attempt, and when, in the
+        // transcript and beside the working label, instead of a clock that keeps counting.
+        const data = event.data as RetryEvent;
+        closeLive();
+        const mark = ui.icons.think === "*" ? "~" : "↻";
+        ui.addChat(new Text(`${ansi.yellow(mark)} ${ansi.gray(retryLine(data))}`, 1, 0));
+        ui.activity?.setNote(`retry ${retryCount(data)}`);
+        ui.requestRender();
+        return;
+      }
+      case "llm/retry-started":
+        ui.activity?.setState("Waiting for model");
+        ui.requestRender();
+        return;
       case "compaction/start": {
         const state = footerState();
         const pct =

@@ -14,7 +14,7 @@ import { migrateAgentsSkills } from "./setup/skills.js";
 import { localDefaultRoute } from "./setup/discover.js";
 import { ansi } from "./ui/theme.js";
 import { parseFlags } from "./flags.js";
-import { checkForUpdate, detectInstallKind, updateCommand } from "./update.js";
+import { detectInstallKind, startUpdateCheck, updateCommand } from "./update.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { name: string; version: string };
@@ -406,7 +406,7 @@ async function main(): Promise<void> {
   // delayed. The cached result drives the notice (T24 style) shown by the
   // session; gated off by bruine.json updateCheck, BRUINE_NO_UPDATE_CHECK, CI,
   // or a non-TTY stdout.
-  void checkForUpdate({ dshHome }).catch(() => undefined);
+  void startUpdateCheck({ dshHome });
 
   // MCP: a project's .mcp.json starts programs, so it is approved before the session starts.
   try {

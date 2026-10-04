@@ -121,7 +121,7 @@ describe("the header", () => {
     expect(rows[3]).toBe("");
     expect(rows[4]).toMatch(/^ {2}skills {3}apex · brixhub/);
     expect(rows[4]!.trimEnd().endsWith("/skills")).toBe(true);
-    expect(rows[5]).toMatch(/^ {2}plugins {2}repl · render$/);
+    expect(rows[5]).toMatch(/^ {2}plugins {2}2 loaded\s+\/plugins$/);
   });
 
   test("an empty kind is left out, never announced", () => {
@@ -129,7 +129,7 @@ describe("the header", () => {
     ui.setResources({ skills: [], plugins: ["repl"] });
     const rows = ui.headerText(100).split("\n").map(strip);
     expect(rows.some((row) => row.includes("skills"))).toBe(false);
-    expect(rows.at(-1)).toMatch(/plugins {2}repl/);
+    expect(rows.at(-1)).toMatch(/plugins {2}1 loaded/);
   });
 
   test.each([100, 60, 46, 30])("no header line is wider than %i columns", (width) => {
@@ -212,4 +212,11 @@ describe("a launch takes the whole terminal", () => {
     process.stdout.isTTY = false;
     expect(await launch()).toBe(0);
   });
+});
+
+test("a loopback server is named by its port, a remote one by its host", async () => {
+  const { headerHost } = await import("../src/ui/bruine-ui.js");
+  expect(headerHost({ models: { main: { baseUrl: "http://127.0.0.1:8080/v1" } } })).toBe("localhost:8080");
+  expect(headerHost({ models: { main: { baseUrl: "http://localhost/v1" } } })).toBe("localhost");
+  expect(headerHost({ models: { main: { baseUrl: "https://api.mistral.ai/v1" } } })).toBe("api.mistral.ai");
 });

@@ -21,7 +21,7 @@ test("tokens settle after the answer while real totals and other readings stay c
   footer.beginTurn(); footer.beginTurn();
   footer.set({ inputTokens: 1600, outputTokens: 536, cacheRead: 1200 });
   expect(text(footer)).toContain("↑100 ↓10");
-  expect(text(footer)).toContain("cached 1.2k");
+  expect(text(footer)).toContain("1.2k served");
   expect(footer.state).toMatchObject({ inputTokens: 1600, outputTokens: 536 });
   expect(footer.active).toBe(false);
   footer.endTurn(); expect(footer.active).toBe(true);

@@ -6,6 +6,7 @@ import {
   bgOptOut,
   blendHex,
   deriveBackdrop,
+  deriveInk,
   detectColorDepth,
   fgCode,
   fillLine,
@@ -50,6 +51,58 @@ describe("Nuage palette", () => {
     expect(bgCode("surface", "truecolor")).toBe("\x1b[48;2;28;32;48m");
     expect(fgCode("sky", "none")).toBe("");
     expect(to256("#000000")).toBeGreaterThanOrEqual(16);
+  });
+  test("every foreground stays readable on a light terminal, and on odd dark ones", () => {
+    // The defect: only the surfaces followed a light background, so the answer
+    // text (#e6e9f2) was 1.2:1 on white.
+    for (const bg of [
+      { r: 255, g: 255, b: 255 },
+      { r: 0xfd, g: 0xf6, b: 0xe3 }, // Solarized Light
+      { r: 0x28, g: 0x2c, b: 0x34 }, // One Dark
+      { r: 0, g: 0, b: 0 },
+    ]) {
+      const backdrop = deriveBackdrop(bg);
+      const ink = deriveInk(bg, backdrop);
+      const base = `#${[bg.r, bg.g, bg.b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+      for (const surface of [base, backdrop.surface, backdrop.chip, backdrop.userBlock, backdrop.toolOk, backdrop.toolPending, backdrop.toolErr]) {
+        expect(contrastRatio(ink.text, surface)).toBeGreaterThanOrEqual(7);
+        for (const role of ["muted", "sky", "lavender", "mint", "amber", "rose", "pink"] as const) {
+          expect(contrastRatio(ink[role], surface)).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+      expect(contrastRatio(ink.addFg, backdrop.addBg)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(ink.delFg, backdrop.delBg)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(ink.faint, base)).toBeGreaterThanOrEqual(3);
+    }
+    // A hue that has to move keeps its hue: lavender on white is still violet.
+    const lavender = deriveInk({ r: 255, g: 255, b: 255 }).lavender;
+    const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(lavender.slice(i, i + 2), 16)) as [number, number, number];
+    expect(b).toBeGreaterThan(g);
+    expect(r).toBeGreaterThan(g);
+  });
+  test("a light background repaints the ink, not only the surfaces", () => {
+    process.env.BRUINE_COLOR = "truecolor";
+    resetColorDepth();
+    expect(fgCode("text", "truecolor")).toBe("\x1b[38;2;230;233;242m");
+    setTerminalBackdrop({ r: 255, g: 255, b: 255 });
+    expect(fgCode("text", "truecolor")).not.toBe("\x1b[38;2;230;233;242m");
+    setTerminalBackdrop();
+    expect(fgCode("text", "truecolor")).toBe("\x1b[38;2;230;233;242m");
+  });
+  test("256 colors: dark tinted surfaces land on the gray ramp, not on navy or black", () => {
+    // The defect: #1c2030 snapped to 17 (#00005f) and the ok card to 16 (black).
+    for (const role of ["surface", "chip", "userBlock", "toolOk", "toolPending"] as const) {
+      const code = to256(NUAGE[role].hex);
+      expect(code).toBeGreaterThanOrEqual(232);
+      expect(code).toBeGreaterThan(232);
+    }
+    // A band whose hue is its meaning keeps a hue, and is never pure black.
+    expect(to256(NUAGE.addBg.hex, true)).toBe(22);
+    expect(to256(NUAGE.delBg.hex, true)).toBe(52);
+    expect(bgCode("delBg", "256")).toBe("\x1b[48;5;52m");
+    // Plain colors still find their cube entry.
+    expect(to256("#ff0000")).toBe(196);
+    expect(to256("#808080")).toBe(244);
   });
   test("gradient only in truecolor", () => {
     process.env.BRUINE_COLOR = "truecolor";

@@ -45,7 +45,8 @@ describe("addSpaceBunnyToHome", () => {
     expect(r).toMatchObject({ displayName: "OpenCode Zen", api: "openai-completions", baseURL: "https://opencode.ai/zen/v1", headers: { Authorization: "Bearer public" } });
     expect(r.apiKeyEnv).toBeUndefined();
     expect(r.models[0]).toMatchObject({ id: "space-bunny-free", contextWindow: 1_000_000, input: ["text", "image"] });
-    expect(r.streamIdleTimeoutMs).toBeUndefined();
+    // A ceiling, not a timeout: bruine's adaptive silence budget decides under it.
+    expect(r.streamIdleTimeoutMs).toBe(900_000);
     expect(r.models[0].maxTokens).toBe(131_072);
     expect(r.models[0].reasoningEfforts).toEqual({ off: "minimal", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" });
     // Nothing is written to .env: there is no key variable.
@@ -143,17 +144,22 @@ describe("repairSpaceBunnyRoute: the first version of the route", () => {
     expect(await repairSpaceBunnyRoute(h)).toBe(false);
   });
 
-  test("the two-minute stream timeout an earlier version wrote is removed, any other value is kept", async () => {
+  test("the two-minute stream timeout an earlier version wrote, or none, becomes the ceiling; any other value is kept", async () => {
     const h = await home();
     await addSpaceBunnyToHome(h);
     const text = await readFile(join(h, "settings.yaml"), "utf8");
-    await writeFile(join(h, "settings.yaml"), text.replace("headers:", "streamIdleTimeoutMs: 120000\n      headers:"));
+    await writeFile(join(h, "settings.yaml"), text.replace("streamIdleTimeoutMs: 900000", "streamIdleTimeoutMs: 120000"));
     expect((await route(h)).streamIdleTimeoutMs).toBe(120_000);
     expect(await repairSpaceBunnyRoute(h)).toBe(true);
-    expect((await route(h)).streamIdleTimeoutMs).toBeUndefined();
+    expect((await route(h)).streamIdleTimeoutMs).toBe(900_000);
     expect(await repairSpaceBunnyRoute(h)).toBe(false);
     const again = await readFile(join(h, "settings.yaml"), "utf8");
-    await writeFile(join(h, "settings.yaml"), again.replace("headers:", "streamIdleTimeoutMs: 45000\n      headers:"));
+    await writeFile(join(h, "settings.yaml"), again.replace(/\n\s+streamIdleTimeoutMs: 900000/, ""));
+    expect((await route(h)).streamIdleTimeoutMs).toBeUndefined();
+    expect(await repairSpaceBunnyRoute(h)).toBe(true);
+    expect((await route(h)).streamIdleTimeoutMs).toBe(900_000);
+    const mine = await readFile(join(h, "settings.yaml"), "utf8");
+    await writeFile(join(h, "settings.yaml"), mine.replace("streamIdleTimeoutMs: 900000", "streamIdleTimeoutMs: 45000"));
     expect(await repairSpaceBunnyRoute(h)).toBe(false);
     expect((await route(h)).streamIdleTimeoutMs).toBe(45_000);
   });

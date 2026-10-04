@@ -149,6 +149,11 @@
     - id: bruine-mcp
       name: 'bruine/mcp'
 
+    # An adaptive silence budget on every model stream: longer while the model thinks hard or
+    # writes a large file, longer on every retry, and a retryable TIMEOUT when it runs out.
+    - id: bruine-silence
+      name: 'bruine/silence'
+
     - id: tool-ask-user
       name: '@deepseek-ai/dsh-tool-ask-user'
 

@@ -17,6 +17,7 @@ import {
 } from "./simple.js";
 import { syncSkills, type SkillMeta } from "./skills.js";
 import type { Discovered, TemplateCaps } from "./discover.js";
+import { STREAM_CEILING_MS } from "../llm/silence.js";
 
 export type PermissionModeValue = "ask" | "auto" | "full";
 export type Theme = "dark" | "light" | "high-contrast";
@@ -334,6 +335,8 @@ export class SetupFlow {
             api: "openai-completions",
             baseURL: d.baseUrl,
             ...(d.headers !== undefined ? { headers: { ...d.headers } } : { apiKeyEnv: "BRUINE_LOCAL_API_KEY" }),
+            // A ceiling, not a timeout: bruine's adaptive silence budget decides (src/llm/silence.ts).
+            streamIdleTimeoutMs: STREAM_CEILING_MS,
             // T19.A.2: an `off` effort so the Auto judge can get a plain answer.
             models: [],
           };

@@ -1,6 +1,6 @@
 {
   "name": "bruine",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Interactive terminal coding agent that runs your own models, local or OpenAI-compatible",
   "type": "module",
   "license": "MIT",
@@ -38,6 +38,7 @@
     "./modes": "./dist/plugins/modes.js",
     "./web-search": "./dist/plugins/web-search.js",
     "./mcp": "./dist/plugins/mcp.js",
+    "./silence": "./dist/plugins/silence.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
     "./compat": "./dist/compat.js"

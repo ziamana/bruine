@@ -176,12 +176,12 @@ export class ToolCallComponent implements ChatToolCall {
     const bar = ascii ? "|" : "│";
     const out = rows.slice(0, PREVIEW_ROWS).map((row, i) => {
       const gutter = `${String(i + 1).padStart(4)} ${bar} `;
-      return ansi.faint(gutter) + ansi.gray(clipCells(sanitize(row).replace(/\t/g, "  "), Math.max(1, width - gutter.length), ellipsis));
+      return ansi.gray(gutter) + ansi.gray(clipCells(sanitize(row).replace(/\t/g, "  "), Math.max(1, width - gutter.length), ellipsis));
     });
     if (count > PREVIEW_ROWS) {
       const bytes = Buffer.byteLength(text, "utf8");
       const size = bytes < 1024 ? `${String(bytes)} B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
-      out.push(ansi.faint(clipCells(`     ${ellipsis} ${String(count)} lines ${ascii ? "-" : "·"} ${size}`, width, ellipsis)));
+      out.push(ansi.gray(clipCells(`     ${ellipsis} ${String(count)} lines ${ascii ? "-" : "·"} ${size}`, width, ellipsis)));
     }
     return out;
   }
@@ -219,7 +219,7 @@ export class ToolCallComponent implements ChatToolCall {
     const ellipsis = this.icons.think === "*" ? "..." : "…";
     return [
       ...shown.map((row) => ansi.gray(clipCells(`    ${row}`, width, ellipsis))),
-      ...(hidden > 0 ? [ansi.faint(clipCells(`    ${ellipsis} ${String(hidden)} more lines`, width))] : []),
+      ...(hidden > 0 ? [ansi.gray(clipCells(`    ${ellipsis} ${String(hidden)} more lines`, width))] : []),
     ];
   }
   /** A settled call at one width in one set of colours is the same lines every time it is asked for. */

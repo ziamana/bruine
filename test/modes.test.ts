@@ -59,6 +59,27 @@ describe("bruine gate (T16.C)", () => {
     expect(modes.decisionFor("missing")).toBeUndefined();
   });
 
+  test("dsh's parsed arguments: an Always covers the one command, never every command", async () => {
+    // dsh hands the gate the arguments already parsed. They used to be read with
+    // String(), which made every bash call `bash` with no command: auto never saw `ls`,
+    // and an Always on one command was remembered as `bash:` and allowed them all.
+    const { fake, modes, agent } = harness();
+    const run = (args: unknown, callId: string) =>
+      fake.emit("tools/pre-execute", { name: "bash", arguments: args, agent, callId }, async () => ({ kind: "delegate" })) as Promise<any>;
+    modes.permission = "auto";
+    expect((await run({ command: "ls" }, "p1")).kind).toBe("allow");
+    modes.permission = "ask";
+    expect((await run({ command: "npm test" }, "p2")).kind).toBe("ask");
+    expect(modes.alwaysScope("p2")).toBe("bash:npm test");
+    modes.rememberFor("p2");
+    expect((await run({ command: "npm test" }, "p3")).kind).toBe("allow");
+    expect((await run({ command: "rm -rf dist" }, "p4")).kind).toBe("ask");
+    // A key without a command is never remembered.
+    modes.pendingKeys.set("p5", "bash:");
+    modes.rememberFor("p5");
+    expect(modes.sessionAllowed.has("bash:")).toBe(false);
+  });
+
   test("delegates other agents' calls to next()", async () => {
     const { preExecute, otherAgent } = harness();
     const d = await preExecute("bash", { command: "ls" }, "c9", otherAgent);

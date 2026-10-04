@@ -34,6 +34,7 @@ import { echoLine, QuestionForm } from "./questions.js";
 import type { QuestionCallComponent } from "./question-call-component.js";
 import type { ReasoningComponent } from "./reasoning-component.js";
 import { PromptFrame } from "./prompt-frame.js";
+import type { SilenceProbe } from "./working.js";
 import { withEscapeFilter } from "./escape-filter.js";
 import { besideLogo, LOGO_BESIDE_GAP, LOGO_MIN_WIDTH, logoRows, paintResourceLine, planResourceLine } from "./header.js";
 import { terminalMotionAllowed } from "./logo-motion.js";
@@ -41,6 +42,7 @@ import { IntroPlayer, introSetting, planIntro, readLastIntro, rememberIntro } fr
 import { TurnActivity } from "./turn-activity.js";
 import { WeatherBackdrop, readWeatherEffect, type WeatherEffect } from "./weather-effect.js";
 import { QueuedPrompts } from "./queued-prompts.js";
+import { ApprovalBand } from "./approval-band.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
 import { createAutocomplete } from "./file-complete.js";
 import {
@@ -75,6 +77,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   noticeForStartup,
+  newerVersion,
+  pendingUpdateCheck,
+  formatUpdateNotice,
   readBruineJsonDoc,
   readUpdateCache,
   resolveDshHome,
@@ -207,7 +212,8 @@ export function headerHost(
   const main = bruineJson?.models?.main;
   if (typeof main?.baseUrl === "string" && main.baseUrl !== "") {
     try {
-      return new URL(main.baseUrl).hostname;
+      const url = new URL(main.baseUrl);
+      return loopbackLabel(url) ?? url.hostname;
     } catch {
       // fall through
     }
@@ -237,6 +243,12 @@ export function readBruineJsonForHeader(dshHome?: string): {
  * own network (it tells you which box), the provider's display name for a cloud API
  * (a 45-character host like token-plan.ap-southeast-1.maas.aliyuncs.com says nothing).
  */
+/** A loopback address says nothing a person reads; the port says which server: `localhost:8080`. */
+export function loopbackLabel(url: URL): string | undefined {
+  if (!/^(127\.\d+\.\d+\.\d+|localhost|\[::1\])$/.test(url.hostname)) return undefined;
+  return url.port === "" ? "localhost" : `localhost:${url.port}`;
+}
+
 export function serverLabel(hostname: string, displayName?: string): string {
   const h = hostname.toLowerCase();
   const local =
@@ -543,7 +555,8 @@ export class BruineUi {
       busy: () => this.activity.active,
       rows: () => this.terminal.rows,
       decorateRows: () => this.shell.weatherRows,
-      paused: () => this.mouse.span !== undefined,
+      // A selection in progress, or an approval: the one still moment means "you decide".
+      paused: () => this.mouse.span !== undefined || this.activity.held,
       allowed: () => this.terminal.columns >= 12 && terminalMotionAllowed({ ascii: this.icons.think === "*" }) && colorDepth() !== "none" && appEnv("NO_RAIN") !== "1",
     });
     this.#layer.addChild(this.weather);
@@ -1049,6 +1062,11 @@ export class BruineUi {
   }
 
   /** Show the waiting state immediately on submit; content advances the activity. */
+  /** Where the working label reads how long the model has been quiet (bruine-silence). */
+  setSilenceProbe(probe: SilenceProbe | undefined): void {
+    this.promptFrame.silence = probe;
+  }
+
   showWorking(): void {
     if (this.#closed) return;
     this.footer.beginTurn();
@@ -1145,7 +1163,9 @@ export class BruineUi {
     const ink = { label: this.#ink("lavender"), name: this.#ink("muted"), chrome: this.#ink("faint") };
     const resources = [
       planResourceLine("skills", this.#resources.skills, width, { hint: "/skills", sep: lineSep, ellipsis }),
-      planResourceLine("plugins", this.#resources.plugins, width, { sep: lineSep, ellipsis }),
+      // bruine's own plugins are how it is built, not something to read on every start:
+      // they are counted, and their names are one command away.
+      planResourceLine("plugins", this.#resources.plugins.length === 0 ? [] : [`${String(this.#resources.plugins.length)} loaded`], width, { hint: "/plugins", sep: lineSep, ellipsis }),
     ].flatMap((plan) => (plan === undefined ? [] : [paintResourceLine(plan, width, ink, lineSep)]));
     // The blank row is what makes the lines read as a list rather than as more
     // chrome: the eye needs a gap to change register.
@@ -1166,6 +1186,11 @@ export class BruineUi {
    * plugin entry points of the package that is running); a caller that knows better
    * — a plugin mounting something extra — replaces the list it owns.
    */
+  /** The plugins this session loaded, for /plugins: the header only counts them. */
+  get pluginNames(): readonly string[] {
+    return this.#resources.plugins;
+  }
+
   setResources(next: SessionResources): void {
     if (next.skills !== undefined) this.#resources.skills = [...next.skills];
     if (next.plugins !== undefined) this.#resources.plugins = [...next.plugins];
@@ -1207,7 +1232,8 @@ export class BruineUi {
       try {
         const route = readSettingsRoute();
         if (route?.baseUrl !== undefined && route.baseUrl !== "") {
-          host = serverLabel(new URL(route.baseUrl).hostname, route.providerDisplayName);
+          const url = new URL(route.baseUrl);
+          host = loopbackLabel(url) ?? serverLabel(url.hostname, route.providerDisplayName);
         } else if (route?.provider !== undefined && route.provider !== "" && route.provider !== "local") {
           host = route.provider;
         }
@@ -1452,8 +1478,16 @@ export class BruineUi {
       // The TUI shell only exists on an interactive terminal, so the TTY
       // gate was already passed by the launcher.
       if (!updateCheckEnabled({ doc, isTTY: true })) return;
-      const text = noticeForStartup({ cache: await readUpdateCache(home), current: version });
-      if (text !== undefined) this.showPersistentNotice(text);
+      // What the cache already knew; otherwise the launch's check, the moment it answers.
+      let text = noticeForStartup({ cache: await readUpdateCache(home), current: version });
+      if (text === undefined) {
+        const latest = newerVersion(await pendingUpdateCheck(), version);
+        if (latest !== undefined) text = formatUpdateNotice(latest, version);
+      }
+      if (text !== undefined && !this.#closed) {
+        this.showPersistentNotice(text);
+        this.requestRender();
+      }
     } catch {
       // an update notice must never break the session
     }
@@ -1508,8 +1542,13 @@ export class BruineUi {
     this.requestRender();
   }
 
-  askChoice(title: string, items: SelectItem[], opts: { initial?: number; preview?: (index: number) => void } = {}): Promise<number> {
+  askChoice(
+    title: string,
+    items: SelectItem[],
+    opts: { initial?: number; preview?: (index: number) => void; keys?: readonly string[] } = {},
+  ): Promise<number> {
     if (this.#closed) return Promise.resolve(-1);
+    if (opts.keys !== undefined && opts.keys.length === items.length) return this.#askApproval(title, items, opts.keys);
     this.clearNoticeBox();
     this.#setConfirming(true);
     const titleText = new Text(ansi.yellow(title), 1, 0);
@@ -1532,6 +1571,36 @@ export class BruineUi {
       list.onSelect = (item) => finish(items.indexOf(item));
       list.onCancel = () => finish(-1);
       this.tui.setFocus(list);
+      this.requestRender();
+    });
+  }
+
+  /**
+   * An approval: the turn is waiting on the person, so it says so everywhere at once. The
+   * band is the one framed amber block, the prompt box steps back, the turn's clock stops,
+   * the rain stops, and the queue's own key hints leave the screen to the band's.
+   */
+  #askApproval(title: string, items: SelectItem[], keys: readonly string[]): Promise<number> {
+    this.clearNoticeBox();
+    this.#setConfirming(true);
+    const band = new ApprovalBand(title, items.map((item, i) => ({ key: keys[i]!, label: item.label })), this.icons);
+    this.noticeBox.addChild(band);
+    this.activity.hold();
+    this.queued.quiet = true;
+    this.requestRender();
+    return new Promise((resolve) => {
+      const finish = (index: number) => {
+        this.queued.quiet = false;
+        this.activity.release();
+        this.#setConfirming(false);
+        this.clearNoticeBox();
+        this.tui.setFocus(this.promptFrame);
+        this.requestRender();
+        resolve(index);
+      };
+      band.onSelect = (index) => finish(index);
+      band.onCancel = () => finish(-1);
+      this.tui.setFocus(band);
       this.requestRender();
     });
   }

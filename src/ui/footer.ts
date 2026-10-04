@@ -390,7 +390,8 @@ export class FooterComponent implements Component {
     const tagged = s.provider === "local" ? `(local) ${name}` : name;
     const dot = this.#ascii ? "-" : "\u2022";
     // T34: `?` until the effort plugin resolves the model's levels, never a guess.
-    const effort = s.effort ?? "?";
+    // "auto" is also a permission mode, on the same bar: that one effort is named.
+    const effort = s.effort === "auto" ? "effort auto" : s.effort ?? "?";
     if (this.#ascii) return [`${tagged} ${dot} ${effort}`, tagged, `${name} ${dot} ${effort}`, name];
     const head = this.#ink("text");
     const tail = `${this.#ink("faint")(dot)} ${this.#ink("muted")(effort)}`;
@@ -433,7 +434,7 @@ export class FooterComponent implements Component {
     // last call hit. One label each, so the two are never confused for one.
     const served = s.cacheRead === undefined
       ? { long: undefined, short: undefined }
-      : { long: this.#read("cached", formatK(s.cacheRead)), short: this.#ink("muted")(`R${formatK(s.cacheRead)}`) };
+      : { long: `${this.#ink("text")(formatK(s.cacheRead))} ${this.#ink("muted")("served")}`, short: this.#ink("muted")(`R${formatK(s.cacheRead)}`) };
     const hitRole: PaletteRole = s.cachePct === undefined
       ? "text"
       : s.cacheFirst === true
@@ -445,9 +446,11 @@ export class FooterComponent implements Component {
             : "rose";
     const hit = s.cachePct === undefined
       ? { long: undefined, short: undefined }
-      : { long: this.#read("hit", `${formatHit(s.cachePct)}%`, hitRole), short: this.#ink(hitRole)(`CH${formatHit(s.cachePct)}%`) };
+      : { long: this.#read("cache", `${formatHit(s.cachePct)}%`, hitRole), short: this.#ink(hitRole)(`CH${formatHit(s.cachePct)}%`) };
     const cache = {
-      long: [served.long, hit.long].filter((part) => part !== undefined).join(this.#dot(true)),
+      // One word for the cache everywhere, the turn receipt included: `cache 96%` is
+      // how well the last call hit, and what it served comes after it.
+      long: [hit.long, served.long].filter((part) => part !== undefined).join(this.#dot(true)),
       short: [served.short, hit.short].filter((part) => part !== undefined).join(" "),
     };
     // T31.5: the reading is in the colour as much as in the digits — mint under
@@ -478,7 +481,7 @@ export class FooterComponent implements Component {
     const bolt = this.#ascii ? "*" : "\u21af";
     const rates: string[] = [];
     if (s.tps !== undefined && Number.isFinite(s.tps) && s.tps > 0) {
-      rates.push(`${this.#ink("faint")(bolt)} ${this.#ink("muted")("TPS:")} ${this.#ink("sky")(`${s.tpsEstimated ? "~" : ""}${s.tps.toFixed(1)}`)} ${this.#ink("muted")("tok/s")}`);
+      rates.push(`${this.#ink("faint")(bolt)} ${this.#ink("sky")(`${s.tpsEstimated ? "~" : ""}${s.tps.toFixed(1)}`)} ${this.#ink("muted")("tok/s")}`);
     }
     const pp = this.#displayPrefill();
     if (pp !== undefined && Number.isFinite(pp) && pp > 0) {

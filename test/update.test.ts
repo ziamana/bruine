@@ -28,6 +28,8 @@ import {
   type FetchLike,
 } from "../src/update.js";
 import { BruineUi } from "../src/ui/bruine-ui.js";
+import { runUpdateCommand } from "../src/plugins/repl.js";
+import { lastLine, newerVersion, pendingUpdateCheck, startUpdateCheck } from "../src/update.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -179,12 +181,12 @@ describe("update notice text (T30)", () => {
   test("accepted: newer → the exact line; same or older → nothing", () => {
     const cache = { checkedAt: 1, latest: "0.3.0" };
     expect(noticeForStartup({ cache, current: "0.2.0" })).toBe(
-      "bruine 0.3.0 is available (you have 0.2.0). Run: bruine update",
+      "bruine 0.3.0 is available (you have 0.2.0). Type /update to install it.",
     );
     expect(noticeForStartup({ cache: { checkedAt: 1, latest: "0.2.0" }, current: "0.2.0" })).toBeUndefined();
     expect(noticeForStartup({ cache: { checkedAt: 1, latest: "0.1.0" }, current: "0.2.0" })).toBeUndefined();
     expect(noticeForStartup({ cache: undefined, current: "0.2.0" })).toBeUndefined();
-    expect(formatUpdateNotice("2.0.0", "1.9.9")).toBe("bruine 2.0.0 is available (you have 1.9.9). Run: bruine update");
+    expect(formatUpdateNotice("2.0.0", "1.9.9")).toBe("bruine 2.0.0 is available (you have 1.9.9). Type /update to install it.");
   });
 });
 
@@ -283,7 +285,7 @@ describe("BruineUi persistent update notice (T30)", () => {
   test("newer cached version → notice above the editor; gone after the first submit", async () => {
     const ui = await uiWithCache("0.3.0");
     const text = ui.tui.render(80).map(strip).join("\n");
-    expect(text).toContain("bruine 0.3.0 is available (you have 0.2.0). Run: bruine update");
+    expect(text).toContain("bruine 0.3.0 is available (you have 0.2.0). Type /update to install it.");
     ui.editor.onSubmit?.("first prompt");
     const after = ui.tui.render(80).map(strip).join("\n");
     expect(after).not.toContain("0.3.0 is available");
@@ -307,4 +309,69 @@ describe("bruine update command (T30)", () => {
     expect(out).toContain("Developer install: run git pull && pnpm build");
     expect(out).not.toContain("Update now?");
   }, 30_000);
+});
+
+describe("/update inside a session", () => {
+  const fetched = (latest: string) => async () => ({ ran: "fetched" as const, cache: { checkedAt: 1, latest } });
+  const yes = { askChoice: async () => 0 };
+  const no = { askChoice: async () => 1 };
+
+  test("a newer version: says what it runs, runs it on yes, and says how to restart", async () => {
+    const ran: string[][] = [];
+    const notices: string[] = [];
+    const answer = await runUpdateCommand({
+      current: "0.1.0",
+      kind: "npm",
+      ui: yes,
+      notice: (t) => notices.push(t),
+      check: fetched("0.2.0"),
+      install: async (cmd) => (ran.push([...cmd]), { ok: true, code: 0, output: "" }),
+    });
+    expect(ran).toEqual([["npm", "install", "-g", "bruine@latest"]]);
+    expect(notices).toEqual(["Checking for a new version of bruine…", "Updating bruine to 0.2.0…"]);
+    expect(answer).toBe("Updated to bruine 0.2.0. This session keeps running 0.1.0: restart to use it (ctrl+d, then bruine).");
+  });
+
+  test("nothing runs without a yes, nor when there is nothing newer, nor on a git checkout", async () => {
+    const install = async () => {
+      throw new Error("must not run");
+    };
+    expect(await runUpdateCommand({ current: "0.1.0", kind: "npm", ui: no, check: fetched("0.2.0"), install })).toBe("Not updated. /update when you are ready.");
+    expect(await runUpdateCommand({ current: "0.2.0", kind: "npm", ui: yes, check: fetched("0.2.0"), install })).toBe("bruine 0.2.0 is the latest version.");
+    expect(await runUpdateCommand({ current: "0.1.0", kind: "developer", ui: yes, check: fetched("0.2.0"), install })).toMatch(/git pull && pnpm build/);
+    expect(await runUpdateCommand({ current: "0.1.0", kind: "pnpm", check: fetched("0.2.0"), install })).toBe(
+      "bruine 0.2.0 is available (you have 0.1.0). To install it: pnpm add -g bruine@latest",
+    );
+  });
+
+  test("a failed install says why, in one line, and what to run by hand", async () => {
+    const answer = await runUpdateCommand({
+      current: "0.1.0",
+      kind: "npm",
+      ui: yes,
+      check: fetched("0.2.0"),
+      install: async () => ({ ok: false, code: 243, output: "npm error code EACCES\nnpm error permission denied\n" }),
+    });
+    expect(answer).toBe("The update failed (exit 243): npm error permission denied. Run it yourself: npm install -g bruine@latest");
+    expect(await runUpdateCommand({ current: "0.1.0", kind: "npm", ui: yes, check: async () => ({ ran: "failed" as const }) })).toMatch(/^Could not reach the npm registry/);
+  });
+
+  test("the launch's check is shared with the session, so the notice can come on the first launch", async () => {
+    const home = await mkdtemp(join(tmpdir(), "bruine-update-pending-"));
+    const check = startUpdateCheck({
+      dshHome: home,
+      isTTY: true,
+      env: {},
+      doc: {},
+      fetchImpl: async () => ({ ok: true, json: async () => ({ version: "9.9.9" }) }),
+    });
+    expect(pendingUpdateCheck()).toBe(check);
+    expect(newerVersion(await pendingUpdateCheck(), "0.1.0")).toBe("9.9.9");
+    expect(newerVersion(await check, "9.9.9")).toBeUndefined();
+  });
+
+  test("lastLine keeps the last thing said", () => {
+    expect(lastLine("a\n\n  b  \n\n")).toBe("b");
+    expect(lastLine("")).toBe("");
+  });
 });

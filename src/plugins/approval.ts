@@ -40,6 +40,22 @@ export function buildQuestion(
   return `${approvalTitle(request, describe)} ? [y/N] `;
 }
 
+/**
+ * What "Always" says it will do, from the rule key it would remember: one exact command
+ * line for a shell tool, the whole tool otherwise. "Always for this session" never said
+ * which, and the difference is the whole point of the answer.
+ */
+export function alwaysLabel(scope: string | undefined, toolName: string): string {
+  if (scope === undefined) return "Always for this session";
+  const at = scope.indexOf(":");
+  if (at > 0) {
+    const command = scope.slice(at + 1).replace(/\s+/g, " ").trim();
+    const shown = command.length > 48 ? `${command.slice(0, 47)}…` : command;
+    return `Always allow "${shown}" this session`;
+  }
+  return `Always allow every ${toolName === "edit" || toolName === "write" ? toolName : `${toolName} call`} this session`;
+}
+
 /** Only an explicit y/yes allows; everything else (including empty) rejects. */
 export function parseAnswer(line: string): boolean {
   return /^y(es)?$/i.test(line.trim());
@@ -48,7 +64,7 @@ export function parseAnswer(line: string): boolean {
 export function apply(ctx: DshContext): void {
   let repl: BruineRepl | undefined;
   let render: RenderService | undefined;
-  let modes: Pick<BruineModesService, "rememberFor" | "decisionFor" | "governs"> | undefined;
+  let modes: Pick<BruineModesService, "rememberFor" | "decisionFor" | "governs"> & Partial<Pick<BruineModesService, "alwaysScope">> | undefined;
   ctx.inject(["bruineRepl"], (c: any) => {
     repl = c.bruineRepl;
   });
@@ -134,14 +150,18 @@ export function apply(ctx: DshContext): void {
 
       const ui = repl.ui;
       if (ui !== undefined) {
-        // TUI mode (T13d/T16): pi-tui select. Escape/cancel = reject.
+        // TUI mode (T13d/T16): the approval band, y / a / n. Escape/cancel = reject.
         const title = approvalTitle(request, (id) => render?.describe?.(id));
         return ui
-          .askChoice(title, [
-            { value: "allow", label: "Allow once" },
-            { value: "always", label: "Always for this session" },
-            { value: "reject", label: "Reject" },
-          ])
+          .askChoice(
+            title,
+            [
+              { value: "allow", label: "Allow once" },
+              { value: "always", label: alwaysLabel(modes?.alwaysScope?.(request.callId), request.toolName) },
+              { value: "reject", label: "Reject" },
+            ],
+            { keys: ["y", "a", "n"] },
+          )
           .then((choice) => {
             if (choice === 0) return "allowed-once" as const;
             if (choice === 1) {

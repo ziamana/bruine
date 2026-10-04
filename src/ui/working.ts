@@ -28,6 +28,8 @@ export class WorkingComponent implements Component {
   get active(): boolean { return this.#animate; }
   private status(): { label: string; elapsed: string } {
     const elapsed = this.activity.elapsed;
+    // An approval is open: nothing is running, and the label says whose turn it is.
+    if (this.activity.held) return { label: `${isAscii(this.icons) ? "?" : "◆"} Waiting for you`, elapsed: formatElapsed(elapsed) };
     // Rain while the model works: how hard it falls is the effort it was asked to think at.
     const frame = this.#animate ? dropSpinner(elapsed, rainLevel(), isAscii(this.icons)) : isAscii(this.icons) ? "|" : "⋮";
     return { label: `${frame} ${this.state}`, elapsed: formatElapsed(elapsed) };
@@ -35,7 +37,7 @@ export class WorkingComponent implements Component {
   /** Compact label for the composer rule; time has its own muted color. */
   label(): string {
     const status = this.status();
-    return `${ansi.violet(status.label)} ${ansi.gray(status.elapsed)}`;
+    return `${(this.activity.held ? ansi.yellow : ansi.violet)(status.label)} ${ansi.gray(status.elapsed)}`;
   }
   line(width: number): string {
     const status = this.status();

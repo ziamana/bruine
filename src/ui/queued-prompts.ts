@@ -12,6 +12,8 @@ const SHOWN = 3;
  */
 export class QueuedPrompts implements Component {
   #items: string[] = [];
+  /** An approval is open: its keys are the only ones on screen, so these hints step aside. */
+  quiet = false;
 
   constructor(private readonly icons: BruineIcons) {}
 
@@ -34,6 +36,7 @@ export class QueuedPrompts implements Component {
     });
     const more = this.#items.length - SHOWN;
     if (more > 0) out.push(ansi.gray(`  + ${String(more)} more queued`));
+    if (this.quiet) return out;
     const keys = ascii ? "up: edit the last  .  esc: stop, and take them back" : "↑ edit the last  ·  esc stop, and take them back";
     out.push(truncateToWidth(ansi.gray(`  ${keys}`), width, ""));
     return out;

@@ -18,7 +18,7 @@ interface PromptEditor {
 /** Own the input rules and their activity label without changing editor input. */
 export class PromptFrame implements Component {
   #working: WorkingComponent;
-  #role: "lavender" | "faint" | undefined;
+  #role: "lavender" | "faint" | "amber" | undefined;
   constructor(
     private content: Component,
     private editor: PromptEditor,
@@ -40,7 +40,7 @@ export class PromptFrame implements Component {
    * is looking at).
    */
   #glow(): { mode: Exclude<GlowMode, "off">; time: number } | undefined {
-    if (!this.#working.active || isAscii(this.icons) || process.env.BRUINE_NO_GLOW === "1") return undefined;
+    if (!this.#working.active || isAscii(this.icons) || process.env.BRUINE_NO_GLOW === "1" || this.activity.held) return undefined;
     if (!this.activity.active && !this.editor.focused) return undefined;
     const mode = glowMode(currentEffortName());
     if (mode === "off" || !glowDrawable()) return undefined;
@@ -57,7 +57,8 @@ export class PromptFrame implements Component {
     return since === undefined ? undefined : rippleFrame(since, isAscii(this.icons));
   }
   private updateBorder(): void {
-    const role = this.activity.active || this.editor.focused ? "lavender" : "faint";
+    // While an approval is open the keys belong to it: the box steps back.
+    const role = this.activity.held ? "faint" : this.activity.active || this.editor.focused ? "lavender" : "faint";
     if (role === this.#role) return;
     this.#role = role;
     this.editor.borderColor = text => paint(role, asciiText(text, isAscii(this.icons), "editor"));
@@ -93,7 +94,8 @@ export class PromptFrame implements Component {
     const label = truncateToWidth(ripple !== undefined ? paint("lavender", ripple) : this.#working.label(), room, ascii ? "..." : "…");
     const caption = label + paint("muted", suffix);
     const rest = Math.max(0, width - visibleWidth(caption) - 4);
-    return `${paint("lavender", rule.repeat(2))} ${caption} ${paint("lavender", rule.repeat(rest))}`;
+    const ink = this.activity.held ? "amber" : "lavender";
+    return `${paint(ink, rule.repeat(2))} ${caption} ${paint(ink, rule.repeat(rest))}`;
   }
   handleInput(data: string): void { this.content.handleInput?.(data); }
   invalidate(): void { this.content.invalidate(); }

@@ -60,6 +60,8 @@ export interface BruineModesService {
   togglePlan(): void;
   cyclePermission(): Promise<PermissionMode>;
   rememberFor(callId: string | undefined): void;
+  /** What an "Always" on this call would cover: the rule key it would remember. */
+  alwaysScope(callId: string | undefined): string | undefined;
   decisionFor(callId: string | undefined): "allow" | "ask" | "deny" | undefined;
   governs(agent: unknown): boolean;
   readonly log: ModesLogEntry[];
@@ -168,9 +170,14 @@ export class Modes implements BruineModesService {
     this.#confirmFullAccess = fn;
   }
 
+  alwaysScope(callId: string | undefined): string | undefined {
+    return callId === undefined ? undefined : this.pendingKeys.get(callId);
+  }
+
   rememberFor(callId: string | undefined): void {
     const key = callId === undefined ? undefined : this.pendingKeys.get(callId);
-    if (key !== undefined) this.sessionAllowed.add(key);
+    // A shell key with no command would allow every command: never remember one.
+    if (key !== undefined && !/^(bash|pwsh):$/.test(key)) this.sessionAllowed.add(key);
   }
 
   decisionFor(callId: string | undefined): "allow" | "ask" | "deny" | undefined {
@@ -370,7 +377,7 @@ export function apply(ctx: DshContext): void {
     // one, `ask` has no answer, so it becomes `deny`: failing open would make
     // the gate decorative.
     const canAsk = repl?.ui !== undefined;
-    const args = parseArgs(String(exec.arguments ?? "{}"));
+    const args = parseArgs(exec.arguments ?? {});
     const summary = execSummary(exec.name, args);
     const rule = decide(exec.name, args, {
       mode: modes.permission,

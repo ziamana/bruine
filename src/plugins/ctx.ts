@@ -42,7 +42,7 @@ export interface BruineRepl {
     askChoice(
       title: string,
       items: Array<{ value: string; label: string }>,
-      opts?: { initial?: number },
+      opts?: { initial?: number; keys?: readonly string[] },
     ): Promise<number>;
     askQuestions?(
       questions: Array<{

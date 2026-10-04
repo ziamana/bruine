@@ -908,8 +908,12 @@ test.skipIf(process.platform === "win32")("approval: Auto runs bash ls without a
     toolScript("bash", { command: "ls", description: "list project files" }, "ask_ls"), textScript("ASK_LS_DONE"),
   ], async (h) => {
     await h.prompt("List the project files");
-    await h.waitFor("? Allow bash: ls");
-    expect(h.screen().join("\n")).toContain("Allow once");
+    await h.waitFor("Allow bash");
+    // The approval band: the tool on its frame, the command inside, a letter per answer.
+    expect(h.screen().some((line) => /│ ls\s+│/.test(line))).toBe(true);
+    expect(h.screen().join("\n")).toContain("y  Allow once");
+    expect(h.screen().join("\n")).toContain('a  Always allow "ls" this session');
+    expect(h.screen().join("\n")).toContain("Waiting for you");
     h.press("enter");
     await h.waitFor("ASK_LS_DONE");
   }, false, "ask");

@@ -41,6 +41,7 @@ import { IntroPlayer, introSetting, planIntro, readLastIntro, rememberIntro } fr
 import { TurnActivity } from "./turn-activity.js";
 import { WeatherBackdrop, readWeatherEffect, type WeatherEffect } from "./weather-effect.js";
 import { QueuedPrompts } from "./queued-prompts.js";
+import { ApprovalBand } from "./approval-band.js";
 import { TaskPanel, type TaskItem } from "./task-panel.js";
 import { createAutocomplete } from "./file-complete.js";
 import {
@@ -543,7 +544,8 @@ export class BruineUi {
       busy: () => this.activity.active,
       rows: () => this.terminal.rows,
       decorateRows: () => this.shell.weatherRows,
-      paused: () => this.mouse.span !== undefined,
+      // A selection in progress, or an approval: the one still moment means "you decide".
+      paused: () => this.mouse.span !== undefined || this.activity.held,
       allowed: () => this.terminal.columns >= 12 && terminalMotionAllowed({ ascii: this.icons.think === "*" }) && colorDepth() !== "none" && appEnv("NO_RAIN") !== "1",
     });
     this.#layer.addChild(this.weather);
@@ -1508,8 +1510,13 @@ export class BruineUi {
     this.requestRender();
   }
 
-  askChoice(title: string, items: SelectItem[], opts: { initial?: number; preview?: (index: number) => void } = {}): Promise<number> {
+  askChoice(
+    title: string,
+    items: SelectItem[],
+    opts: { initial?: number; preview?: (index: number) => void; keys?: readonly string[] } = {},
+  ): Promise<number> {
     if (this.#closed) return Promise.resolve(-1);
+    if (opts.keys !== undefined && opts.keys.length === items.length) return this.#askApproval(title, items, opts.keys);
     this.clearNoticeBox();
     this.#setConfirming(true);
     const titleText = new Text(ansi.yellow(title), 1, 0);
@@ -1532,6 +1539,36 @@ export class BruineUi {
       list.onSelect = (item) => finish(items.indexOf(item));
       list.onCancel = () => finish(-1);
       this.tui.setFocus(list);
+      this.requestRender();
+    });
+  }
+
+  /**
+   * An approval: the turn is waiting on the person, so it says so everywhere at once. The
+   * band is the one framed amber block, the prompt box steps back, the turn's clock stops,
+   * the rain stops, and the queue's own key hints leave the screen to the band's.
+   */
+  #askApproval(title: string, items: SelectItem[], keys: readonly string[]): Promise<number> {
+    this.clearNoticeBox();
+    this.#setConfirming(true);
+    const band = new ApprovalBand(title, items.map((item, i) => ({ key: keys[i]!, label: item.label })), this.icons);
+    this.noticeBox.addChild(band);
+    this.activity.hold();
+    this.queued.quiet = true;
+    this.requestRender();
+    return new Promise((resolve) => {
+      const finish = (index: number) => {
+        this.queued.quiet = false;
+        this.activity.release();
+        this.#setConfirming(false);
+        this.clearNoticeBox();
+        this.tui.setFocus(this.promptFrame);
+        this.requestRender();
+        resolve(index);
+      };
+      band.onSelect = (index) => finish(index);
+      band.onCancel = () => finish(-1);
+      this.tui.setFocus(band);
       this.requestRender();
     });
   }

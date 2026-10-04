@@ -200,7 +200,18 @@ export interface DecisionContext {
   mcp?: (name: string) => { readOnly: boolean; allowed: boolean } | undefined;
 }
 
-export function parseArgs(raw: string): Record<string, unknown> {
+/**
+ * A call's arguments as an object. dsh hands `tools/pre-execute` the arguments already
+ * parsed (`ToolExecutionInput.arguments: unknown`); the raw JSON string is accepted too.
+ *
+ * It used to take only the string, and was called as `parseArgs(String(exec.arguments))`:
+ * an object became "[object Object]", which parses to nothing, so every bash call was
+ * judged as `bash` with no command. Read-only commands always asked, and an "Always" on
+ * one command was remembered as `bash:`, which then allowed every command after it.
+ */
+export function parseArgs(raw: unknown): Record<string, unknown> {
+  if (raw !== null && typeof raw === "object") return Array.isArray(raw) ? {} : (raw as Record<string, unknown>);
+  if (typeof raw !== "string") return {};
   try {
     const v = JSON.parse(raw);
     return v !== null && typeof v === "object" && !Array.isArray(v)

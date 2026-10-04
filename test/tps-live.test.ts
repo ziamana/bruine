@@ -38,7 +38,7 @@ test("prefill is held during the answer and animates on completion without chang
   motion();
   const footer = new FooterComponent(UNICODE_ICONS, { cwd: "/tmp" });
   footer.beginTurn(); footer.set({ pp: 1200, tps: 8, tpsEstimated: true, subagents: 1 });
-  expect(text(footer)).toContain("TPS: ~8.0 tok/s"); expect(text(footer)).not.toContain("prefill");
+  expect(text(footer)).toContain("~8.0 tok/s"); expect(text(footer)).not.toContain("prefill");
   footer.endTurn(); expect(footer.active).toBe(true);
   vi.advanceTimersByTime(325);
   expect(text(footer)).toContain("prefill 1.1k tok/s"); expect(footer.state.pp).toBe(1200);
@@ -67,11 +67,11 @@ test("streamed text updates approximate TPS before usage; final usage replaces i
     fake.emit("agent/assistant-stream", { agent, frame: { type: "start", time: 0 } });
     frame(1000, { type: "text-delta", text: "abcd" });
     frame(2000, { type: "text-delta", text: "x".repeat(32) });
-    expect(text(footer)).toContain("TPS: ~8.0 tok/s");
+    expect(text(footer)).toContain("~8.0 tok/s");
     frame(3000, { type: "reasoning-delta", text: "x".repeat(8) });
-    expect(text(footer)).toContain("TPS: ~5.0 tok/s");
+    expect(text(footer)).toContain("~5.0 tok/s");
     frame(3100, { type: "usage", usage: { outputTokens: 60, inputTokens: 1200 } });
-    expect(text(footer)).toContain("TPS: 30.0 tok/s"); expect(footer.state.tpsEstimated).toBe(false);
+    expect(text(footer)).toContain("30.0 tok/s"); expect(footer.state.tpsEstimated).toBe(false);
     expect(text(footer)).not.toContain("prefill");
     frame(3200, { type: "finish" });
     fake.emit("session/event", agent.session, { type: "turn/end", data: {} });

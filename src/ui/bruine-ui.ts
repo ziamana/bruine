@@ -208,7 +208,10 @@ export function headerHost(
   const main = bruineJson?.models?.main;
   if (typeof main?.baseUrl === "string" && main.baseUrl !== "") {
     try {
-      return new URL(main.baseUrl).hostname;
+      // A loopback address says nothing a person reads; the port says which server.
+      const url = new URL(main.baseUrl);
+      if (/^(127\.\d+\.\d+\.\d+|localhost|\[::1\])$/.test(url.hostname)) return url.port === "" ? "localhost" : `localhost:${url.port}`;
+      return url.hostname;
     } catch {
       // fall through
     }
@@ -1147,7 +1150,9 @@ export class BruineUi {
     const ink = { label: this.#ink("lavender"), name: this.#ink("muted"), chrome: this.#ink("faint") };
     const resources = [
       planResourceLine("skills", this.#resources.skills, width, { hint: "/skills", sep: lineSep, ellipsis }),
-      planResourceLine("plugins", this.#resources.plugins, width, { sep: lineSep, ellipsis }),
+      // bruine's own plugins are how it is built, not something to read on every start:
+      // they are counted, and their names are one command away.
+      planResourceLine("plugins", this.#resources.plugins.length === 0 ? [] : [`${String(this.#resources.plugins.length)} loaded`], width, { hint: "/plugins", sep: lineSep, ellipsis }),
     ].flatMap((plan) => (plan === undefined ? [] : [paintResourceLine(plan, width, ink, lineSep)]));
     // The blank row is what makes the lines read as a list rather than as more
     // chrome: the eye needs a gap to change register.
@@ -1168,6 +1173,11 @@ export class BruineUi {
    * plugin entry points of the package that is running); a caller that knows better
    * — a plugin mounting something extra — replaces the list it owns.
    */
+  /** The plugins this session loaded, for /plugins: the header only counts them. */
+  get pluginNames(): readonly string[] {
+    return this.#resources.plugins;
+  }
+
   setResources(next: SessionResources): void {
     if (next.skills !== undefined) this.#resources.skills = [...next.skills];
     if (next.plugins !== undefined) this.#resources.plugins = [...next.plugins];

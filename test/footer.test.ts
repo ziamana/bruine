@@ -42,8 +42,8 @@ describe("the three rows (D3)", () => {
     });
     expect(rows(f, 100)).toEqual([
       expect.stringContaining("~/Bureau  ⎇ main"),
-      expect.stringContaining("↑17k ↓749  ·  cached 34k · hit 99.9%  ·  ctx 12% of 131k"),
-      expect.stringContaining("↯ TPS: 78.0 tok/s"),
+      expect.stringContaining("↑17k ↓749  ·  cache 99.9% · 34k served  ·  ctx 12% of 131k"),
+      expect.stringContaining("↯ 78.0 tok/s"),
     ]);
     // The row the eye lands on: the route at the right edge, the metrics at the margin.
     const turn = rows(f, 100)[1]!;
@@ -65,7 +65,7 @@ describe("the three rows (D3)", () => {
       contextWindow: 131_072,
       model: "m",
     });
-    expect(rows(f, 100)[1]).toContain("cached 34k · hit 99.9%");
+    expect(rows(f, 100)[1]).toContain("cache 99.9% · 34k served");
     expect(rows(f, 100)[1]).toContain("ctx 12% of 131k");
     const narrow = rows(f, 60)[1]!;
     expect(narrow).toContain("↑17k ↓749 R34k CH99.9% 12%/131k");
@@ -79,7 +79,7 @@ describe("the three rows (D3)", () => {
     // Faint is the structure role (palette.ts); a separator in the text role
     // would read as a reading.
     expect(turn).toContain("\x1b[90m\u00b7\x1b[39m");
-    expect(strip(turn)).toContain("↑1 ↓2  ·  cached 3 · hit 99.0%  ·  ctx 4.0% of 100");
+    expect(strip(turn)).toContain("↑1 ↓2  ·  cache 99.0% · 3 served  ·  ctx 4.0% of 100");
   });
 
   test("the first row ends on the badge, and the badge is the mode the session is in", () => {
@@ -140,11 +140,11 @@ describe("degradation (D3: throughput, then cache, then context)", () => {
     for (const width of [70, 68, 67, 60, 30]) {
       const squeezed = rows(at(full), width);
       expect(squeezed).toHaveLength(3);
-      expect(squeezed[2]).toContain("TPS: 78.0 tok/s");
+      expect(squeezed[2]).toContain("78.0 tok/s");
     }
     const longRoute = rows(at({ ...full, model: "Ornith-1.5-9B-Q4_K_M-instruct-uncensored" }), 70);
     expect(longRoute).toHaveLength(3);
-    expect(longRoute[2]).toContain("TPS: 78.0 tok/s");
+    expect(longRoute[2]).toContain("78.0 tok/s");
   });
 
   test("then the cache, then the context, and the route is never cut", () => {
@@ -227,9 +227,9 @@ describe("widths, ASCII and no colour (D3)", () => {
     const lines = a.render(100);
     expect(lines.join("")).not.toMatch(/\x1b\[/);
     expect(lines[0]).toContain("~/Bureau  # main");
-    expect(lines[1]).toContain("^17k v749  -  cached 34k - hit 99.9%  -  ctx 12% of 131k");
+    expect(lines[1]).toContain("^17k v749  -  cache 99.9% - 34k served  -  ctx 12% of 131k");
     expect(lines[1].trimEnd().endsWith("(local) Ornith-1.5-9B-Q4_K_M - high")).toBe(true);
-    expect(lines[2]).toContain("* TPS: 78.0 tok/s");
+    expect(lines[2]).toContain("* 78.0 tok/s");
     expect(lines[0].trimEnd().endsWith("FULL ACCESS  plan")).toBe(true);
     for (const width of [60, 30]) {
       for (const line of a.render(width)) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
@@ -244,7 +244,7 @@ describe("widths, ASCII and no colour (D3)", () => {
     expect(ctx(70)).toContain("\x1b[33m70% of 100");
     expect(ctx(78)).toContain("\x1b[31m78% of 100");
     // A cache that has not answered yet is gray (T27.1), not a reading of zero.
-    expect(at({ cachePct: 99, cacheFirst: true }).render(100)[1]!).toContain("\x1b[90mhit\x1b[39m \x1b[90m99.0%");
+    expect(at({ cachePct: 99, cacheFirst: true }).render(100)[1]!).toContain("\x1b[90mcache\x1b[39m \x1b[90m99.0%");
     expect(at({ cachePct: 10 }).render(100)[1]!).toContain("\x1b[31m10.0%");
     // The throughput is sky: it is a rate, not a verdict.
     expect(at({ tps: 78 }).render(100)[2]!).toContain("\x1b[36m");
@@ -256,16 +256,16 @@ describe("widths, ASCII and no colour (D3)", () => {
     const lines = rows(at(busy), 120);
     expect(lines).toHaveLength(3);
     expect(lines[0]).toContain("~/Bureau");
-    expect(lines[1]).toContain("↑17k ↓749  ·  cached 34k · hit 99.9%");
+    expect(lines[1]).toContain("↑17k ↓749  ·  cache 99.9% · 34k served");
     expect(lines[1]!.trimEnd().endsWith("(local) Ornith-1.5-9B-Q4_K_M • high")).toBe(true);
-    expect(lines[2]).toContain("TPS");
+    expect(lines[2]).toContain("78.0 tok/s");
   });
 
   test("prefill shares the speed row when it fits and wraps when it does not", () => {
     const f = at({ tps: 78, pp: 1_200 });
     expect(rows(f, 100)[2]).toContain("prefill 1.2k tok/s");
     expect(rows(f, 24).join("\n")).toContain("prefill 1.2k tok/s");
-    expect(rows(f, 24).join("\n")).toContain("TPS: 78.0 tok/s");
+    expect(rows(f, 24).join("\n")).toContain("78.0 tok/s");
   });
 });
 
@@ -371,7 +371,7 @@ describe("the branch it names (D3)", () => {
     f.set({ inputTokens: 17_000, outputTokens: 749, cacheRead: 34_000, cachePct: 99.9 });
     const line = rows(f, 100)[1]!;
     expect(line).toContain("↑17k ↓749");
-    expect(line).toContain("cached 34k · hit 99.9%");
+    expect(line).toContain("cache 99.9% · 34k served");
     expect(rows(f, 100)[0]).toContain("⎇ main");
   });
 });

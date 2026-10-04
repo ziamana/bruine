@@ -144,8 +144,8 @@ long agent loops. The setup detects what the server's chat template supports (th
 PowerShell there. [docs/PLATFORMS.md](docs/PLATFORMS.md) lists what was checked and what still has limits.
 
 **How do I make it ask less?** `/auto` lets a fast model judge the routine actions (risky ones still
-ask), "Always for this session" remembers one exact command, and `/full` asks nothing at all (it says
-so loudly). For an MCP server you trust, `"readOnly": true` or `"alwaysAllow": [...]`.
+ask), the approval's `a` (Always) remembers one exact command for the session and says which, and
+`/full` asks nothing at all (it says so loudly). For an MCP server you trust, `"readOnly": true` or `"alwaysAllow": [...]`.
 
 **Can I reuse my Claude Code setup?** Your skills, yes, and MCP servers in the same format, including a
 project's `.mcp.json`. Claude Code hooks are not run.

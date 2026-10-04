@@ -65,6 +65,7 @@ export const BRUINE_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/ask", description: "Switch permissions directly" },
   { name: "/full", description: "Switch permissions directly" },
   { name: "/skills", description: "List available skills" },
+  { name: "/plugins", description: "List the plugins this session loaded" },
   { name: "/config", description: "Open settings.yaml and bruine.json in your editor" },
   { name: "/tasks", description: "List background tasks (commands and sub-agents); /tasks kill <id> stops one" },
   { name: "/reload", description: "Re-read settings.yaml and the terminal background" },
@@ -664,6 +665,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/model  Switch provider and model (also f2)",
           "/provider  List the providers (also /provider all)",
           "/skills  List available skills (or /skills <name>)",
+          "/plugins  List the plugins this session loaded",
           "/config  Open settings.yaml and bruine.json in your editor (/config path lists them)",
           "/tasks  List background tasks; /tasks kill <id> stops one",
           "/reload  Re-read settings.yaml and the terminal background",
@@ -682,6 +684,11 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       const message = await runEffectCommand(clean.slice(cmd.length), ui, runtimeHome());
       if (ui === undefined) reply(message);
       else ui.showNotice(message);
+      return;
+    }
+    if (cmd === "/plugins") {
+      const names = (ui as { pluginNames?: readonly string[] } | undefined)?.pluginNames ?? [];
+      reply(names.length === 0 ? "No plugins listed for this session." : `Plugins (${String(names.length)}): ${names.join(", ")}`);
       return;
     }
     if (cmd === "/skills") {

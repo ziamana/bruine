@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/demo/bruine.svg" alt="bruine in a terminal: a prompt, the model's reasoning streaming then folding away, a file read, an edit shown as a diff, two permission prompts, the tests passing, and a second prompt that was queued while it worked going out after" width="820">
+<img src="docs/demo/bruine.svg" alt="bruine in a terminal: a prompt, the model's reasoning streaming then folding away, a file read, an edit shown as a diff, two permission prompts, the tests passing, and a second prompt that was queued while it worked going out after" width="100%">
 
 # bruine
 

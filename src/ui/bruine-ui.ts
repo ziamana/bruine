@@ -208,10 +208,8 @@ export function headerHost(
   const main = bruineJson?.models?.main;
   if (typeof main?.baseUrl === "string" && main.baseUrl !== "") {
     try {
-      // A loopback address says nothing a person reads; the port says which server.
       const url = new URL(main.baseUrl);
-      if (/^(127\.\d+\.\d+\.\d+|localhost|\[::1\])$/.test(url.hostname)) return url.port === "" ? "localhost" : `localhost:${url.port}`;
-      return url.hostname;
+      return loopbackLabel(url) ?? url.hostname;
     } catch {
       // fall through
     }
@@ -241,6 +239,12 @@ export function readBruineJsonForHeader(dshHome?: string): {
  * own network (it tells you which box), the provider's display name for a cloud API
  * (a 45-character host like token-plan.ap-southeast-1.maas.aliyuncs.com says nothing).
  */
+/** A loopback address says nothing a person reads; the port says which server: `localhost:8080`. */
+export function loopbackLabel(url: URL): string | undefined {
+  if (!/^(127\.\d+\.\d+\.\d+|localhost|\[::1\])$/.test(url.hostname)) return undefined;
+  return url.port === "" ? "localhost" : `localhost:${url.port}`;
+}
+
 export function serverLabel(hostname: string, displayName?: string): string {
   const h = hostname.toLowerCase();
   const local =
@@ -1219,7 +1223,8 @@ export class BruineUi {
       try {
         const route = readSettingsRoute();
         if (route?.baseUrl !== undefined && route.baseUrl !== "") {
-          host = serverLabel(new URL(route.baseUrl).hostname, route.providerDisplayName);
+          const url = new URL(route.baseUrl);
+          host = loopbackLabel(url) ?? serverLabel(url.hostname, route.providerDisplayName);
         } else if (route?.provider !== undefined && route.provider !== "" && route.provider !== "local") {
           host = route.provider;
         }

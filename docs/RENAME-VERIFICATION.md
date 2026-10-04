@@ -35,3 +35,5 @@ https://github.com/ziamana/bruine/issues
 ```
 
 `npm view bruine name version` returned E404 during the availability check. This does not reserve the name or publish the package. Global command installation and publishing were deliberately not exercised; the two bin entries both target `dist/bin.js`.
+
+Update, 2026-10-04: the plain name was free but npm refused to publish it ("Package name too similar to existing package byline"), so bruine is published as `@ziamana/bruine`. The installed command is still `bruine`.

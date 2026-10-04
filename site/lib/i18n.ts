@@ -21,8 +21,8 @@ export const pagePath = (path: string): string => {
 export type Installer = "npm" | "pnpm" | "bun";
 export const INSTALL: Record<Installer, string> = {
   npm: "npm install -g @ziamana/bruine",
-  pnpm: "pnpm add -g bruine",
-  bun: "bun add -g bruine",
+  pnpm: "pnpm add -g @ziamana/bruine",
+  bun: "bun add -g @ziamana/bruine",
 };
 
 export interface Chapter {

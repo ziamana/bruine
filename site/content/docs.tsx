@@ -61,7 +61,7 @@ const en: DocSection[] = [
           <code>{"npm install -g @ziamana/bruine\nbruine"}</code>
         </pre>
         <p>
-          <code>pnpm add -g bruine</code> and <code>bun add -g bruine</code> work too; bruine remembers which one installed it and updates through the same.
+          <code>pnpm add -g @ziamana/bruine</code> and <code>bun add -g @ziamana/bruine</code> work too; bruine remembers which one installed it and updates through the same.
         </p>
       </>
     ),
@@ -243,7 +243,7 @@ const fr: DocSection[] = [
           <code>{"npm install -g @ziamana/bruine\nbruine"}</code>
         </pre>
         <p>
-          <code>pnpm add -g bruine</code> et <code>bun add -g bruine</code> marchent aussi ; bruine se souvient de l'installateur utilisé et se met à jour avec lui.
+          <code>pnpm add -g @ziamana/bruine</code> et <code>bun add -g @ziamana/bruine</code> marchent aussi ; bruine se souvient de l'installateur utilisé et se met à jour avec lui.
         </p>
       </>
     ),

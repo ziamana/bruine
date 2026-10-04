@@ -34,6 +34,7 @@ import { echoLine, QuestionForm } from "./questions.js";
 import type { QuestionCallComponent } from "./question-call-component.js";
 import type { ReasoningComponent } from "./reasoning-component.js";
 import { PromptFrame } from "./prompt-frame.js";
+import type { SilenceProbe } from "./working.js";
 import { withEscapeFilter } from "./escape-filter.js";
 import { besideLogo, LOGO_BESIDE_GAP, LOGO_MIN_WIDTH, logoRows, paintResourceLine, planResourceLine } from "./header.js";
 import { terminalMotionAllowed } from "./logo-motion.js";
@@ -1058,6 +1059,11 @@ export class BruineUi {
   }
 
   /** Show the waiting state immediately on submit; content advances the activity. */
+  /** Where the working label reads how long the model has been quiet (bruine-silence). */
+  setSilenceProbe(probe: SilenceProbe | undefined): void {
+    this.promptFrame.silence = probe;
+  }
+
   showWorking(): void {
     if (this.#closed) return;
     this.footer.beginTurn();

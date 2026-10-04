@@ -426,7 +426,7 @@ test("startup: header host and window known before first answer, pretty name (T2
   await scenario("startup", [], async (h) => {
     const head = h.screen().join("\n");
     expect(head).not.toContain("Starting session");
-    expect(head).toContain("127.0.0.1");
+    expect(head).toMatch(/localhost:\d+/);
     expect(head).toContain("e2e-model Pretty");
     // The turn row reads `ctx 0% of 100k`: the share of the window spent, and
     // the window.
@@ -1519,6 +1519,24 @@ test("errors: 401 then 404 print the exact two lines (T33b)", async () => {
         ],
       },
     },
+  );
+}, 90_000);
+
+test("a model that goes quiet is retried, and the retry says so (adaptive silence)", async () => {
+  // The first answer starts, then the server goes silent for half a minute; the silence budget
+  // (scaled down here) runs out first, dsh retries, and the second request answers.
+  await serverScenario(
+    "silence-retry",
+    [{ chunks: [{ delta: { content: "Let me" } }], finishDelayMs: 30_000 }, textScript("RECOVERED_AFTER_SILENCE")],
+    async (h) => {
+      await h.prompt("hello");
+      await h.until(() => /has not answered for \d+s\. Retry 1\/5/.test(h.screen().join("\n")), 30_000, "the retry line");
+      await h.waitFor("RECOVERED_AFTER_SILENCE", 30_000);
+      expect(h.screen().join("\n")).toMatch(/↻ The model has not answered for \d+s\. Retry 1\/5 in [\d.]+s\./);
+      expect(h.server.mainRequests()).toHaveLength(2);
+      await h.dump("silence-retry");
+    },
+    { env: { BRUINE_SILENCE_SCALE: "0.02" } },
   );
 }, 90_000);
 

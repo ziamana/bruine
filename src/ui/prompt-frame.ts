@@ -2,7 +2,7 @@ import { appEnv } from "../compat.js";
 import { stripTerminalSequences, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
 import { bruineIcons, isAscii, asciiText, type BruineIcons } from "../render/chars.js";
 import { paint } from "./palette.js";
-import { WorkingComponent } from "./working.js";
+import { WorkingComponent, type SilenceProbe } from "./working.js";
 import { currentEffortName, rippleFrame } from "./rain.js";
 import { glowDrawable, glowMode, tintBorder, type GlowMode } from "./border-glow.js";
 import { Box } from "./box.js";
@@ -30,6 +30,8 @@ export class PromptFrame implements Component {
     activity.subscribe(() => this.updateBorder());
     this.updateBorder();
   }
+  /** Where the working label reads the live silence from. */
+  set silence(probe: SilenceProbe | undefined) { this.#working.silence = probe; }
   get focused(): boolean { return this.editor.focused; }
   set focused(value: boolean) { this.editor.focused = value; this.updateBorder(); }
   get active(): boolean { return (this.activity.active && this.#working.active) || this.#ripple() !== undefined || this.#glow() !== undefined; }

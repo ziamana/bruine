@@ -38,6 +38,7 @@
     "./modes": "./dist/plugins/modes.js",
     "./web-search": "./dist/plugins/web-search.js",
     "./mcp": "./dist/plugins/mcp.js",
+    "./silence": "./dist/plugins/silence.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
     "./compat": "./dist/compat.js"

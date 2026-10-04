@@ -1,3 +1,4 @@
+import { STREAM_CEILING_MS } from "../llm/silence.js";
 import type { Discovered } from "./discover.js";
 import type { RolePick } from "./flow.js";
 import type { SettingsDoc } from "./simple.js";
@@ -45,8 +46,9 @@ export const SPACE_BUNNY_INPUT: string[] = ["text", "image"];
 /**
  * A stream timeout of two minutes that an earlier version wrote into the route. It was wrong: at its
  * highest level the model stays silent for longer than that while it prepares a large write, so every
- * attempt was cut off and the turn failed. The harness default (five minutes) is the right one, and a
- * route that still carries exactly this value loses it.
+ * attempt was cut off and the turn failed. A route that still carries exactly this value gets the
+ * ceiling instead (STREAM_CEILING_MS): how long a silence may last is now bruine's adaptive budget
+ * (src/llm/silence.ts), which waits longer for a large write and longer on every retry.
  */
 export const SPACE_BUNNY_LEGACY_IDLE_TIMEOUT_MS = 120_000;
 
@@ -57,6 +59,7 @@ export function spaceBunnyRoute(): Record<string, unknown> {
     api: "openai-completions",
     baseURL: SPACE_BUNNY.baseUrl,
     headers: { ...SPACE_BUNNY_HEADERS },
+    streamIdleTimeoutMs: STREAM_CEILING_MS,
     models: [
       {
         id: SPACE_BUNNY.model,

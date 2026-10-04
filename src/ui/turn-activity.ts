@@ -7,6 +7,7 @@ export class TurnActivity {
   #startedAt = 0;
   #stoppedAt: number | undefined;
   #heldAt: number | undefined;
+  #note: string | undefined;
   #listeners = new Set<() => void>();
   constructor(private now: () => number = Date.now) {}
   get active(): boolean { return this.#active; }
@@ -14,6 +15,13 @@ export class TurnActivity {
   get startedAt(): number { return this.#startedAt; }
   /** The turn's own time: the minutes it waited on a person are not the agent's. */
   get elapsed(): number { return Math.max(0, (this.#heldAt ?? this.now()) - this.#startedAt); }
+  /** A word on what the turn is going through (`retry 2/5`), shown beside the state. */
+  get note(): string | undefined { return this.#note; }
+  setNote(note: string | undefined): void {
+    if (this.#note === note) return;
+    this.#note = note;
+    this.changed();
+  }
   /** Waiting on the person at the keyboard (an approval): the clock is paused. */
   get held(): boolean { return this.#heldAt !== undefined; }
   /** Milliseconds since the turn ended; undefined while it runs or before the first one. */
@@ -42,6 +50,7 @@ export class TurnActivity {
   }
   stop(): void {
     this.#heldAt = undefined;
+    this.#note = undefined;
     if (!this.#active) return;
     this.#active = false;
     this.#stoppedAt = this.now();

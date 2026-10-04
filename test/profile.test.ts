@@ -2,7 +2,9 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import path, { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { ensureProfile, profilePaths } from "../src/profile.js";
+import { existsSync } from "node:fs";
+import { symlink } from "node:fs/promises";
+import { ensureProfile, linkProfileBundles, profilePaths, resolveDshBaseDir } from "../src/profile.js";
 
 describe("profilePaths (T14.4)", () => {
   test("win32 home uses backslash separators", () => {
@@ -138,5 +140,40 @@ describe("ensureProfile migration (T20.3)", () => {
     expect(result.created).toBe(false);
     const kept = JSON.parse(await readFile(pkgPath, "utf8"));
     expect(kept.dsh.profile.bundles).toContain("bruine-some-plugin");
+  });
+});
+
+describe("linkProfileBundles (first run without pnpm)", () => {
+  async function fixture(): Promise<{ profile: string; own: string; base: string }> {
+    const root = await mkdtemp(join(tmpdir(), "bruine-link-"));
+    const own = join(root, "global", "node_modules", "@ziamana", "bruine");
+    const base = join(root, "global", "node_modules", "@deepseek-ai", "dsh-base");
+    for (const dir of [own, base]) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, "package.json"), "{}");
+    }
+    return { profile: join(root, "home", "profiles", "bruine"), own, base };
+  }
+
+  test("links this package and dsh-base into the profile, creating the scope folder", async () => {
+    const { profile, own, base } = await fixture();
+    expect(linkProfileBundles(profile, { name: "@ziamana/bruine", root: own }, base)).toBe(true);
+    expect(existsSync(join(profile, "node_modules", "@ziamana", "bruine", "package.json"))).toBe(true);
+    expect(existsSync(join(profile, "node_modules", "@deepseek-ai", "dsh-base", "package.json"))).toBe(true);
+  });
+
+  test("a link that points nowhere any more is replaced", async () => {
+    const { profile, own, base } = await fixture();
+    await mkdir(join(profile, "node_modules", "@ziamana"), { recursive: true });
+    await symlink(join(own, "..", "gone"), join(profile, "node_modules", "@ziamana", "bruine"), "dir");
+    expect(existsSync(join(profile, "node_modules", "@ziamana", "bruine", "package.json"))).toBe(false);
+    expect(linkProfileBundles(profile, { name: "@ziamana/bruine", root: own }, base)).toBe(true);
+    expect(existsSync(join(profile, "node_modules", "@ziamana", "bruine", "package.json"))).toBe(true);
+  });
+
+  test("dsh-base is found through the dsh this package pins", () => {
+    const dir = resolveDshBaseDir();
+    expect(dir).toBeDefined();
+    expect(existsSync(join(dir as string, "package.json"))).toBe(true);
   });
 });

@@ -5,10 +5,12 @@ name: Release
 # have it yet, and creates the tag vX.Y.Z and its GitHub release (that version's CHANGELOG notes) if
 # they do not exist yet. Every step is idempotent: running it twice changes nothing.
 #
-# Publishing needs one repository secret, NPM_TOKEN (an npm automation token allowed to publish
-# `bruine`). Without it the tag and the release are still made, and the publish is skipped with a
-# warning; add the secret and run the workflow again to publish. Every installed bruine finds the
-# new version within a day (the daily update check) and offers /update.
+# Publishing uses npm trusted publishing: no token is stored anywhere. npmjs.com lets this
+# workflow (repository ziamana/bruine, file release.yml) publish `@ziamana/bruine`, and the job's
+# OIDC identity (id-token: write) is the proof. If that is not set up, or the publish fails, the
+# tag and the release are still made and the failure shows as a warning; fix it and run the
+# workflow again to publish. Every installed bruine finds the new version within a day (the daily
+# update check) and offers /update.
 
 on:
   push:
@@ -60,15 +62,16 @@ jobs:
       - if: steps.v.outputs.on_npm != 'true' || steps.v.outputs.tagged != 'true'
         run: pnpm test
       - name: Publish to npm
+        id: pub
         if: steps.v.outputs.on_npm != 'true'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true
         run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "::warning::No NPM_TOKEN secret: bruine ${{ steps.v.outputs.version }} was not published to npm. Add the secret and run this workflow again."
-            exit 0
-          fi
+          # Trusted publishing needs npm 11.5.1 or newer.
+          npm install -g npm@latest
           npm publish --provenance --access public
+      - name: Say so when the publish did not happen
+        if: steps.pub.outcome == 'failure'
+        run: echo "::warning::bruine ${{ steps.v.outputs.version }} was not published to npm. Check the trusted publisher on npmjs.com, then run this workflow again."
       - name: Tag and GitHub release
         if: steps.v.outputs.tagged != 'true'
         env:

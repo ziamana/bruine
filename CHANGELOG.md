@@ -3,6 +3,24 @@
 Every version that reaches npm, newest first. bruine checks for a new one once a day and offers
 `/update` in the session (or `bruine update` from a shell).
 
+## 0.1.1
+
+### First launch
+
+- **Setting up the first time no longer needs pnpm.** bruine used to call `dsh plugin add`, which
+  stops with "pnpm not found on PATH" on a machine that has only node and npm. It now links the
+  copies that came with the install, with no network and no pnpm; dsh's installer stays as the
+  fallback.
+- **The package is `@ziamana/bruine`.** npm refused the plain name as too close to another package.
+  Install with `npm install -g @ziamana/bruine`; the command is still `bruine`, and `bruine update`
+  and `/update` look under the new name.
+
+### Websites
+
+- When you ask for a complete or professional site, the agent plans every page first, builds all
+  of them, then goes back over them for detail and polish, and invents a brand name instead of
+  taking the folder's name.
+
 ## 0.1.0
 
 ### When the model goes quiet

@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { buildLaunch, flagMode, resolveDshEntry, runDsh } from "./launch.js";
-import { ensureProfile } from "./profile.js";
+import { ensureProfile, linkProfileBundles, resolveDshBaseDir } from "./profile.js";
 import { simpleSetup, type SetupIO } from "./setup/simple.js";
 import { migrateAgentsSkills } from "./setup/skills.js";
 import { localDefaultRoute } from "./setup/discover.js";
@@ -81,8 +81,17 @@ function ensureBundleInstalled(
   const marker = join(profileDir, "node_modules", pkg.name, "package.json");
   if (existsSync(marker)) return;
 
-  const spec = selfPackageRoot() ?? `${pkg.name}@${pkg.version}`;
+  const root = selfPackageRoot();
   if (!headless) console.log("Setting up bruine (one time)…");
+  // Link the copies already on the disk first: no network, and no pnpm, which a
+  // machine with only node and npm does not have. dsh's installer is the fallback.
+  const dshBase = resolveDshBaseDir();
+  if (root !== undefined && dshBase !== undefined && linkProfileBundles(profileDir, { name: pkg.name, root }, dshBase)) {
+    if (!headless) console.log("Ready.");
+    return;
+  }
+
+  const spec = root ?? `${pkg.name}@${pkg.version}`;
   const { status, error, output } = runDsh(
     dshEntry,
     ["plugin", "--profile", "bruine", "add", spec],

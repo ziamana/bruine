@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 
@@ -239,4 +239,43 @@ export async function ensureProfile(
   await writePersonaPatch(p.patchYml, dshHome, pathMod);
 
   return { created: true, dir };
+}
+
+/**
+ * The bundles a profile boots from, linked to the copies that are already on the
+ * disk: this package (where it runs from) and dsh-base (the one dsh brings). Setting
+ * the profile up this way needs no network and no pnpm; `dsh plugin add` needs both,
+ * and a machine with only node and npm has neither. A link that points nowhere any
+ * more (the global install moved) is replaced. Returns false when a link cannot be
+ * made, so the caller can fall back to dsh's own installer.
+ */
+export function linkProfileBundles(
+  profileDir: string,
+  own: { name: string; root: string },
+  dshBaseDir: string,
+): boolean {
+  const type = process.platform === "win32" ? "junction" : "dir";
+  const link = (target: string, at: string): void => {
+    mkdirSync(path.dirname(at), { recursive: true });
+    rmSync(at, { recursive: true, force: true });
+    symlinkSync(target, at, type);
+  };
+  try {
+    const modules = path.join(profileDir, "node_modules");
+    link(own.root, path.join(modules, own.name));
+    link(dshBaseDir, path.join(modules, "@deepseek-ai", "dsh-base"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Where dsh's own dsh-base lives, found through the dsh this package pins. */
+export function resolveDshBaseDir(): string | undefined {
+  try {
+    const dshRequire = createRequire(require.resolve("@deepseek-ai/dsh/package.json"));
+    return path.dirname(dshRequire.resolve("@deepseek-ai/dsh-base/package.json"));
+  } catch {
+    return undefined;
+  }
 }

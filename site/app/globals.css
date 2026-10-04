@@ -257,14 +257,14 @@ video {
   gap: 1.25rem;
   max-width: 56rem;
   margin: 0 auto;
-  padding: clamp(1.5rem, 5vh, 4rem) 0 var(--step);
+  padding: clamp(1.25rem, 4vh, 3.5rem) 0 clamp(1.5rem, 4vh, 3rem);
 }
 .hero-mark {
-  width: clamp(170px, 20vw, 240px);
+  width: clamp(160px, 17vw, 210px);
   margin: 0 0 0 -0.75rem;
 }
 .hero h1 {
-  font-size: clamp(2rem, min(4.2vw, 6.4vh), 3.4rem);
+  font-size: clamp(2rem, min(4vw, 5.8vh), 3.1rem);
   letter-spacing: -0.035em;
   max-width: 22ch;
 }
@@ -410,12 +410,29 @@ video {
 .session-stage {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
-  gap: clamp(1.5rem, 4vw, 4rem);
+  grid-template-areas:
+    "pin head"
+    "pin chapters";
+  column-gap: clamp(1.5rem, 4vw, 4rem);
   align-items: start;
 }
+.session-head {
+  grid-area: head;
+  margin-bottom: 0;
+}
+.session-head h2 {
+  font-size: clamp(1.6rem, 2.6vw, 2.25rem);
+}
+.session-head p {
+  font-size: 1rem;
+}
+.chapters {
+  grid-area: chapters;
+}
 .session-pin {
+  grid-area: pin;
   position: sticky;
-  top: max(4.5rem, calc(50vh - 15rem));
+  top: max(2rem, calc(50vh - 15rem));
   container-type: inline-size;
 }
 .window {
@@ -490,19 +507,16 @@ video {
   position: absolute;
   top: 0;
   left: 0;
-  width: 104ch;
   font-family: var(--mono);
   font-size: 16px;
   line-height: 1.32;
+  height: calc(26 * 1.32em);
   color: var(--term-fg);
   white-space: pre;
   font-variant-ligatures: none;
   transform-origin: 0 0;
   transform: scale(var(--scale, 0.6));
   transition: opacity 400ms var(--ease);
-}
-.window[data-ready="false"] .term {
-  min-height: calc(26 * 1.32em);
 }
 .term-row {
   position: relative;
@@ -531,7 +545,8 @@ video {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background: var(--window);
   animation: weather-in 500ms var(--ease) both;
 }
 @keyframes weather-in {
@@ -555,15 +570,12 @@ video {
 }
 .chapter {
   min-height: 78vh;
-  display: grid;
-  align-content: start;
-  gap: 0.9rem;
   padding-top: 22vh;
   color: var(--muted);
   transition: color 300ms var(--ease);
 }
 .chapter:first-child {
-  padding-top: 8vh;
+  padding-top: 14vh;
 }
 .chapter:last-child {
   min-height: 90vh;
@@ -579,6 +591,10 @@ video {
 .chapter[data-active="true"] h3 {
   color: var(--violet-light);
 }
+.chapter-text {
+  display: grid;
+  gap: 0.9rem;
+}
 .chapter p {
   max-width: 40ch;
 }
@@ -587,23 +603,53 @@ video {
 .film {
   padding-bottom: var(--step);
 }
-.film-frame {
-  margin: 0;
-  display: grid;
-  gap: 0.75rem;
+.film-screen {
+  position: relative;
+  background: var(--window);
 }
-.film-frame video {
+.film-screen video {
+  display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
-  border-radius: 12px;
-  border: 1px solid var(--edge);
-  background: var(--window);
-  box-shadow: 0 26px 40px -22px rgba(0, 0, 0, 0.85);
+  background: var(--night);
 }
-.film-frame figcaption {
-  font-family: var(--mono);
-  font-size: 0.8125rem;
-  color: var(--muted);
+.film-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 1rem;
+  border: 0;
+  padding: clamp(1rem, 3vw, 2rem);
+  background: linear-gradient(180deg, rgba(11, 13, 20, 0) 40%, rgba(11, 13, 20, 0.55));
+  color: var(--text);
+  font: 400 0.9375rem var(--mono);
+  cursor: pointer;
+}
+.film-play-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: clamp(48px, 5vw, 64px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid rgba(180, 167, 255, 0.7);
+  background: rgba(11, 13, 20, 0.6);
+  color: var(--lavender);
+  transition: transform 220ms var(--ease), background 220ms var(--ease), border-color 220ms var(--ease);
+}
+.film-play-mark svg {
+  margin-left: 4px;
+}
+.film-play:hover .film-play-mark,
+.film-play:focus-visible .film-play-mark {
+  transform: scale(1.06);
+  background: rgba(180, 167, 255, 0.16);
+  border-color: var(--lavender);
+}
+.film-play:focus-visible {
+  outline-offset: -4px;
 }
 
 /* Models: one long line of who it talks to, then the three promises as status readings. */
@@ -611,6 +657,8 @@ video {
   padding-bottom: var(--step);
 }
 .providers {
+  list-style: none;
+  padding: 0;
   font-family: var(--mono);
   font-size: clamp(1.15rem, 2.6vw, 2rem);
   line-height: 1.45;
@@ -633,12 +681,13 @@ video {
   border-bottom: 1px solid var(--edge);
 }
 .promise dt {
-  display: grid;
-  gap: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   align-content: start;
+  gap: 0.5rem 0.9rem;
 }
 .reading {
-  justify-self: start;
   font-family: var(--mono);
   font-size: 0.875rem;
   color: var(--sky);
@@ -663,6 +712,16 @@ video {
   margin: 0;
   color: var(--muted);
   max-width: var(--measure);
+}
+
+.providers li {
+  display: inline;
+  white-space: nowrap;
+}
+.providers li:not(:last-child)::after {
+  content: "\00a0· ";
+  white-space: normal;
+  color: var(--faint);
 }
 
 /* What it does not do */
@@ -736,13 +795,13 @@ video {
   display: none;
 }
 .faq summary::after {
-  content: "+";
+  content: "›";
   color: var(--lavender);
   font-weight: 400;
   transition: transform 220ms var(--ease);
 }
 .faq details[open] summary::after {
-  transform: rotate(45deg);
+  transform: rotate(90deg);
 }
 .faq summary:hover {
   color: var(--violet-light);
@@ -1005,7 +1064,13 @@ video {
   }
   .session-stage {
     grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+    grid-template-areas:
+      "head"
+      "pin"
+      "chapters";
+  }
+  .session-head {
+    margin-bottom: 1.5rem;
   }
   .session-pin {
     top: 0.5rem;
@@ -1013,16 +1078,22 @@ video {
     padding-bottom: 0.75rem;
     background: linear-gradient(180deg, var(--night) 85%, transparent);
   }
+  .chapter-text {
+    position: sticky;
+    top: calc(var(--pin-h, 40vh) + 1.25rem);
+    display: grid;
+    gap: 0.75rem;
+  }
   .window-bar {
     padding: 0.45rem 0.6rem;
     font-size: 0.6875rem;
   }
   .chapter {
-    min-height: 62vh;
-    padding-top: 12vh;
+    min-height: 70vh;
+    padding-top: 1.5rem;
   }
   .chapter:first-child {
-    padding-top: 4vh;
+    padding-top: 1.5rem;
   }
   .chapter p {
     max-width: none;

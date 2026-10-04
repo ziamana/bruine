@@ -21,7 +21,8 @@ Every terminal screen on the site comes from the running app, nothing is drawn b
   `promo-video` branch.
 - `data/shots.json` and `data/shots-light.json` are the retry, image and light-theme stills, recorded by
   `test/e2e/screenshots.test.ts` (`RECORD_SHOTS=1`).
-- `scripts/import-tape.mjs` turns them into `public/tape/session.json` (run by `npm run build`).
+- `data/narrow/` is the same session and stills recorded at 56 columns for phones (`RECORD_COLS=56`).
+- `scripts/import-tape.mjs` turns them into `public/tape/session.json` and `session-narrow.json` (run by `npm run build`).
 - `public/media/` holds the film and the stills from `docs/media/`. `film-poster.jpg` is the film's frame at 3.2 s.
 
 To refresh after a UI change: record again with those tests, copy the files into `data/`, then build.

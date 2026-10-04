@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { InstallBand } from "@/components/InstallBand";
+import { Film } from "@/components/Film";
 import { Arrow } from "@/components/Icons";
 import { Session } from "@/components/Session";
 import { asset, DICTS, isLang, type Lang } from "@/lib/i18n";
@@ -30,12 +31,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
           <h2 id="film-title">{t.film.title}</h2>
           <p>{t.film.lead}</p>
         </header>
-        <figure className="film-frame">
-          <video controls preload="none" playsInline poster={asset("/media/film-poster.jpg")} width="1280" height="720">
-            <source src={asset("/media/bruine-film.mp4")} type="video/mp4" />
-          </video>
-          <figcaption>{t.film.caption}</figcaption>
-        </figure>
+        <Film title="bruine-film.mp4" play={t.film.caption} />
       </section>
 
       <section className="models" aria-labelledby="models-title">
@@ -43,17 +39,19 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
           <h2 id="models-title">{t.models.title}</h2>
           <p>{t.models.lead}</p>
         </header>
-        <p className="providers" translate="no">
-          {t.models.providers}
-        </p>
+        <ul className="providers" translate="no">
+          {t.models.providers.split(" · ").map((name) => (
+            <li key={name}>{name}</li>
+          ))}
+        </ul>
         <dl className="promises">
           {t.models.promises.map((promise) => (
             <div key={promise.title} className="promise">
               <dt>
+                <span className="promise-title">{promise.title}</span>
                 <span className="reading" translate="no">
                   {promise.reading}
                 </span>
-                <span className="promise-title">{promise.title}</span>
               </dt>
               <dd>{promise.body}</dd>
             </div>

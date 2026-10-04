@@ -19,7 +19,7 @@ import { toolScript, type Script } from "./sse-server.js";
 const enabled = process.env.RECORD_SHOTS === "1";
 beforeAll(enabled ? build : () => {}, 60_000);
 
-const COLS = 104;
+const COLS = Number(process.env.RECORD_COLS ?? 104);
 const ROWS = 30;
 
 type Span = [col: number, text: string, fg: string | null, bg: string | null, flags: number];

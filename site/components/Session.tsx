@@ -7,6 +7,8 @@ import { BASE_INTENSITY, setWeather } from "@/lib/weather";
 
 const clamp = (n: number): number => Math.max(0, Math.min(1, n));
 const clock = (s: number): string => `0:${s.toFixed(1).padStart(4, "0")}`;
+/** Phones get the same session recorded at 56 columns, so the text stays readable. */
+const NARROW = "(max-width: 860px)";
 
 /**
  * The signature of the page: a real bruine session pinned beside its chapters, scrubbed by the
@@ -16,10 +18,12 @@ export function Session({ lang }: { lang: Lang }) {
   const t = DICTS[lang].session;
   const termRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<HTMLDivElement>(null);
+  const pinRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const chapterRefs = useRef<(HTMLLIElement | null)[]>([]);
   const [active, setActive] = useState(0);
   const [stamp, setStamp] = useState("0:00.0");
-  const [ready, setReady] = useState(false);
+  const [cols, setCols] = useState(104);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,11 +32,14 @@ export function Session({ lang }: { lang: Lang }) {
     let queued = 0;
     let lastActive = -1;
     let lastWeather = "";
+    const narrow = window.matchMedia(NARROW);
 
     const update = (): void => {
       queued = 0;
       if (!screen || !tape) return;
-      const anchor = window.innerHeight * 0.55;
+      // On a phone the terminal covers the top of the screen: a chapter starts just below it.
+      const pinBottom = pinRef.current?.getBoundingClientRect().bottom ?? 0;
+      const anchor = narrow.matches ? pinBottom + 24 : window.innerHeight * 0.55;
       const items = chapterRefs.current;
       let index = 0;
       let progress = 0;
@@ -47,8 +54,7 @@ export function Session({ lang }: { lang: Lang }) {
       // Past the last chapter, the session is over: the sky goes back to its drizzle.
       const lastBox = items.at(-1)?.getBoundingClientRect();
       const over = lastBox !== undefined && lastBox.bottom < anchor;
-      const chapter = t.chapters[index]!;
-      const screenOf = chapter.screen;
+      const screenOf = t.chapters[index]!.screen;
       let still = false;
       if ("tape" in screenOf) {
         const [from, to] = screenOf.tape;
@@ -80,22 +86,36 @@ export function Session({ lang }: { lang: Lang }) {
     const schedule = (): void => {
       if (!queued) queued = requestAnimationFrame(update);
     };
+    const load = (): void => {
+      fetch(asset(narrow.matches ? "/tape/session-narrow.json" : "/tape/session.json"))
+        .then((r) => r.json() as Promise<Tape>)
+        .then((loaded) => {
+          if (cancelled || !termRef.current) return;
+          tape = loaded;
+          screen = new Screen(termRef.current, loaded);
+          lastActive = -1;
+          setCols(loaded.cols);
+          update();
+        })
+        .catch(() => {});
+    };
+    // The pin's height, for the chapter text that sits under it on a phone.
+    const measure = new ResizeObserver(() => {
+      const pin = pinRef.current;
+      if (pin) stageRef.current?.style.setProperty("--pin-h", `${pin.offsetHeight}px`);
+      schedule();
+    });
+    if (pinRef.current) measure.observe(pinRef.current);
 
-    fetch(asset("/tape/session.json"))
-      .then((r) => r.json() as Promise<Tape>)
-      .then((loaded) => {
-        if (cancelled || !termRef.current) return;
-        tape = loaded;
-        screen = new Screen(termRef.current, loaded);
-        setReady(true);
-        update();
-      })
-      .catch(() => {});
+    load();
+    narrow.addEventListener("change", load);
     window.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule);
     return () => {
       cancelled = true;
       cancelAnimationFrame(queued);
+      measure.disconnect();
+      narrow.removeEventListener("change", load);
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
       setWeather({ intensity: BASE_INTENSITY });
@@ -103,7 +123,7 @@ export function Session({ lang }: { lang: Lang }) {
   }, [t]);
 
   // The terminal is laid out at a fixed size and scaled to the window, so a browser that rounds
-  // glyph advances to whole pixels still fits all 104 columns.
+  // glyph advances to whole pixels still fits every column.
   useEffect(() => {
     const fit = fitRef.current;
     const term = termRef.current;
@@ -120,35 +140,39 @@ export function Session({ lang }: { lang: Lang }) {
     void document.fonts.ready.then(resize);
     resize();
     return () => watch.disconnect();
-  }, [ready]);
+  }, [cols]);
 
   const screenOf = t.chapters[active]!.screen;
   const mode = "weather" in screenOf ? "weather" : "still" in screenOf && screenOf.still === "light" ? "light" : "dark";
+  // The stills were recorded in another project than the session: the title says which.
+  const folder = "still" in screenOf ? "~/code/report" : "~/code/api";
 
   return (
     <section className="session" aria-labelledby="session-title">
       <link rel="prefetch" href={asset("/media/effort.webp")} as="image" />
-      <header className="section-head">
-        <h2 id="session-title">{t.title}</h2>
-        <p>{t.lead}</p>
-      </header>
-      <div className="session-stage">
-        <div className="session-pin">
-          <figure className="window" data-mode={mode} data-ready={ready}>
+      <div ref={stageRef} className="session-stage">
+        <header className="section-head session-head">
+          <h2 id="session-title">{t.title}</h2>
+          <p>{t.lead}</p>
+        </header>
+        <div ref={pinRef} className="session-pin">
+          <figure className="window" data-mode={mode}>
             <figcaption className="window-bar">
               <span className="window-lights" aria-hidden="true">
                 <i />
                 <i />
                 <i />
               </span>
-              <span className="window-title">{t.window}</span>
+              <span className="window-title" translate="no">
+                bruine · {folder}
+              </span>
               <span className="window-stamp" aria-hidden="true">
                 {stamp}
               </span>
             </figcaption>
             <div className="window-body">
               <div ref={fitRef} className="term-fit">
-                <div ref={termRef} className="term" aria-hidden="true" translate="no" />
+                <div ref={termRef} className="term" style={{ width: `${cols}ch` }} aria-hidden="true" translate="no" />
               </div>
               {/* The weather chapter shows the prompt box from the film, effort low to max. */}
               {mode === "weather" ? <img className="window-weather" src={asset("/media/effort.webp")} alt="" decoding="async" /> : null}
@@ -169,8 +193,10 @@ export function Session({ lang }: { lang: Lang }) {
               className="chapter"
               data-active={i === active}
             >
-              <h3>{chapter.title}</h3>
-              <p>{chapter.body}</p>
+              <div className="chapter-text">
+                <h3>{chapter.title}</h3>
+                <p>{chapter.body}</p>
+              </div>
             </li>
           ))}
         </ol>

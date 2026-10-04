@@ -37,7 +37,7 @@ export interface Dict {
     failed: string;
     label: string;
   };
-  session: { title: string; lead: string; chapters: Chapter[]; window: string; still: string; noscript: string };
+  session: { title: string; lead: string; chapters: Chapter[]; still: string; noscript: string };
   film: { title: string; lead: string; caption: string };
   models: {
     title: string;
@@ -78,7 +78,6 @@ const en: Dict = {
   session: {
     title: "One session, as it ran.",
     lead: "This is the real bruine in a real terminal on a real project, recorded cell by cell. Scroll, and it plays.",
-    window: "bruine · ~/code/api",
     still: "still",
     noscript: "The session plays with JavaScript on. Here it is at the end of the turn.",
     chapters: [
@@ -147,7 +146,7 @@ const en: Dict = {
   film: {
     title: "Forty-two seconds of it.",
     lead: "Made in code with Remotion. The demo inside the film is the same recording you just scrolled through.",
-    caption: "The bruine film, with sound.",
+    caption: "Play the film, with sound",
   },
   models: {
     title: "Your model is not a degraded cloud.",
@@ -239,7 +238,6 @@ const fr: Dict = {
   session: {
     title: "Une session, telle qu'elle s'est passée.",
     lead: "Voici le vrai bruine, dans un vrai terminal, sur un vrai projet, enregistré cellule par cellule. Fais défiler : il se joue.",
-    window: "bruine · ~/code/api",
     still: "capture",
     noscript: "La session se joue avec JavaScript activé. La voici à la fin du tour.",
     chapters: [
@@ -308,7 +306,7 @@ const fr: Dict = {
   film: {
     title: "Quarante-deux secondes.",
     lead: "Fait en code avec Remotion. La démo du film est le même enregistrement que celui que tu viens de faire défiler.",
-    caption: "Le film de bruine, avec le son.",
+    caption: "Lancer le film, avec le son",
   },
   models: {
     title: "Ton modèle n'est pas un cloud au rabais.",

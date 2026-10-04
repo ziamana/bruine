@@ -1,0 +1,681 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-04T14:58:18+00:00",
+  "title": "Design System: bruine",
+  "extensions": {
+    "colorMeta": {
+      "lavender": {
+        "role": "primary",
+        "displayName": "Rain Lavender",
+        "canonical": "#b4a7ff",
+        "oklch": "oklch(77.3% 0.124 289.9)",
+        "tonalRamp": [
+          "oklch(15.0% 0.124 289.9)",
+          "oklch(26.4% 0.124 289.9)",
+          "oklch(37.9% 0.124 289.9)",
+          "oklch(49.3% 0.124 289.9)",
+          "oklch(60.7% 0.124 289.9)",
+          "oklch(72.1% 0.124 289.9)",
+          "oklch(83.6% 0.124 289.9)",
+          "oklch(95.0% 0.124 289.9)"
+        ]
+      },
+      "violet-light": {
+        "role": "primary",
+        "displayName": "Pale Violet",
+        "canonical": "#d9d0ff",
+        "oklch": "oklch(88.0% 0.065 293.8)",
+        "tonalRamp": [
+          "oklch(15.0% 0.065 293.8)",
+          "oklch(26.4% 0.065 293.8)",
+          "oklch(37.9% 0.065 293.8)",
+          "oklch(49.3% 0.065 293.8)",
+          "oklch(60.7% 0.065 293.8)",
+          "oklch(72.1% 0.065 293.8)",
+          "oklch(83.6% 0.065 293.8)",
+          "oklch(95.0% 0.065 293.8)"
+        ]
+      },
+      "sky": {
+        "role": "secondary",
+        "displayName": "Night Sky Blue",
+        "canonical": "#7dcfff",
+        "oklch": "oklch(82.0% 0.105 235.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.105 235.7)",
+          "oklch(26.4% 0.105 235.7)",
+          "oklch(37.9% 0.105 235.7)",
+          "oklch(49.3% 0.105 235.7)",
+          "oklch(60.7% 0.105 235.7)",
+          "oklch(72.1% 0.105 235.7)",
+          "oklch(83.6% 0.105 235.7)",
+          "oklch(95.0% 0.105 235.7)"
+        ]
+      },
+      "amber": {
+        "role": "tertiary",
+        "displayName": "Approval Amber",
+        "canonical": "#f2cf73",
+        "oklch": "oklch(86.6% 0.118 89.0)",
+        "tonalRamp": [
+          "oklch(15.0% 0.118 89.0)",
+          "oklch(26.4% 0.118 89.0)",
+          "oklch(37.9% 0.118 89.0)",
+          "oklch(49.3% 0.118 89.0)",
+          "oklch(60.7% 0.118 89.0)",
+          "oklch(72.1% 0.118 89.0)",
+          "oklch(83.6% 0.118 89.0)",
+          "oklch(95.0% 0.118 89.0)"
+        ]
+      },
+      "mint": {
+        "role": "tertiary",
+        "displayName": "Done Mint",
+        "canonical": "#8fe3a3",
+        "oklch": "oklch(84.6% 0.121 150.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.121 150.7)",
+          "oklch(26.4% 0.121 150.7)",
+          "oklch(37.9% 0.121 150.7)",
+          "oklch(49.3% 0.121 150.7)",
+          "oklch(60.7% 0.121 150.7)",
+          "oklch(72.1% 0.121 150.7)",
+          "oklch(83.6% 0.121 150.7)",
+          "oklch(95.0% 0.121 150.7)"
+        ]
+      },
+      "pink": {
+        "role": "tertiary",
+        "displayName": "Refusal Pink",
+        "canonical": "#ff9ed2",
+        "oklch": "oklch(81.3% 0.131 347.0)",
+        "tonalRamp": [
+          "oklch(15.0% 0.131 347.0)",
+          "oklch(26.4% 0.131 347.0)",
+          "oklch(37.9% 0.131 347.0)",
+          "oklch(49.3% 0.131 347.0)",
+          "oklch(60.7% 0.131 347.0)",
+          "oklch(72.1% 0.131 347.0)",
+          "oklch(83.6% 0.131 347.0)",
+          "oklch(95.0% 0.131 347.0)"
+        ]
+      },
+      "night": {
+        "role": "neutral",
+        "displayName": "Night",
+        "canonical": "#0b0d14",
+        "oklch": "oklch(16.0% 0.015 272.2)",
+        "tonalRamp": [
+          "oklch(15.0% 0.015 272.2)",
+          "oklch(26.4% 0.015 272.2)",
+          "oklch(37.9% 0.015 272.2)",
+          "oklch(49.3% 0.015 272.2)",
+          "oklch(60.7% 0.015 272.2)",
+          "oklch(72.1% 0.015 272.2)",
+          "oklch(83.6% 0.015 272.2)",
+          "oklch(95.0% 0.015 272.2)"
+        ]
+      },
+      "night-glow": {
+        "role": "neutral",
+        "displayName": "Night Glow",
+        "canonical": "#1a1830",
+        "oklch": "oklch(22.5% 0.046 285.9)",
+        "tonalRamp": [
+          "oklch(15.0% 0.046 285.9)",
+          "oklch(26.4% 0.046 285.9)",
+          "oklch(37.9% 0.046 285.9)",
+          "oklch(49.3% 0.046 285.9)",
+          "oklch(60.7% 0.046 285.9)",
+          "oklch(72.1% 0.046 285.9)",
+          "oklch(83.6% 0.046 285.9)",
+          "oklch(95.0% 0.046 285.9)"
+        ]
+      },
+      "cloud-blue": {
+        "role": "neutral",
+        "displayName": "Cloud Blue",
+        "canonical": "#4a70aa",
+        "oklch": "oklch(54.3% 0.101 258.6)",
+        "tonalRamp": [
+          "oklch(15.0% 0.101 258.6)",
+          "oklch(26.4% 0.101 258.6)",
+          "oklch(37.9% 0.101 258.6)",
+          "oklch(49.3% 0.101 258.6)",
+          "oklch(60.7% 0.101 258.6)",
+          "oklch(72.1% 0.101 258.6)",
+          "oklch(83.6% 0.101 258.6)",
+          "oklch(95.0% 0.101 258.6)"
+        ]
+      },
+      "cloud-violet": {
+        "role": "neutral",
+        "displayName": "Cloud Violet",
+        "canonical": "#6f5fd6",
+        "oklch": "oklch(56.3% 0.176 285.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.176 285.4)",
+          "oklch(26.4% 0.176 285.4)",
+          "oklch(37.9% 0.176 285.4)",
+          "oklch(49.3% 0.176 285.4)",
+          "oklch(60.7% 0.176 285.4)",
+          "oklch(72.1% 0.176 285.4)",
+          "oklch(83.6% 0.176 285.4)",
+          "oklch(95.0% 0.176 285.4)"
+        ]
+      },
+      "window": {
+        "role": "neutral",
+        "displayName": "Terminal Window",
+        "canonical": "#11141e",
+        "oklch": "oklch(19.3% 0.021 271.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.021 271.4)",
+          "oklch(26.4% 0.021 271.4)",
+          "oklch(37.9% 0.021 271.4)",
+          "oklch(49.3% 0.021 271.4)",
+          "oklch(60.7% 0.021 271.4)",
+          "oklch(72.1% 0.021 271.4)",
+          "oklch(83.6% 0.021 271.4)",
+          "oklch(95.0% 0.021 271.4)"
+        ]
+      },
+      "clip-ground": {
+        "role": "neutral",
+        "displayName": "Clip Ground",
+        "canonical": "#0d1019",
+        "oklch": "oklch(17.4% 0.019 270.1)",
+        "tonalRamp": [
+          "oklch(15.0% 0.019 270.1)",
+          "oklch(26.4% 0.019 270.1)",
+          "oklch(37.9% 0.019 270.1)",
+          "oklch(49.3% 0.019 270.1)",
+          "oklch(60.7% 0.019 270.1)",
+          "oklch(72.1% 0.019 270.1)",
+          "oklch(83.6% 0.019 270.1)",
+          "oklch(95.0% 0.019 270.1)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Raised Surface",
+        "canonical": "#1c2030",
+        "oklch": "oklch(24.7% 0.031 273.1)",
+        "tonalRamp": [
+          "oklch(15.0% 0.031 273.1)",
+          "oklch(26.4% 0.031 273.1)",
+          "oklch(37.9% 0.031 273.1)",
+          "oklch(49.3% 0.031 273.1)",
+          "oklch(60.7% 0.031 273.1)",
+          "oklch(72.1% 0.031 273.1)",
+          "oklch(83.6% 0.031 273.1)",
+          "oklch(95.0% 0.031 273.1)"
+        ]
+      },
+      "edge": {
+        "role": "neutral",
+        "displayName": "Edge",
+        "canonical": "#262c3f",
+        "oklch": "oklch(29.6% 0.036 270.6)",
+        "tonalRamp": [
+          "oklch(15.0% 0.036 270.6)",
+          "oklch(26.4% 0.036 270.6)",
+          "oklch(37.9% 0.036 270.6)",
+          "oklch(49.3% 0.036 270.6)",
+          "oklch(60.7% 0.036 270.6)",
+          "oklch(72.1% 0.036 270.6)",
+          "oklch(83.6% 0.036 270.6)",
+          "oklch(95.0% 0.036 270.6)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Text",
+        "canonical": "#e6e9f2",
+        "oklch": "oklch(93.4% 0.013 271.3)",
+        "tonalRamp": [
+          "oklch(15.0% 0.013 271.3)",
+          "oklch(26.4% 0.013 271.3)",
+          "oklch(37.9% 0.013 271.3)",
+          "oklch(49.3% 0.013 271.3)",
+          "oklch(60.7% 0.013 271.3)",
+          "oklch(72.1% 0.013 271.3)",
+          "oklch(83.6% 0.013 271.3)",
+          "oklch(95.0% 0.013 271.3)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "#9aa0b8",
+        "oklch": "oklch(70.9% 0.036 274.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.036 274.4)",
+          "oklch(26.4% 0.036 274.4)",
+          "oklch(37.9% 0.036 274.4)",
+          "oklch(49.3% 0.036 274.4)",
+          "oklch(60.7% 0.036 274.4)",
+          "oklch(72.1% 0.036 274.4)",
+          "oklch(83.6% 0.036 274.4)",
+          "oklch(95.0% 0.036 274.4)"
+        ]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint",
+        "canonical": "#858ba6",
+        "oklch": "oklch(64.1% 0.041 275.3)",
+        "tonalRamp": [
+          "oklch(15.0% 0.041 275.3)",
+          "oklch(26.4% 0.041 275.3)",
+          "oklch(37.9% 0.041 275.3)",
+          "oklch(49.3% 0.041 275.3)",
+          "oklch(60.7% 0.041 275.3)",
+          "oklch(72.1% 0.041 275.3)",
+          "oklch(83.6% 0.041 275.3)",
+          "oklch(95.0% 0.041 275.3)"
+        ]
+      },
+      "term-light-bg": {
+        "role": "neutral",
+        "displayName": "Light Terminal Ground",
+        "canonical": "#fafafa",
+        "oklch": "oklch(98.5% 0.000 89.9)",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 89.9)",
+          "oklch(26.4% 0.000 89.9)",
+          "oklch(37.9% 0.000 89.9)",
+          "oklch(49.3% 0.000 89.9)",
+          "oklch(60.7% 0.000 89.9)",
+          "oklch(72.1% 0.000 89.9)",
+          "oklch(83.6% 0.000 89.9)",
+          "oklch(95.0% 0.000 89.9)"
+        ]
+      },
+      "term-light-fg": {
+        "role": "neutral",
+        "displayName": "Light Terminal Ink",
+        "canonical": "#1f2330",
+        "oklch": "oklch(25.8% 0.025 271.3)",
+        "tonalRamp": [
+          "oklch(15.0% 0.025 271.3)",
+          "oklch(26.4% 0.025 271.3)",
+          "oklch(37.9% 0.025 271.3)",
+          "oklch(49.3% 0.025 271.3)",
+          "oklch(60.7% 0.025 271.3)",
+          "oklch(72.1% 0.025 271.3)",
+          "oklch(83.6% 0.025 271.3)",
+          "oklch(95.0% 0.025 271.3)"
+        ]
+      },
+      "term-light-edge": {
+        "role": "neutral",
+        "displayName": "Light Terminal Edge",
+        "canonical": "#d5d8e2",
+        "oklch": "oklch(88.3% 0.014 272.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.014 272.7)",
+          "oklch(26.4% 0.014 272.7)",
+          "oklch(37.9% 0.014 272.7)",
+          "oklch(49.3% 0.014 272.7)",
+          "oklch(60.7% 0.014 272.7)",
+          "oklch(72.1% 0.014 272.7)",
+          "oklch(83.6% 0.014 272.7)",
+          "oklch(95.0% 0.014 272.7)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The one-line offer, centred in the hero up to 30ch; the same voice, larger, closes the page."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section titles, balanced; the centred two-line capability title; steps down inside the session stage and documents."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Promise, chapter and document subsection titles; FAQ questions."
+      },
+      "card-title": {
+        "displayName": "Card Title",
+        "purpose": "The heading of a capability or developer card."
+      },
+      "command": {
+        "displayName": "Command",
+        "purpose": "The install command inside the approval band, after a faint $."
+      },
+      "button": {
+        "displayName": "Button",
+        "purpose": "Every pill button, mono bold."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running prose in Inter, capped at the 68ch measure."
+      },
+      "body-lead": {
+        "displayName": "Body Lead",
+        "purpose": "The muted paragraph under a section title."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Nav, install facts, band title and keys, readings, copy buttons, table headers, window bar, table of contents."
+      },
+      "terminal": {
+        "displayName": "Terminal",
+        "purpose": "The recorded screen: 104 cells at 16px (56 on phones and in every capability demo), scaled whole, ligatures off."
+      }
+    },
+    "shadows": [
+      {
+        "name": "band-glow",
+        "value": "0 14px 30px -18px rgba(242, 207, 115, 0.32), 0 2px 6px rgba(0, 0, 0, 0.35)",
+        "purpose": "The approval band at rest."
+      },
+      {
+        "name": "band-glow-done",
+        "value": "0 14px 30px -18px rgba(143, 227, 163, 0.34), 0 2px 6px rgba(0, 0, 0, 0.35)",
+        "purpose": "The band after the command is copied."
+      },
+      {
+        "name": "window-lift",
+        "value": "0 26px 40px -22px rgba(0, 0, 0, 0.85), 0 18px 36px -26px rgba(111, 95, 214, 0.45)",
+        "purpose": "Every terminal window: the hero, the session, the capability demos and the film."
+      },
+      {
+        "name": "sky",
+        "value": "radial-gradient(780px 460px at 24% 40px, rgba(74, 112, 170, 0.38), transparent 72%), radial-gradient(720px 420px at 74% 0, rgba(111, 95, 214, 0.28), transparent 70%), linear-gradient(180deg, rgba(20, 26, 44, 0.85), transparent 820px), radial-gradient(120% 60% at 50% -10%, #1a1830 0%, transparent 60%) fixed, #0b0d14",
+        "purpose": "The page ground: clouds lit from above, painted on body and scrolling away with the page, over the fixed night glow. Not a shadow but the first of two lights."
+      },
+      {
+        "name": "close-glow",
+        "value": "radial-gradient(50% 55% at 50% 60%, rgba(74, 112, 170, 0.3), rgba(111, 95, 214, 0.12) 45%, transparent 72%)",
+        "purpose": "Behind the centred close, inset 10% from the top; the second light."
+      },
+      {
+        "name": "card-fill",
+        "value": "linear-gradient(180deg, rgba(28, 32, 48, 0.55), rgba(17, 20, 30, 0.35))",
+        "purpose": "The capability card fill, lit from the top; flat, no shadow."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Every transition on the site."
+      },
+      {
+        "name": "duration-hover",
+        "value": "160ms",
+        "purpose": "Link, band-choice and copy-button colour and fill."
+      },
+      {
+        "name": "duration-button",
+        "value": "180ms",
+        "purpose": "Pill button fill, border and the primary pill’s 1px rise."
+      },
+      {
+        "name": "duration-move",
+        "value": "220ms",
+        "purpose": "Small transforms: band pointer slide, arrow nudge, FAQ chevron, play ring scale."
+      },
+      {
+        "name": "duration-state",
+        "value": "300ms",
+        "purpose": "Band done state, active chapter colour."
+      },
+      {
+        "name": "duration-mode",
+        "value": "500ms",
+        "purpose": "Terminal window light/dark mode change."
+      },
+      {
+        "name": "autoplay",
+        "value": "loop, 2.6s hold",
+        "purpose": "The hero window plays the recorded session from the prompt to the queued message, holds on the last frame, loops; pauses off screen or in a hidden tab."
+      },
+      {
+        "name": "scrub",
+        "value": "scroll-linked",
+        "purpose": "The pinned terminal plays the recording frame by frame with scroll; a chapter maps its stretch over the first 82% of its height."
+      },
+      {
+        "name": "rain",
+        "value": "intensity 0.16 at rest, 1 with lightning for the weather card",
+        "purpose": "Rain eases toward the target over ~420ms; holds still while the session waits for an approval; storms with lightning (900ms flashes) while the weather card is more than 55% on screen. Each source claims weather under its own name; the sky takes the strongest rain, lightning if any, stillness if any (site/lib/weather.ts)."
+      },
+      {
+        "name": "ripple",
+        "value": "3 lavender rings",
+        "purpose": "The one ripple, when a command is copied, at the band."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "prefers-reduced-motion: reduce",
+        "purpose": "Transitions and animations drop to 0.01ms; the rain is drawn once and never moves; the hero rests on its last frame."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "narrow",
+        "value": "860px",
+        "purpose": "Card grids to one column; session stacks; terminal pins to the top; 56-column recording in hero and session; one-column reading layout."
+      },
+      {
+        "name": "phone",
+        "value": "520px",
+        "purpose": "Nav drops a link; band choices 44px; window title hidden."
+      }
+    ],
+    "cssVariables": {
+      "note": "Tokens are live as custom properties on :root in site/app/globals.css; component CSS references them by name.",
+      "map": {
+        "night": "--night",
+        "night-glow": "--night-glow",
+        "window": "--window",
+        "edge": "--edge",
+        "surface": "--surface",
+        "sky": "--sky",
+        "lavender": "--lavender",
+        "violet-light": "--violet-light",
+        "pink": "--pink",
+        "mint": "--mint",
+        "amber": "--amber",
+        "text": "--text",
+        "muted": "--muted",
+        "faint": "--faint",
+        "mono": "--mono",
+        "sans": "--sans",
+        "gutter": "--gutter",
+        "column": "--column",
+        "measure": "--measure",
+        "step": "--step",
+        "ease": "--ease",
+        "term-bg": "--term-bg",
+        "term-fg": "--term-fg"
+      }
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one light pill per region: text fill, night label, brightens and rises 1px on hover.",
+      "html": "<a class=\"ds-btn-primary\" href=\"#\">Install bruine</a>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;min-height:44px;padding:0 1.25rem;border-radius:999px;border:1px solid var(--text);background:var(--text);color:var(--night);font:700 .9375rem var(--mono);text-decoration:none;transition:background 180ms var(--ease),border-color 180ms var(--ease),transform 180ms var(--ease)}.ds-btn-primary:hover{background:#fff;border-color:#fff;color:var(--night);transform:translateY(-1px)}.ds-btn-primary:focus-visible{outline:2px solid var(--sky);outline-offset:3px}"
+    },
+    {
+      "name": "Outlined Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Every other pill: translucent window fill, edge border; lavender edge and wash on hover.",
+      "html": "<div class=\"ds-btn-row\"><a class=\"ds-btn\" href=\"#\">Read the guide</a><a class=\"ds-btn\" href=\"#\">MCP servers</a></div>",
+      "css": ".ds-btn-row{display:flex;flex-wrap:wrap;gap:.75rem}.ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;min-height:44px;padding:0 1.25rem;border-radius:999px;border:1px solid var(--edge);background:rgba(17,20,30,.7);color:var(--text);font:700 .9375rem var(--mono);text-decoration:none;transition:background 180ms var(--ease),border-color 180ms var(--ease)}.ds-btn:hover{border-color:var(--lavender);background:rgba(180,167,255,.1);color:var(--text)}.ds-btn:focus-visible{outline:2px solid var(--sky);outline-offset:3px}"
+    },
+    {
+      "name": "Install Band",
+      "kind": "custom",
+      "refersTo": "install-band",
+      "description": "The signature: the install command asked as the TUI asks, amber frame with title and keys cut into the border.",
+      "html": "<div class=\"ds-band\"><div class=\"ds-band-title\"><span>─</span> Allow bash</div><div class=\"ds-band-body\"><code class=\"ds-band-command\">npm install -g bruine</code><ul class=\"ds-band-choices\"><li><button type=\"button\" class=\"ds-band-choice\" aria-current=\"true\"><span class=\"ds-band-pointer\">›</span><kbd>y</kbd><span>Copy the command</span></button></li><li><button type=\"button\" class=\"ds-band-choice\"><span class=\"ds-band-pointer\">›</span><kbd>a</kbd><span>Use pnpm instead</span></button></li><li><button type=\"button\" class=\"ds-band-choice\"><span class=\"ds-band-pointer\">›</span><kbd>n</kbd><span>Not yet: read the guide</span></button></li></ul></div><div class=\"ds-band-foot\">y · a · n <span>──</span></div></div>",
+      "css": ".ds-band{--band:var(--amber);position:relative;max-width:56rem;border:1px solid var(--band);border-radius:10px;background:linear-gradient(180deg,rgba(242,207,115,.07),rgba(242,207,115,.02)),rgba(11,13,20,.86);box-shadow:0 14px 30px -18px rgba(242,207,115,.32),0 2px 6px rgba(0,0,0,.35);font-family:var(--mono);color:var(--text);transition:border-color 300ms var(--ease),box-shadow 300ms var(--ease)}.ds-band:focus-within{--band:var(--amber)}.ds-band-title,.ds-band-foot{position:absolute;padding:0 .5rem;background:var(--night);color:var(--band);font-size:.8125rem;font-weight:700;line-height:1}.ds-band-title{top:-.45rem;left:.9rem}.ds-band-foot{bottom:-.45rem;right:.9rem;font-weight:400;color:var(--muted)}.ds-band-foot span{color:var(--band)}.ds-band-body{padding:1.25rem clamp(1rem,2.4vw,1.6rem) 1.1rem;display:grid;gap:.7rem}.ds-band-command{font-size:clamp(1.05rem,2.6vw,1.5rem)}.ds-band-command::before{content:\"$ \";color:var(--faint)}.ds-band-choices{list-style:none;margin:0;padding:0;display:grid;gap:.1rem}.ds-band-choice{display:inline-flex;align-items:center;gap:.75rem;min-height:40px;padding:.2rem .65rem .2rem .25rem;border:0;border-radius:6px;background:none;color:var(--muted);font:inherit;font-size:.9375rem;cursor:pointer;transition:background 160ms var(--ease),color 160ms var(--ease)}.ds-band-choice kbd{font-family:inherit;color:var(--band);font-weight:700}.ds-band-pointer{width:1ch;color:var(--band);opacity:0;transform:translateX(-4px);transition:opacity 160ms var(--ease),transform 220ms var(--ease)}.ds-band-choice[aria-current=\"true\"],.ds-band-choice:hover{color:var(--text);background:rgba(242,207,115,.08)}.ds-band-choice[aria-current=\"true\"] .ds-band-pointer,.ds-band-choice:hover .ds-band-pointer{opacity:1;transform:none}.ds-band-choice:active{background:rgba(242,207,115,.16)}.ds-band-choice:focus-visible{outline:2px solid var(--sky);outline-offset:3px}"
+    },
+    {
+      "name": "Terminal Window",
+      "kind": "card",
+      "refersTo": "terminal-window",
+      "description": "The frame for every recorded screen and the film: window lights, centred title, lavender stamp; window fill, edge, 12px radius, lift with a violet glow.",
+      "html": "<figure class=\"ds-window\"><figcaption class=\"ds-window-bar\"><span class=\"ds-window-lights\"><i></i><i></i><i></i></span><span class=\"ds-window-title\">bruine · ~/code/api</span><span class=\"ds-window-stamp\">0:12.4</span></figcaption><pre class=\"ds-window-body\">› \n\n  ask · ↯ 53.6 tok/s · cache 95.9%</pre></figure>",
+      "css": ".ds-window{margin:0;max-width:40rem;border:1px solid var(--edge);border-radius:12px;background:var(--window);box-shadow:0 26px 40px -22px rgba(0,0,0,.85),0 18px 36px -26px rgba(111,95,214,.45);overflow:hidden;transition:background 500ms var(--ease),border-color 500ms var(--ease)}.ds-window-bar{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:1rem;padding:.6rem .85rem;border-bottom:1px solid rgba(38,44,63,.7);font-family:var(--mono);font-size:.75rem;color:var(--faint)}.ds-window-lights{display:inline-flex;gap:6px}.ds-window-lights i{width:10px;height:10px;border-radius:50%;background:#ff6159}.ds-window-lights i:nth-child(2){background:#ffbd2e}.ds-window-lights i:nth-child(3){background:#28c941}.ds-window-title{text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.ds-window-stamp{min-width:6ch;font-variant-numeric:tabular-nums;color:var(--lavender);text-align:right}.ds-window-body{margin:0;padding:14px 18px;font-family:var(--mono);font-size:14px;line-height:1.32;color:var(--text);font-variant-ligatures:none;white-space:pre}"
+    },
+    {
+      "name": "Capability Card",
+      "kind": "card",
+      "refersTo": "capability-card",
+      "description": "One claim shown by the real terminal: 14px card, edge border, top-lit fill, the 56 x 16 window bleeding off the bottom edge with square bottom corners.",
+      "html": "<article class=\"ds-cap\"><div class=\"ds-cap-text\"><h3>A quiet model is retried, out loud.</h3><p>When it gives up, the transcript says why, which attempt, and when.</p></div><figure class=\"ds-cap-window\"><figcaption class=\"ds-cap-bar\"><span class=\"ds-cap-lights\"><i></i><i></i><i></i></span><span>bruine · ~/code/report</span><span></span></figcaption><pre class=\"ds-cap-body\">  Retry 2/5\n\n›</pre></figure></article>",
+      "css": ".ds-cap{display:grid;grid-template-rows:auto 1fr;gap:1.5rem;max-width:34rem;padding:clamp(1.25rem,2.5vw,2rem) clamp(1.25rem,2.5vw,2rem) 0;border:1px solid var(--edge);border-radius:14px;background:linear-gradient(180deg,rgba(28,32,48,.55),rgba(17,20,30,.35));overflow:hidden}.ds-cap-text{display:grid;gap:.6rem}.ds-cap h3{margin:0;font-family:var(--mono);font-weight:700;font-size:1.15rem;line-height:1.12;letter-spacing:-.01em;color:var(--text)}.ds-cap p{margin:0;font-family:var(--sans);font-size:.975rem;line-height:1.65;color:var(--muted);max-width:52ch}.ds-cap-window{align-self:end;margin:0 0 -1px;border:1px solid var(--edge);border-radius:12px 12px 0 0;background:var(--window);box-shadow:0 26px 40px -22px rgba(0,0,0,.85),0 18px 36px -26px rgba(111,95,214,.45);overflow:hidden}.ds-cap-bar{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:1rem;padding:.6rem .85rem;border-bottom:1px solid rgba(38,44,63,.7);font-family:var(--mono);font-size:.75rem;color:var(--faint);text-align:center}.ds-cap-lights{display:inline-flex;gap:6px}.ds-cap-lights i{width:10px;height:10px;border-radius:50%;background:#ff6159}.ds-cap-lights i:nth-child(2){background:#ffbd2e}.ds-cap-lights i:nth-child(3){background:#28c941}.ds-cap-body{margin:0;padding:12px 16px;font-family:var(--mono);font-size:13px;line-height:1.32;color:var(--text);white-space:pre;font-variant-ligatures:none}"
+    },
+    {
+      "name": "Developer Card",
+      "kind": "card",
+      "refersTo": "dev-card",
+      "description": "A card that holds one command to copy: flat window fill at 50%, the command in a window well with an outlined copy button.",
+      "html": "<article class=\"ds-dev\"><h3>Start with one command</h3><p>Install Node 22 or newer, then:</p><div class=\"ds-copy\"><pre><code>npm install -g bruine</code></pre><button type=\"button\">Copy</button></div></article>",
+      "css": ".ds-dev{display:grid;align-content:start;gap:.6rem;max-width:34rem;padding:clamp(1.25rem,2.5vw,2rem);border:1px solid var(--edge);border-radius:14px;background:rgba(17,20,30,.5)}.ds-dev h3{margin:0;font-family:var(--mono);font-weight:700;font-size:1.15rem;line-height:1.12;letter-spacing:-.01em;color:var(--text)}.ds-dev p{margin:0;font-family:var(--sans);line-height:1.65;color:var(--muted)}.ds-copy{display:flex;align-items:flex-start;gap:.75rem;margin-top:.75rem;padding:.85rem .85rem .85rem 1rem;border:1px solid var(--edge);border-radius:8px;background:var(--window);min-width:0}.ds-copy pre{flex:1;margin:0;min-width:0;overflow-x:auto;font-family:var(--mono);font-size:.875rem;line-height:1.6;color:var(--text)}.ds-copy code::before{content:\"$ \";color:var(--faint)}.ds-copy button{flex:none;min-height:32px;padding:0 .7rem;border:1px solid var(--edge);border-radius:6px;background:none;color:var(--muted);font:400 .8125rem var(--mono);cursor:pointer;transition:color 160ms var(--ease),border-color 160ms var(--ease)}.ds-copy button:hover{color:var(--text);border-color:var(--lavender)}.ds-copy button:focus-visible{outline:2px solid var(--sky);outline-offset:3px}"
+    },
+    {
+      "name": "Readings",
+      "kind": "chip",
+      "refersTo": "reading",
+      "description": "Status-line chips; colour is the job: sky measured, mint kept, amber asks.",
+      "html": "<div class=\"ds-readings\"><span class=\"ds-reading\">↯ 53.6 tok/s</span><span class=\"ds-reading ds-reading-kept\">cache 95.9%</span><span class=\"ds-reading ds-reading-ask\">ask</span><span class=\"ds-release-tag\">latest</span></div>",
+      "css": ".ds-readings{display:flex;flex-wrap:wrap;gap:.75rem;align-items:baseline}.ds-reading{font-family:var(--mono);font-size:.875rem;color:var(--sky);padding:.15rem .5rem;border-radius:4px;background:var(--window);border:1px solid var(--edge)}.ds-reading-kept{color:var(--mint)}.ds-reading-ask{color:var(--amber)}.ds-release-tag{font-family:var(--mono);font-size:.8125rem;color:var(--mint);border:1px solid rgba(143,227,163,.4);border-radius:999px;padding:.05rem .6rem}"
+    },
+    {
+      "name": "Links",
+      "kind": "button",
+      "refersTo": "link",
+      "description": "Sky links with a 40% underline, violet-light on hover; the mono more-link with a moving arrow; sky focus ring.",
+      "html": "<p class=\"ds-prose\">llama.cpp, any /v1 server, or <a class=\"ds-link\" href=\"#\">about thirty cloud providers</a>.</p><a class=\"ds-more\" href=\"#\">See the full comparison <svg width=\"14\" height=\"14\" viewBox=\"0 0 14 14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M2 7h10M8 3l4 4-4 4\"/></svg></a>",
+      "css": ".ds-prose{margin:0 0 1rem;font-family:var(--sans);font-size:1.0625rem;line-height:1.65;color:var(--muted)}.ds-link,.ds-more{color:var(--sky);text-decoration-color:rgba(125,207,255,.4);text-underline-offset:.22em;text-decoration-thickness:1px;transition:color 160ms var(--ease),text-decoration-color 160ms var(--ease)}.ds-link:hover,.ds-more:hover{color:var(--violet-light);text-decoration-color:currentColor}.ds-link:focus-visible,.ds-more:focus-visible{outline:2px solid var(--sky);outline-offset:3px;border-radius:4px}.ds-more{display:inline-flex;align-items:center;gap:.5rem;min-height:44px;font-family:var(--mono);font-size:.9375rem}.ds-more svg{transition:transform 220ms var(--ease)}.ds-more:hover svg{transform:translateX(3px)}"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "One mono row: raindrop and wordmark left, muted links right, a bordered language switch.",
+      "html": "<header class=\"ds-nav\"><a class=\"ds-nav-home\" href=\"#\"><span class=\"ds-nav-drop\"></span>bruine</a><ul class=\"ds-nav-links\"><li><a href=\"#\" aria-current=\"page\">Guide</a></li><li><a href=\"#\">Compare</a></li><li><a href=\"#\">Changelog</a></li><li><a class=\"ds-nav-lang\" href=\"#\">en <span class=\"ds-nav-sep\">/</span> <span class=\"ds-nav-other\">fr</span></a></li></ul></header>",
+      "css": ".ds-nav{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1.1rem 0;font-family:var(--mono);font-size:.875rem}.ds-nav-home{display:inline-flex;align-items:center;gap:.55rem;color:var(--text);text-decoration:none;font-weight:700;font-size:1.05rem;letter-spacing:-.01em}.ds-nav-drop{width:9px;height:14px;background:linear-gradient(180deg,var(--sky),var(--lavender));border-radius:50% 50% 50% 50%/62% 62% 38% 38%;transform:rotate(180deg)}.ds-nav-links{display:flex;align-items:center;gap:1.5rem;list-style:none;margin:0;padding:0}.ds-nav-links a{display:inline-flex;align-items:center;gap:.25rem;min-height:44px;color:var(--muted);text-decoration:none;transition:color 160ms var(--ease)}.ds-nav-links a:hover,.ds-nav-links a[aria-current=\"page\"]{color:var(--text)}.ds-nav-links a:focus-visible{outline:2px solid var(--sky);outline-offset:3px;border-radius:4px}.ds-nav-links .ds-nav-lang{min-height:32px;padding:0 .55rem;border:1px solid var(--edge);border-radius:6px}.ds-nav-sep{color:var(--faint)}.ds-nav-other{color:var(--lavender)}"
+    },
+    {
+      "name": "Hairline Rows",
+      "kind": "custom",
+      "refersTo": "reading",
+      "description": "Grouped facts as rows between 1px edge hairlines: a promise row and an FAQ item with the drawn chevron.",
+      "html": "<div class=\"ds-rows\"><div class=\"ds-row\"><div class=\"ds-row-head\"><span class=\"ds-row-title\">The numbers are measured.</span><span class=\"ds-row-reading\">↯ 53.6 tok/s</span></div><p class=\"ds-row-body\">Speed, prefill and cache hits come from bruine's own clock.</p></div><details class=\"ds-faq\"><summary>Does it send my code anywhere?<svg class=\"ds-chev\" width=\"14\" height=\"14\" viewBox=\"0 0 14 14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 3l4 4-4 4\"/></svg></summary><p>Only to the model route you configured.</p></details></div>",
+      "css": ".ds-rows{max-width:46rem;border-top:1px solid var(--edge)}.ds-row{display:grid;gap:.75rem;padding:1.5rem 0;border-bottom:1px solid var(--edge)}.ds-row-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem .9rem}.ds-row-title{font-family:var(--mono);font-weight:700;font-size:1.25rem;letter-spacing:-.01em;color:var(--text)}.ds-row-reading{font-family:var(--mono);font-size:.875rem;color:var(--sky);padding:.15rem .5rem;border-radius:4px;background:var(--window);border:1px solid var(--edge)}.ds-row-body{margin:0;font-family:var(--sans);color:var(--muted);line-height:1.65}.ds-faq{border-bottom:1px solid var(--edge)}.ds-faq summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:1rem;padding:1.15rem 0;font-family:var(--mono);font-weight:700;font-size:1.0625rem;color:var(--text);transition:color 160ms var(--ease)}.ds-faq summary::-webkit-details-marker{display:none}.ds-chev{flex:none;align-self:center;color:var(--lavender);transition:transform 220ms var(--ease)}.ds-faq[open] .ds-chev{transform:rotate(90deg)}.ds-faq summary:hover{color:var(--violet-light)}.ds-faq summary:focus-visible{outline:2px solid var(--sky);outline-offset:3px;border-radius:4px}.ds-faq p{margin:0;padding:0 0 1.35rem;font-family:var(--sans);color:var(--muted)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "A Terminal Under Fine Rain",
+    "overview": "The site is the terminal app's own world brought to page scale. A night ground lit by clouds from above holds a faint pastel rain that falls behind everything and never takes a click; on top of it sit the TUI's own framed windows, set in JetBrains Mono, with Inter carrying the prose between them. The page does not describe bruine from outside: it frames the real thing (a recorded session playing on its own, slices of the real terminal, the film) and asks the visitor in the same amber frame bruine uses when it asks before acting.\n\nThe composition follows the reference the user pinned (DeepSeek's Harness page): a centred offer under a lit night sky with the product window directly beneath it, then the amber install band, a scroll-scrubbed session, a 2x2 grid of capability cards each shown by the real terminal, two developer cards that each hold one command, and a centred close under a second glow. Cards are allowed, but they are earned: a card exists to hold a real terminal or a command, never icon-heading-text filler. Grouped facts (promises, FAQ, fit tables, releases) stay as rows on 1px hairlines. Colour is rationed by job: each pastel means one thing, and amber means only \"this asks you\". Motion is the weather: the hero window plays the recording, the scroll scrubs it, the rain follows what the page shows, and a copied command lands as a ring in the rain.\n\nThe theme is dark only, deliberately: the readers are terminal developers, often at night, and the brand is night rain. Light appears only inside a terminal window, when it shows the TUI's light theme.",
+    "keyCharacteristics": [
+      "Night ground with clouds lit from above at the top, a fixed violet glow, and pastel rain on a fixed canvas behind the page.",
+      "JetBrains Mono for every heading, label, button, command and terminal; Inter only for running prose.",
+      "Real terminal windows everywhere a product is shown, laid out on their own cell grid and scaled whole.",
+      "Earned cards (14px, edge border, translucent night fill) that hold a real terminal demo or a command; hairline rows for everything else.",
+      "Pill buttons: one light pill per region, the rest outlined.",
+      "Amber reserved for asking; mint for done; pink for what bruine refuses.",
+      "Motion that is weather: autoplay, scrub, rain intensity combined from every source, one ripple."
+    ],
+    "rules": [
+      {
+        "name": "The Amber Asks Rule",
+        "body": "Amber appears only where something asks for a decision: the install band and the Ask permission mode. A heading, a button, a highlight or a warning that does not ask is never amber.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Job Rule",
+        "body": "Each pastel keeps its job across every page: sky is a link or focus, lavender is the interactive accent, mint is done, pink is refusal. A new element takes the colour of its job, not a colour for variety.",
+        "section": "colors"
+      },
+      {
+        "name": "The Night Only Rule",
+        "body": "The page is dark only (`color-scheme: dark`, theme colour night). Light exists only inside a terminal window when it shows the light theme; the light pill button is the one light surface on the page itself.",
+        "section": "colors"
+      },
+      {
+        "name": "The Lit Sky Rule",
+        "body": "Light comes from above, twice: the clouds at the top of the page and the glow behind the close, both in cloud blue and cloud violet at low alpha. Nothing else on the page glows except the band's and the window's own shadows.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mono Speaks Rule",
+        "body": "Every heading, label, key, button, command and reading is set in JetBrains Mono; Inter is for paragraphs a person reads. No heading is ever set in Inter.",
+        "section": "typography"
+      },
+      {
+        "name": "The Real Grid Rule",
+        "body": "The terminal is never reflowed or re-set at a smaller font: it is laid out at 16px on its own cell grid and scaled as one block, so every column of the recording lands where the app drew it.",
+        "section": "typography"
+      },
+      {
+        "name": "The Hairline List Rule",
+        "body": "Grouped facts (promises, FAQ, fit tables, releases, refusals) are rows divided by 1px `edge` hairlines or simple lists, never cards.",
+        "section": "layout"
+      },
+      {
+        "name": "The Earned Card Rule",
+        "body": "A card exists only to hold a real terminal demo or a command to copy. Cards come in pinned grids of equal columns (two across); a card that would hold only an icon, a heading and a sentence is a hairline row instead.",
+        "section": "layout"
+      },
+      {
+        "name": "The Two Frames Rule",
+        "body": "Only the approval band and the terminal window cast a shadow. Cards, buttons, lists, tables, code blocks, readings and the table of contents stay flat.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Border Title Rule",
+        "body": "A frame that asks names itself in its top border: the title (`─ Allow bash`) sits on a night patch cut into the top-left edge, and the key hint (`y · a · n ──`) into the bottom-right edge, exactly as the TUI's approval box.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Bleed Rule",
+        "body": "A terminal inside a card has no padding below it: the window sits at the card's bottom edge with its own bottom corners squared, so it reads as continuing past the card.",
+        "section": "shapes"
+      },
+      {
+        "name": "The One Light Pill Rule",
+        "body": "Each region has at most one primary light pill (Install bruine in the hero; View on GitHub at the close); every other action beside it is an outlined pill.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do keep amber for asking: the install band and the Ask permission mode only.",
+      "Do set every heading, label, button, command and reading in JetBrains Mono, and prose in Inter at the 68ch measure.",
+      "Do draw frames as the TUI does: 1px line, rounded corners, the title cut into the top border.",
+      "Do divide grouped facts with 1px `edge` hairlines.",
+      "Do give every card a real terminal demo bleeding off its bottom edge or a command to copy, at 14px radius with a 1px `edge` border and a translucent night fill, in a grid of equal columns.",
+      "Do size every capability demo at 56 columns × 16 rows, and give a film clip the same box (33.6 / 21.12) on `clip-ground`.",
+      "Do fill every terminal window with output recorded from the running app, laid out on its own cell grid and scaled whole.",
+      "Do use one light pill per region and outline the rest.",
+      "Do draw icons as SVG at one 1.5px stroke with round caps.",
+      "Do let motion be weather: the hero autoplay, the scroll scrub, rain intensity that follows the page (drizzle at 0.16, still while the session waits for an approval, a storm with lightning while the weather card is more than 55% on screen), and one ripple on copy, all easing on `cubic-bezier(0.16, 1, 0.3, 1)`. Every part of the page claims weather under its own name and the sky combines them: the strongest rain, lightning if any asks, stillness if any waits.",
+      "Do stop all of it under reduced motion: the rain is drawn once and never moves, the hero rests on its last frame."
+    ],
+    "donts": [
+      "Don't add a light page theme; light lives only inside the terminal window and in the one light pill.",
+      "Don't use amber for emphasis, buttons, warnings or decoration that does not ask.",
+      "Don't set a heading in Inter or a paragraph of prose in mono.",
+      "Don't make a card of an icon, a heading and a sentence; without a real terminal or a command, it is a hairline row.",
+      "Don't put two light pills in one region.",
+      "Don't put a shadow on anything but the install band and the terminal window; cards stay flat.",
+      "Don't reflow or re-set a terminal to fit a card; slice whole rows and scale the grid.",
+      "Don't set text dimmer than `faint`.",
+      "Don't let the rain take input or sit in front of content: it is fixed, behind, and `pointer-events: none`."
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "bruine-site",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "node scripts/import-tape.mjs && next build",
+    "tape": "node scripts/import-tape.mjs",
+    "preview": "node scripts/import-tape.mjs && PREVIEW=1 next build && node scripts/preview.mjs"
+  },
+  "dependencies": {
+    "next": "16.3.8",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.0"
+  }
+}

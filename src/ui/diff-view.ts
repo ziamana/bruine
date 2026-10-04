@@ -193,9 +193,10 @@ export function renderDiff(d: FileDiff, width: number, ascii = false): string[] 
     if (l.kind === "ctx") return `${paint("muted", prefix)}${paint("faint", sign)}${paint("muted", `${gutter}${body}${pad}`)}`;
     const role = l.kind === "add" ? "mint" : "rose";
     const ink = l.kind === "add" ? "addFg" : "delFg";
-    const band = `${gutter}${body}${pad}`;
-    const painted = bgEnabled() ? onBg(l.kind === "add" ? "addBg" : "delBg", paint(ink, band)) : paint(ink, band);
-    return `${paint("muted", prefix)}${paint(role, sign)}${painted}`;
+    // The band is the whole line, its number and sign included: an added line is one green
+    // stripe from the first column, not a stripe that starts after its own label.
+    const line = `${paint("muted", prefix)}${paint(role, sign)}${paint(ink, `${gutter}${body}${pad}`)}`;
+    return bgEnabled() ? onBg(l.kind === "add" ? "addBg" : "delBg", line) : line;
   };
   const out = shown.map(row);
   const rest = d.lines.length - shown.length;

@@ -1,6 +1,7 @@
 import { appEnv } from "../compat.js";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { release as osRelease } from "node:os";
+import { sharedState } from "../shared-state.js";
 /**
  * bruine's palette ("Nuage"): soft sky blues and lavender. 24-bit color when the
  * terminal says so, a 256-color approximation otherwise, and the classic 16 ANSI
@@ -296,10 +297,17 @@ export function deriveInk(bg: { r: number; g: number; b: number }, backdrop: Bac
   return out;
 }
 
-/** Backgrounds probed from the terminal; empty until a reply lands. */
-const probed: Partial<Record<ProbedRole, string>> = {};
-/** Foregrounds fitted to that background; empty until a reply lands. */
-const inked: Partial<Record<InkRole, string>> = {};
+/**
+ * What the terminal said about itself, one per process (src/shared-state.ts): the backgrounds
+ * probed from it and the foregrounds fitted to them (empty until a reply lands), and its depth.
+ */
+const state = sharedState("palette", () => ({
+  probed: {} as Partial<Record<ProbedRole, string>>,
+  inked: {} as Partial<Record<InkRole, string>>,
+  depth: undefined as ColorDepth | undefined,
+}));
+const probed = state.probed;
+const inked = state.inked;
 
 /** Adopt the terminal's real background (OSC 11) for the painted surfaces and the ink on them. */
 export function setTerminalBackdrop(bg?: { r: number; g: number; b: number }): Backdrop | undefined {
@@ -409,14 +417,13 @@ export function bgEnabled(depth: ColorDepth = colorDepth()): boolean {
   return depth === "truecolor" || depth === "256";
 }
 
-let cachedDepth: ColorDepth | undefined;
 /** The session's color depth (read once; tests reset it with resetColorDepth). */
 export function colorDepth(): ColorDepth {
-  cachedDepth ??= detectColorDepth();
-  return cachedDepth;
+  state.depth ??= detectColorDepth();
+  return state.depth;
 }
 export function resetColorDepth(): void {
-  cachedDepth = undefined;
+  state.depth = undefined;
   resetTerminalBackdrop();
 }
 

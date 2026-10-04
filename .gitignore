@@ -13,3 +13,6 @@ test/e2e/__screens__/run/
 
 # agent scratch (apex run journals, checkpoints): local state, not source
 .agents/
+
+# impeccable review captures: regenerated, not source
+.impeccable/review/

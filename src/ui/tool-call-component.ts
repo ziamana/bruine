@@ -1,6 +1,6 @@
 import type { Component } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
-import { isAbsolute, relative } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import { clipCells, sanitize, spinnerFrame } from "../render/reasoning.js";
 import { formatDuration } from "./tool-group.js";
 import type { RailState } from "./chat-layout.js";
@@ -10,6 +10,15 @@ import { ansi } from "./theme.js";
 import { diffCounter, diffForCall, renderDiff, type FileDiff } from "./diff-view.js";
 import { parsePartialJson } from "./partial-json.js";
 import { readableToolSummary, toolSummariesEnabled } from "./tool-summary.js";
+import { previewImageFile } from "./image-preview.js";
+
+/** Tools whose result is an image the model looked at: the transcript shows it too. */
+const IMAGE_TOOLS = new Set(["read_image", "view_image"]);
+/** A `read` of one of these is an image too. */
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp)$/i;
+/** The most room an image takes in the transcript, in cells. */
+export const IMAGE_PREVIEW_COLS = 64;
+export const IMAGE_PREVIEW_ROWS = 16;
 
 const SUMMARY_KEYS = ["command", "cmd", "path", "file_path", "url", "query", "pattern", "name"];
 /** T59: the tools whose call is a change to the workspace. */
@@ -68,6 +77,8 @@ export class ToolCallComponent implements ChatToolCall {
   #done: { ok: boolean; seconds: number; lines: string[]; rest: number } | undefined;
   /** What a successful edit/write changed, shown instead of "file updated". */
   #diff: FileDiff | undefined;
+  /** The image file a successful image read showed the model. */
+  #image: string | undefined;
   #readableSummaries: boolean;
   constructor(readonly tool: string, private now: () => number = Date.now, private icons: BruineIcons = bruineIcons(), opts: { readableSummaries?: boolean } = {}) {
     this.#startTime = now();
@@ -102,6 +113,9 @@ export class ToolCallComponent implements ChatToolCall {
       .filter((l) => !/^\s*\(End of file - total \d+ lines?\)\s*$/.test(l));
     while (lines.length > 0 && lines.at(-1)!.trim() === "") lines.pop();
     this.#diff = ok && WRITE_TOOLS.has(this.tool) ? diffForCall(this.tool, this.#rawArgs) : undefined;
+    // An image the model read is shown as the image, not as the envelope the model was given.
+    const path = this.#arg("path") ?? this.#arg("file_path");
+    this.#image = ok && path !== undefined && (IMAGE_TOOLS.has(this.tool) || (this.tool === "read" && IMAGE_FILE.test(path))) ? resolve(process.cwd(), path) : undefined;
     if (lines.at(-1) === "") lines.pop();
     this.#settled = undefined;
     this.#done = { ok, seconds: (this.now() - this.#startTime) / 1000, lines: lines.slice(0, MAX_OUTPUT_LINES), rest: Math.max(0, lines.length - MAX_OUTPUT_LINES) };
@@ -247,7 +261,8 @@ export class ToolCallComponent implements ChatToolCall {
     const dur = formatDuration(this.#done.seconds) ?? (this.#done.ok ? "0.0s" : undefined);
     const counter = this.#diff === undefined ? "" : `  ${diffCounter(this.#diff)}`;
     const durCells = this.#diff === undefined ? 0 : 2 + `+${String(this.#diff.added)} -${String(this.#diff.removed)}`.length;
-    const prefixCells = 1 + 1 + 7 + 2;
+    // The name is padded to seven cells, and a longer one (read_image) takes what it needs.
+    const prefixCells = 1 + 1 + stringWidth(toolPad) + 2;
     const avail = Math.max(0, width - prefixCells - durCells);
     const budget = Math.min(60, avail);
     const durPart = counter;
@@ -270,6 +285,14 @@ export class ToolCallComponent implements ChatToolCall {
       out.push(...renderDiff(this.#diff, Math.max(1, width - 2), this.icons.think === "*").map((l) => `  ${l}`));
       if (dur !== undefined) out.push(ansi.gray(clipCells(`Took ${dur}`, width)));
       return out;
+    }
+    if (this.#image !== undefined) {
+      const preview = previewImageFile(this.#image, Math.min(IMAGE_PREVIEW_COLS, Math.max(1, width - 6)), IMAGE_PREVIEW_ROWS);
+      if (preview !== undefined) {
+        if (preview.lines !== undefined) out.push(...preview.lines.map((l) => `    ${l}`));
+        out.push(ansi.gray(clipCells(`    ${preview.description}${dur === undefined ? "" : ` ${this.icons.think === "*" ? "-" : "·"} ${dur}`}`, width)));
+        return out;
+      }
     }
     const branch = this.icons.think === "*" ? ">" : "⎿";
     this.#done.lines.forEach((line, i) => out.push(ansi.gray(clipCells(`${i === 0 ? `  ${branch} ` : "    "}${line}`, width))));

@@ -1,18 +1,26 @@
 <div align="center">
 
-<img src="docs/demo/bruine.svg" alt="bruine in a terminal: a prompt, the model's reasoning streaming then folding away, a file read, an edit shown as a diff, two permission prompts, the tests passing, and a second prompt that was queued while it worked going out after" width="100%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/wordmark-dark.svg">
+  <img src="docs/media/wordmark-light.svg" alt="bruine" width="380">
+</picture>
 
-# bruine
-
-**A coding agent for your terminal that runs your own models.**
+### A coding agent for your terminal that runs your own models.
 
 *bruine* (French, /bʁɥin/): a fine, steady rain.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-b4a7ff)](LICENSE)
 [![Node 22+](https://img.shields.io/badge/node-22%2B-7dcfff)](https://nodejs.org)
 ![Windows · macOS · Linux](https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-supported-8fe3a3)
+[![Changelog](https://img.shields.io/badge/version-0.1.0-ff9ed2)](CHANGELOG.md)
+
+<a href="docs/media/bruine-film.mp4"><img src="docs/media/hero.webp" alt="The bruine film: the word bruine becomes the logo in the rain, then the effort climbs from low to max and the rain turns into a storm" width="100%"></a>
+
+<sub>▶ <a href="docs/media/bruine-film.mp4"><b>Watch the 42-second film</b></a> (with sound) · made in code with Remotion, the demo inside it is the real bruine, recorded cell by cell</sub>
 
 </div>
+
+<br>
 
 Point bruine at a llama.cpp server on your machine, at any cloud provider (DeepSeek, Anthropic,
 OpenAI, Google, OpenRouter, Groq, Mistral, xAI and about twenty more), or at anything that speaks
@@ -27,9 +35,42 @@ bruine
 The first launch opens a setup wizard: it finds a local model server if you run one, asks for API
 keys if you want a cloud route, lets you pick skills, and writes `~/.bruine/`.
 
-<sub>The demo above is the real bruine in a real terminal on a real project, with a scripted model so
-it is the same every time: [`test/e2e/demo-recording.test.ts`](test/e2e/demo-recording.test.ts)
-records it.</sub>
+## See it
+
+<img src="docs/demo/bruine.svg" alt="bruine in a terminal: a prompt, the model's reasoning streaming then folding away, a file read, an edit shown as a diff, two permission prompts, the tests passing, and a second prompt that was queued while it worked going out after" width="100%">
+
+<sub>A real session in a real terminal on a real project, with a scripted model so it is the same every
+time: [`test/e2e/demo-recording.test.ts`](test/e2e/demo-recording.test.ts) records it. The stills below
+come the same way, from [`test/e2e/screenshots.test.ts`](test/e2e/screenshots.test.ts).</sub>
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/media/approval.png" alt="An approval: a framed amber band saying Allow write src/summary.ts, with y Allow once, a Always allow every write this session, n Reject, and the prompt box below reading Waiting for you 3s">
+<p><b>It asks first, in one keystroke.</b> The request is the one framed thing on screen: <code>y</code> once,
+<code>a</code> always (and it says exactly what "always" covers), <code>n</code> or <code>esc</code> no. The
+turn's clock stops and the rain holds still while it waits for you.</p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/media/retry.png" alt="A retry: the transcript says The model has not answered for 1s. Retry 1/5 in 0.5s, and the prompt box reads Working 6s, retry 1/5">
+<p><b>A quiet model is retried, out loud.</b> How long bruine waits depends on what the model was doing,
+how hard it was asked to think and how many tries it has had; when it gives up, the transcript says
+why, which attempt, and when.</p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/media/image.png" alt="read_image design/mockup.png: the image itself drawn in the terminal with coloured half blocks, a night-blue gradient with a falling drop and rings, captioned PNG 192x108">
+<p><b>It shows you what it looks at.</b> An image the model reads is drawn right in the transcript, in
+any 24-bit or 256-colour terminal: no graphics protocol, no window, just colour.</p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/media/light.png" alt="bruine on a light terminal theme: an edit shown as a diff with pale red and green bands, dark text, and the status bar with cache 95.3% and ctx 6.4% of 100k">
+<p><b>Light or dark, it reads.</b> bruine asks the terminal for its background and fits every colour to
+it; on 256-colour terminals the surfaces stay gray instead of turning navy.</p>
+</td>
+</tr>
+</table>
 
 ## Why bruine
 
@@ -67,18 +108,29 @@ training), and the offer can end without notice, so keep another model in reach.
 
 ## What it does
 
-| | |
+| Feature | What you see |
 |---|---|
 | Live reasoning | The model's thinking streams in place, word by word, then collapses to `Thought for 4.2s` |
+| Diffs | Every edit and write is shown as a diff, one green or red band per line, before you approve it |
+| Images, both ways | `ctrl+v` sends a screenshot to a vision model, and an image the model reads is drawn in the transcript |
+| Retries you can see | An adaptive silence budget per request, and "Retry 2/5" in the transcript instead of a clock that keeps counting |
+| Updates | A notice when a new version is out, and `/update` installs it after a yes |
 | Tool calls | Every call streams its arguments, then a grouped summary with a duration and a coloured rail |
 | A real permission gate | Ask / Auto / Full access, decided by a rule table you can read, not a black box |
 | Plan mode | `Shift+Tab` to plan before it builds; the plan is a message, the tools never change |
 | `/model` and `/provider` | Switch model mid-session from the server's own live catalogue |
 | Skills | Reuses the skills you already wrote for Claude Code, OpenCode, pi or `~/.agents/skills` |
-| Images | `ctrl+v` (or `alt+v`, which Windows Terminal lets through) pastes a screenshot straight to a vision model |
 | Context and speed | A footer that shows context used, tok/s, prefill and cache hit rate |
 | Works on | Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal |
 | herdr | Works with herdr: shows up as `bruine` in `herdr agent list`. |
+
+## The weather
+
+Use `/effect` for a live preview picker, or choose directly: `/effect bruine` (quiet drizzle), `/effect pluie` (steady rain), `/effect foudre` (heavy rain with distant lavender lightning), `/effect auto` (drizzle at rest; while working, rain as hard as the reasoning effort: each of low, medium, high, xhigh and max has its own weather, and max brings distant lightning), or `/effect off`.
+`/effect on` is an alias for `/effect auto`. Enter saves the choice in `bruine.json`; Escape cancels the preview. Weather is rendered locally and uses no model tokens.
+It follows the visible screen, including empty space below the composer and while reading back. It stays clear of the composer, controls and painted cards, pauses while selecting text, and follows `BRUINE_NO_ANIMATION`, `BRUINE_NO_RAIN`, ASCII and no-color settings.
+
+<p align="center"><a href="docs/media/bruine-film.mp4"><img src="docs/media/effort.webp" alt="The prompt box as ctrl+e climbs from low to max: its border glows violet, then runs every colour, and the rain turns into a storm" width="100%"></a></p>
 
 ## MCP servers
 
@@ -123,7 +175,7 @@ moved. Every one of these is a good tool, and some do things bruine does not.
 | IDE integration | No, terminal only | Yes | Yes (LSP, desktop app) | Editor plugins by the community | Yes |
 
 **Where bruine is behind, today:** no checkpoints or rewind (Git is your undo), no IDE or ACP
-integration, MCP is tools only (no resources, prompts or OAuth login), no LSP, and it is young (0.0.x)
+integration, MCP is tools only (no resources, prompts or OAuth login), no LSP, and it is young (0.1)
 on top of a harness that is itself a developer preview. If you mostly use Claude models in an IDE,
 Claude Code is the better fit; if you want Git-commit-per-edit, Aider is.
 
@@ -249,12 +301,6 @@ MIT. Everything that runs locally stays MIT.
 - [`docs/tickets/`](./docs/tickets) - the work, one ticket at a time
 - [`docs/PLATFORMS.md`](./docs/PLATFORMS.md) - what was checked and fixed for Windows and macOS
 - [`bench/`](./bench) - the benchmark: a system-prompt change only ships when a number says it helps
-
-## Chat weather
-
-Use `/effect` for a live preview picker, or choose directly: `/effect bruine` (quiet drizzle), `/effect pluie` (steady rain), `/effect foudre` (heavy rain with distant lavender lightning), `/effect auto` (drizzle at rest; while working, rain as hard as the reasoning effort: each of low, medium, high, xhigh and max has its own weather, and max brings distant lightning), or `/effect off`.
-`/effect on` is an alias for `/effect auto`. Enter saves the choice in `bruine.json`; Escape cancels the preview. Weather is rendered locally and uses no model tokens.
-It follows the visible screen, including empty space below the composer and while reading back. It stays clear of the composer, controls and painted cards, pauses while selecting text, and follows `BRUINE_NO_ANIMATION`, `BRUINE_NO_RAIN`, ASCII and no-color settings.
 
 ## Existing Kumo installations
 

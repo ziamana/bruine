@@ -20,7 +20,7 @@ const enabled = process.env.RECORD_VIDEO === "1";
 beforeAll(enabled ? build : () => {}, 60_000);
 
 const FPS = 45;
-const COLS = 104;
+const COLS = Number(process.env.RECORD_COLS ?? 104);
 const ROWS = 26;
 
 const HTTP_TS = `export async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {

@@ -76,6 +76,10 @@ export class Harness {
       displayName?: string;
       /** Put the project at `<fresh home>/<path>` and make that the user's home, for recordings. */
       projectPath?: string;
+      /** Declare that the model reads images (`input: [text, image]`), so `read_image` is allowed. */
+      imageInput?: boolean;
+      /** Answer the background query (OSC 11) with this colour, as a terminal with that theme would. */
+      background?: string;
     } = {},
   ) {
     const home = await mkdtemp(join(tmpdir(), "bruine-e2e-home-"));
@@ -111,6 +115,7 @@ export class Harness {
         const provider: any = Object.values(doc["llm-pi-ai"].providers)[0];
         provider.models[0].name = opts.displayName ?? "e2e-model Pretty";
         provider.models[0].contextWindow = 100000;
+        if (opts.imageInput === true) provider.models[0].input = ["text", "image"];
         if (extraModel !== undefined) provider.models.push({ id: extraModel, contextWindow: 50000 });
         await writeFile(join(home, "settings.yaml"), renderSettingsYaml(doc));
       }
@@ -164,6 +169,11 @@ export class Harness {
       ensureSpawnHelper();
       h.child = pty.spawn(process.execPath, [join(root, "dist", "bin.js")], { name: "xterm-256color", cols: 100, rows: 30, cwd: project, env });
       h.child.onData((data) => {
+        // A real terminal answers "what is your background?" (OSC 11); the headless one does not.
+        if (opts.background !== undefined && data.includes("\x1b]11;?")) {
+          const [r, g, b] = [1, 3, 5].map((i) => opts.background!.slice(i, i + 2).repeat(2));
+          h.child.write(`\x1b]11;rgb:${r}/${g}/${b}\x1b\\`);
+        }
         h.pending = h.pending.then(() => new Promise<void>((done) => h.term.write(data, () => {
           const screen = h.screen().join("\n");
           if (/\p{Extended_Pictographic}/u.test(screen) && h.emojiScreens.length < 5) h.emojiScreens.push(screen);

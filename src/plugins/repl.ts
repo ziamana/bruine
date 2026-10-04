@@ -36,6 +36,7 @@ import {
 } from "../image/attach.js";
 import { stripImageChips } from "../image/pending.js";
 import { NO_VISION_NOTICE } from "../image/vision.js";
+import { availableSkillNames, withUiSkillsHint } from "./ui-skills.js";
 import type { ClipboardImage } from "../image/clipboard.js";
 import type { DshContext, BruineRepl, BruineStartup } from "./ctx.js";
 
@@ -464,8 +465,8 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   let { agent } = created;
   const { selection, selectionRef } = created;
 
-  const send = (parts: UserContentPart[]): void => {
-    agent.followup(createUserMessage({ content: parts, source: { kind: "user" } }));
+  const send = (parts: UserContentPart[], text = ""): void => {
+    agent.followup(createUserMessage({ content: withUiSkillsHint(text, parts, skillNames) as UserContentPart[], source: { kind: "user" } }));
   };
 
   /**
@@ -488,7 +489,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     if (ui !== undefined && (await ui.routeSeesImages()) === "no") {
       ui.showNotice(NO_VISION_NOTICE, { red: true });
       ui.pendingImages.release(images);
-      target.followup(createUserMessage({ content: [{ type: "text", text: stripImageChips(text) }], source: { kind: "user" } }));
+      target.followup(createUserMessage({ content: withUiSkillsHint(text, [{ type: "text" as const, text: stripImageChips(text) }], skillNames) as UserContentPart[], source: { kind: "user" } }));
       return;
     }
     const built = await buildUserContent(text, images, attachmentStore());
@@ -498,7 +499,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
     const label = built.attached > 0 ? text : stripImageChips(text);
     target.followup(
       createUserMessage({
-        content: built.attached > 0 ? built.parts : [{ type: "text", text: label }],
+        content: withUiSkillsHint(text, built.attached > 0 ? built.parts : [{ type: "text" as const, text: label }], skillNames) as UserContentPart[],
         source: { kind: "user" },
       }),
     );
@@ -507,7 +508,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
   const followup = (text: string): void => {
     const images = ui?.pendingImages.resolve(text) ?? [];
     if (images.length === 0) {
-      send([{ type: "text", text }]);
+      send([{ type: "text", text }], text);
       return;
     }
     // The store validates and normalizes the bytes, so the send is async. The
@@ -519,6 +520,12 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
 
   /** Palette items: bruine's commands plus dsh's, no duplicates (bruine wins). */
   const skillsDir = join(runtimeHome(), "skills");
+  /** The skills this session can load, read once at the start and again after /reload and /new. */
+  let skillNames: string[] = [];
+  const refreshSkillNames = (): void => {
+    void availableSkillNames(skillsDir, process.cwd()).then((names) => { skillNames = names; });
+  };
+  refreshSkillNames();
   const completeCommandList = (): SlashCommand[] => {
     let commands: SlashCommand[];
     try {
@@ -744,6 +751,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         reply("/reload needs the terminal UI. In a piped run there is nothing to redraw.");
         return;
       }
+      refreshSkillNames();
       // Never a silent lie: a route that moved under us is named, not adopted.
       const report = await ui.reload();
       const lines = [`Reloaded. Route still ${report.live}.`];
@@ -781,6 +789,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       return;
     }
     if (cmd === "/new") {
+      refreshSkillNames();
       await startNewConversation();
       return;
     }
@@ -912,7 +921,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         followup: (t: string) => {
           const images = ui?.pendingImages.resolve(t) ?? [];
           if (images.length === 0) {
-            next.agent.followup(createUserMessage({ content: [{ type: "text", text: t }], source: { kind: "user" } }));
+            next.agent.followup(createUserMessage({ content: withUiSkillsHint(t, [{ type: "text" as const, text: t }], skillNames) as UserContentPart[], source: { kind: "user" } }));
             return;
           }
           void sendWithImages(t, images, next.agent);

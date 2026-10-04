@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
+import { join } from "node:path";
+import { runtimeHome } from "../compat.js";
+import { availableSkillNames, withUiSkillsHint } from "./ui-skills.js";
 import type { DshContext, BruineStartup } from "./ctx.js";
 import type { BruineModesService } from "./modes.js";
 
@@ -82,7 +85,8 @@ async function run(ctx: DshContext): Promise<number> {
       text = "";
       streamed = "";
       reason = "error";
-      agent.followup(createUserMessage({ content: [{ type: "text", text: prompt }], source: { kind: "user" } }));
+      const skills = await availableSkillNames(join(runtimeHome(), "skills"), process.cwd());
+      agent.followup(createUserMessage({ content: withUiSkillsHint(prompt, [{ type: "text" as const, text: prompt }], skills) as any, source: { kind: "user" } }));
       await agent.whenIdle();
       if (text === "") text = streamed;
       if (reason !== "completed") break;

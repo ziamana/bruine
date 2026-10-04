@@ -1,46 +1,79 @@
 name: Release
 
-# A tag `vX.Y.Z` on main publishes bruine X.Y.Z to npm and opens a GitHub release with that
-# version's CHANGELOG section. Every installed bruine finds it within a day (the daily update
-# check) and offers /update.
+# The version in package.json is the release. When it changes on main (or a v* tag is pushed, or
+# the workflow is run by hand), this checks the code, publishes that version to npm if npm does not
+# have it yet, and creates the tag vX.Y.Z and its GitHub release (that version's CHANGELOG notes) if
+# they do not exist yet. Every step is idempotent: running it twice changes nothing.
 #
-# Needs one repository secret: NPM_TOKEN, an npm automation token allowed to publish `bruine`.
+# Publishing needs one repository secret, NPM_TOKEN (an npm automation token allowed to publish
+# `bruine`). Without it the tag and the release are still made, and the publish is skipped with a
+# warning; add the secret and run the workflow again to publish. Every installed bruine finds the
+# new version within a day (the daily update check) and offers /update.
 
 on:
   push:
+    branches: [main]
+    paths: [package.json, CHANGELOG.md, .github/workflows/release.yml]
     tags: ["v*.*.*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
-      - run: pnpm install --frozen-lockfile
-      - name: The tag and package.json agree
+      - name: Version
+        id: v
         run: |
-          tag="${GITHUB_REF_NAME#v}"
           version="$(node -p "require('./package.json').version")"
-          if [ "$tag" != "$version" ]; then echo "tag v$tag but package.json says $version"; exit 1; fi
-      - run: pnpm typecheck
-      - run: pnpm build
-      - run: pnpm test
-      - run: npm publish --provenance --access public
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "tag ${GITHUB_REF_NAME} but package.json says $version"; exit 1
+          fi
+          if npm view "bruine@$version" version >/dev/null 2>&1; then echo "on_npm=true" >> "$GITHUB_OUTPUT"; else echo "on_npm=false" >> "$GITHUB_OUTPUT"; fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then echo "tagged=true" >> "$GITHUB_OUTPUT"; else echo "tagged=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Nothing to do
+        if: steps.v.outputs.on_npm == 'true' && steps.v.outputs.tagged == 'true'
+        run: echo "bruine ${{ steps.v.outputs.version }} is already published and tagged."
+      - if: steps.v.outputs.on_npm != 'true' || steps.v.outputs.tagged != 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.v.outputs.on_npm != 'true' || steps.v.outputs.tagged != 'true'
+        run: pnpm typecheck
+      - if: steps.v.outputs.on_npm != 'true' || steps.v.outputs.tagged != 'true'
+        run: pnpm build
+      - if: steps.v.outputs.on_npm != 'true' || steps.v.outputs.tagged != 'true'
+        run: pnpm test
+      - name: Publish to npm
+        if: steps.v.outputs.on_npm != 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: GitHub release with this version's notes
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::warning::No NPM_TOKEN secret: bruine ${{ steps.v.outputs.version }} was not published to npm. Add the secret and run this workflow again."
+            exit 0
+          fi
+          npm publish --provenance --access public
+      - name: Tag and GitHub release
+        if: steps.v.outputs.tagged != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${{ steps.v.outputs.version }}"
           awk -v v="$version" '$0 ~ "^## " v {on=1; next} /^## / && on {exit} on' CHANGELOG.md > notes.md
-          gh release create "$GITHUB_REF_NAME" --title "bruine $version" --notes-file notes.md
+          gh release create "v$version" --target "$GITHUB_SHA" --title "bruine $version" --notes-file notes.md

@@ -45,7 +45,7 @@ describe("addSpaceBunnyToHome", () => {
     expect(r).toMatchObject({ displayName: "OpenCode Zen", api: "openai-completions", baseURL: "https://opencode.ai/zen/v1", headers: { Authorization: "Bearer public" } });
     expect(r.apiKeyEnv).toBeUndefined();
     expect(r.models[0]).toMatchObject({ id: "space-bunny-free", contextWindow: 1_000_000, input: ["text", "image"] });
-    expect(r.streamIdleTimeoutMs).toBe(120_000);
+    expect(r.streamIdleTimeoutMs).toBeUndefined();
     expect(r.models[0].reasoningEfforts).toEqual({ off: "minimal", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" });
     // Nothing is written to .env: there is no key variable.
     expect(existsSync(join(h, ".env"))).toBe(false);
@@ -142,13 +142,17 @@ describe("repairSpaceBunnyRoute: the first version of the route", () => {
     expect(await repairSpaceBunnyRoute(h)).toBe(false);
   });
 
-  test("a route with no stream timeout gets two minutes, and one the user set is kept", async () => {
+  test("the two-minute stream timeout an earlier version wrote is removed, any other value is kept", async () => {
     const h = await home();
-    await writeFile(join(h, "settings.yaml"), OLD);
-    await repairSpaceBunnyRoute(h);
-    expect((await route(h)).streamIdleTimeoutMs).toBe(120_000);
+    await addSpaceBunnyToHome(h);
     const text = await readFile(join(h, "settings.yaml"), "utf8");
-    await writeFile(join(h, "settings.yaml"), text.replace("streamIdleTimeoutMs: 120000", "streamIdleTimeoutMs: 45000"));
+    await writeFile(join(h, "settings.yaml"), text.replace("headers:", "streamIdleTimeoutMs: 120000\n      headers:"));
+    expect((await route(h)).streamIdleTimeoutMs).toBe(120_000);
+    expect(await repairSpaceBunnyRoute(h)).toBe(true);
+    expect((await route(h)).streamIdleTimeoutMs).toBeUndefined();
+    expect(await repairSpaceBunnyRoute(h)).toBe(false);
+    const again = await readFile(join(h, "settings.yaml"), "utf8");
+    await writeFile(join(h, "settings.yaml"), again.replace("headers:", "streamIdleTimeoutMs: 45000\n      headers:"));
     expect(await repairSpaceBunnyRoute(h)).toBe(false);
     expect((await route(h)).streamIdleTimeoutMs).toBe(45_000);
   });

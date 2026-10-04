@@ -334,7 +334,6 @@ export class SetupFlow {
             api: "openai-completions",
             baseURL: d.baseUrl,
             ...(d.headers !== undefined ? { headers: { ...d.headers } } : { apiKeyEnv: "BRUINE_LOCAL_API_KEY" }),
-            ...(d.streamIdleTimeoutMs !== undefined ? { streamIdleTimeoutMs: d.streamIdleTimeoutMs } : {}),
             // T19.A.2: an `off` effort so the Auto judge can get a plain answer.
             models: [],
           };

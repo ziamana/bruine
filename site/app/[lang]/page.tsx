@@ -1,9 +1,12 @@
-import { Go } from "@/components/Go";
-import { InstallBand } from "@/components/InstallBand";
+import { Capabilities } from "@/components/Capabilities";
+import { CopyCommand } from "@/components/CopyCommand";
 import { Film } from "@/components/Film";
-import { Arrow } from "@/components/Icons";
+import { Go } from "@/components/Go";
+import { HeroTerminal } from "@/components/HeroTerminal";
+import { Arrow, GitHubMark } from "@/components/Icons";
+import { InstallBand } from "@/components/InstallBand";
 import { Session } from "@/components/Session";
-import { asset, DICTS, isLang, type Lang } from "@/lib/i18n";
+import { asset, DICTS, isLang, REPO, type Lang } from "@/lib/i18n";
 
 export default async function Home({ params }: { params: Promise<{ lang: string }> }) {
   const { lang: raw } = await params;
@@ -15,7 +18,14 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
         <img className="hero-mark" src={asset("/media/wordmark-dark.svg")} alt="bruine" width="528" height="232" />
         <h1 id="hero-title">{t.hero.title}</h1>
         <p className="hero-lead">{t.hero.lead}</p>
-        <InstallBand lang={lang} id="install" />
+        <a className="button button-primary" href="#install">
+          {t.hero.cta}
+        </a>
+        <HeroTerminal />
+      </section>
+
+      <section id="install" className="install" aria-label={t.band.label}>
+        <InstallBand lang={lang} id="install-band" />
         <p className="hero-facts">
           <span className="hero-said">{t.hero.said}</span>
           {t.hero.facts.map((fact) => (
@@ -25,6 +35,8 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
       </section>
 
       <Session lang={lang} />
+
+      <Capabilities lang={lang} />
 
       <section className="film" aria-labelledby="film-title">
         <header className="section-head">
@@ -59,6 +71,19 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
         </dl>
       </section>
 
+      <section className="devs" aria-labelledby="devs-title">
+        <h2 id="devs-title">{t.devs.title}</h2>
+        <div className="dev-grid">
+          {t.devs.cards.map((card) => (
+            <article key={card.title} className="dev-card">
+              <h3>{card.title}</h3>
+              <p>{card.body}</p>
+              <CopyCommand command={card.command} copy={t.devs.copy} copied={t.devs.copied} />
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="behind" aria-labelledby="behind-title">
         <header className="section-head">
           <h2 id="behind-title">{t.behind.title}</h2>
@@ -87,10 +112,23 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
         </div>
       </section>
 
-      <section className="close" aria-labelledby="close-title">
-        <h2 id="close-title">{t.close.title}</h2>
-        <p>{t.close.lead}</p>
-        <InstallBand lang={lang} id="install-again" />
+      <section className="join" aria-labelledby="join-title">
+        <h2 id="join-title">{t.join.title}</h2>
+        <p>{t.join.lead}</p>
+        <div className="join-links">
+          <a className="button button-primary" href={REPO}>
+            <GitHubMark size={16} /> {t.join.github}
+          </a>
+          <Go className="button" href={`/${lang}/docs/`}>
+            {t.join.guide}
+          </Go>
+          <Go className="button" href={`/${lang}/docs/#mcp`}>
+            {t.join.mcp}
+          </Go>
+          <Go className="button" href={`/${lang}/compare/`}>
+            {t.join.compare}
+          </Go>
+        </div>
       </section>
     </main>
   );

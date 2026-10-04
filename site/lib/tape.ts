@@ -71,3 +71,17 @@ export class Screen {
     return this.tape.frames[i]!;
   }
 }
+
+/** Phones get the same session recorded at 56 columns, so the text stays readable. */
+export const NARROW = "(max-width: 860px)";
+
+const loading = new Map<string, Promise<Tape>>();
+/** The recording, fetched once per width however many windows play it. */
+export function loadTape(url: string): Promise<Tape> {
+  let tape = loading.get(url);
+  if (!tape) {
+    tape = fetch(url).then((r) => r.json() as Promise<Tape>);
+    loading.set(url, tape);
+  }
+  return tape;
+}

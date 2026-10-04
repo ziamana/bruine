@@ -46,10 +46,15 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  /* Clouds lit from above at the top of the page, as at the start of the film, over the night. */
   background:
+    radial-gradient(780px 460px at 24% 40px, rgba(74, 112, 170, 0.38), transparent 72%),
+    radial-gradient(720px 420px at 74% 0, rgba(111, 95, 214, 0.28), transparent 70%),
+    linear-gradient(180deg, rgba(20, 26, 44, 0.85), transparent 820px),
     radial-gradient(120% 60% at 50% -10%, var(--night-glow) 0%, transparent 60%),
     var(--night);
-  background-attachment: fixed;
+  background-repeat: no-repeat;
+  background-attachment: scroll, scroll, scroll, fixed, scroll;
   color: var(--text);
   font: 400 1.0625rem/1.65 var(--sans);
   caret-color: var(--lavender);
@@ -152,6 +157,9 @@ video {
   position: relative;
   z-index: 1;
 }
+.nav {
+  z-index: 2;
+}
 
 /* Navigation */
 .skip {
@@ -250,28 +258,74 @@ video {
   max-width: var(--measure);
 }
 
-/* Hero: the offer, then bruine asking to be installed. */
+/* Hero: the offer centred under a night sky, the session already running below it. */
 .hero {
+  position: relative;
   display: grid;
-  justify-items: start;
+  justify-items: center;
   gap: 1.25rem;
-  max-width: 56rem;
   margin: 0 auto;
-  padding: clamp(1.25rem, 4vh, 3.5rem) 0 clamp(1.5rem, 4vh, 3rem);
+  padding: clamp(1.5rem, 5vh, 4rem) 0 clamp(2.5rem, 6vh, 4.5rem);
+  text-align: center;
 }
 .hero-mark {
-  width: clamp(160px, 17vw, 210px);
-  margin: 0 0 0 -0.75rem;
+  width: clamp(150px, 15vw, 190px);
 }
 .hero h1 {
-  font-size: clamp(2rem, min(4vw, 5.8vh), 3.1rem);
+  font-size: clamp(2rem, min(4.2vw, 6vh), 3.3rem);
   letter-spacing: -0.035em;
-  max-width: 22ch;
+  max-width: 21ch;
 }
 .hero-lead {
   color: var(--muted);
-  font-size: clamp(1.05rem, 1.3vw, 1.15rem);
-  max-width: 62ch;
+  font-size: clamp(1.02rem, 1.25vw, 1.125rem);
+  max-width: 60ch;
+}
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 1.25rem;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: rgba(17, 20, 30, 0.7);
+  color: var(--text);
+  font: 700 0.9375rem var(--mono);
+  text-decoration: none;
+  transition: background 180ms var(--ease), border-color 180ms var(--ease), transform 180ms var(--ease);
+}
+.button:hover {
+  color: var(--text);
+  border-color: var(--lavender);
+  background: rgba(180, 167, 255, 0.1);
+}
+.button-primary {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--night);
+}
+.button-primary:hover {
+  background: #fff;
+  border-color: #fff;
+  color: var(--night);
+  transform: translateY(-1px);
+}
+.hero-window {
+  width: 100%;
+  max-width: 1040px;
+  margin-top: clamp(1.25rem, 3vh, 2.25rem);
+  container-type: inline-size;
+  text-align: left;
+}
+.install {
+  display: grid;
+  gap: 1rem;
+  max-width: 56rem;
+  margin: 0 auto;
+  padding-bottom: var(--step);
+  scroll-margin-top: 1.5rem;
 }
 .hero-facts {
   display: flex;
@@ -285,6 +339,164 @@ video {
   font-style: italic;
   color: var(--violet-light);
   flex-basis: 100%;
+}
+
+/* Capabilities: one claim per card, each shown by the real terminal. */
+.capabilities {
+  padding-bottom: var(--step);
+}
+.centered-title {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  font-size: clamp(1.75rem, 3.6vw, 2.75rem);
+  margin-bottom: clamp(2.5rem, 5vw, 4rem);
+}
+.capability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(1rem, 2vw, 1.5rem);
+}
+.capability {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 1.5rem;
+  padding: clamp(1.25rem, 2.5vw, 2rem) clamp(1.25rem, 2.5vw, 2rem) 0;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(28, 32, 48, 0.55), rgba(17, 20, 30, 0.35));
+  overflow: hidden;
+}
+.capability-text {
+  display: grid;
+  gap: 0.6rem;
+}
+.capability h3 {
+  font-size: 1.15rem;
+}
+.capability p {
+  color: var(--muted);
+  font-size: 0.975rem;
+  max-width: 52ch;
+}
+.capability-demo {
+  align-self: end;
+  container-type: inline-size;
+  margin-bottom: -1px;
+}
+.capability-demo .window {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.window-film {
+  position: relative;
+}
+.window-clip {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+/* For developers: two ways in, each one command to copy. */
+.devs {
+  padding-bottom: var(--step);
+}
+.devs h2 {
+  margin-bottom: 2rem;
+}
+.dev-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(1rem, 2vw, 1.5rem);
+}
+.dev-card {
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+  padding: clamp(1.25rem, 2.5vw, 2rem);
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: rgba(17, 20, 30, 0.5);
+  min-width: 0;
+}
+.dev-card h3 {
+  font-size: 1.15rem;
+}
+.dev-card p {
+  color: var(--muted);
+}
+.copy-command {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.85rem 0.85rem 0.85rem 1rem;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: var(--window);
+  min-width: 0;
+}
+.copy-command pre {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.copy-command code::before {
+  content: "$ ";
+  color: var(--lavender);
+}
+.copy-command button {
+  flex: none;
+  min-height: 32px;
+  padding: 0 0.7rem;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: 400 0.8125rem var(--mono);
+  cursor: pointer;
+}
+.copy-command button:hover {
+  color: var(--text);
+  border-color: var(--lavender);
+}
+
+/* Join: the close, under the same light as the top. */
+.join {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 1.25rem;
+  padding: var(--step) 0;
+  text-align: center;
+}
+.join::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 10% 0 0;
+  background: radial-gradient(50% 55% at 50% 60%, rgba(74, 112, 170, 0.3), rgba(111, 95, 214, 0.12) 45%, transparent 72%);
+  pointer-events: none;
+}
+.join h2 {
+  font-size: clamp(2.25rem, 5.5vw, 4.25rem);
+  letter-spacing: -0.04em;
+}
+.join > p {
+  color: var(--muted);
+  font-size: 1.0625rem;
+  max-width: 58ch;
+}
+.join-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
 }
 
 /* The approval band: the TUI's framed request, at page scale. */
@@ -539,23 +751,6 @@ video {
 }
 .term .u {
   text-decoration: underline;
-}
-.window-weather {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: var(--window);
-  animation: weather-in 500ms var(--ease) both;
-}
-@keyframes weather-in {
-  from {
-    opacity: 0;
-  }
-}
-.window[data-mode="weather"] .term {
-  opacity: 0;
 }
 .window-noscript {
   padding: 2rem;
@@ -812,25 +1007,6 @@ video {
   max-width: var(--measure);
 }
 
-/* The close */
-.close {
-  display: grid;
-  gap: 1.25rem;
-  max-width: 56rem;
-  margin: 0 auto;
-  padding: var(--step) 0;
-  text-align: left;
-}
-.close h2 {
-  font-size: clamp(2.25rem, 5.5vw, 4.5rem);
-  letter-spacing: -0.04em;
-}
-.close > p {
-  color: var(--muted);
-  font-size: 1.125rem;
-  max-width: var(--measure);
-}
-
 /* Footer */
 .footer {
   max-width: calc(var(--column) + 2 * var(--gutter));
@@ -1062,6 +1238,10 @@ video {
   .nav-gh-label {
     display: none;
   }
+  .capability-grid,
+  .dev-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .session-stage {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
@@ -1077,14 +1257,6 @@ video {
     z-index: 2;
     padding: 0.5rem 0 0.75rem;
     background: linear-gradient(180deg, var(--night) 88%, transparent);
-  }
-  /* The weather clip is 16:9: the window takes its shape rather than framing it with empty bands. */
-  .window[data-mode="weather"] .term-fit {
-    height: auto !important;
-    aspect-ratio: 16 / 9;
-  }
-  .window[data-mode="weather"] .window-body {
-    padding: 0;
   }
   .chapter-text {
     position: sticky;

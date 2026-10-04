@@ -12,7 +12,11 @@ export const PREVIEW = process.env.NEXT_PUBLIC_PREVIEW === "1";
 export const asset = (path: string): string => (PREVIEW ? path.slice(1) : `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`);
 
 /** A page of the site, as the preview build links it: relative, and naming its index.html. */
-export const pagePath = (path: string): string => (PREVIEW ? `${path.slice(1)}${path.endsWith("/") ? "index.html" : ""}` : path);
+export const pagePath = (path: string): string => {
+  if (!PREVIEW) return path;
+  const [page = "", hash] = path.slice(1).split("#");
+  return `${page}${page.endsWith("/") ? "index.html" : ""}${hash ? `#${hash}` : ""}`;
+};
 
 export type Installer = "npm" | "pnpm" | "bun";
 export const INSTALL: Record<Installer, string> = {
@@ -25,14 +29,14 @@ export interface Chapter {
   id: string;
   title: string;
   body: string;
-  /** What the terminal shows: a stretch of the recording (seconds), a still, or the weather film. */
-  screen: { tape: [number, number] } | { still: "retry" | "image" | "light" } | { weather: true };
+  /** The stretch of the recording the chapter scrubs through, in seconds. */
+  tape: [number, number];
 }
 
 export interface Dict {
   meta: { title: string; description: string };
   nav: { guide: string; compare: string; changelog: string; github: string; skip: string; language: string; other: string };
-  hero: { title: string; lead: string; said: string; facts: string[] };
+  hero: { title: string; lead: string; said: string; facts: string[]; cta: string };
   band: {
     title: string;
     copy: string;
@@ -43,7 +47,10 @@ export interface Dict {
     failed: string;
     label: string;
   };
-  session: { title: string; lead: string; chapters: Chapter[]; still: string; noscript: string };
+  session: { title: string; lead: string; chapters: Chapter[]; noscript: string };
+  capabilities: { title: string[]; cards: { id: "retry" | "image" | "light" | "weather"; title: string; body: string }[] };
+  devs: { title: string; copy: string; copied: string; cards: { title: string; body: string; command: string }[] };
+  join: { title: string; lead: string; github: string; guide: string; mcp: string; compare: string };
   film: { title: string; lead: string; caption: string };
   models: {
     title: string;
@@ -53,7 +60,6 @@ export interface Dict {
   };
   behind: { title: string; lead: string; items: string[]; fit: string; compare: string };
   faq: { title: string; items: { q: string; a: string }[] };
-  close: { title: string; lead: string };
   footer: { line: string; built: string; license: string };
 }
 
@@ -70,6 +76,7 @@ const en: Dict = {
       "Point it at llama.cpp on your machine, at about thirty cloud providers, or at anything that speaks the OpenAI-compatible /v1 API. It reads and edits your code, runs your commands, and asks before anything risky. There is no account, and nothing goes anywhere you did not point it at.",
     said: "bruine (French, /bʁɥin/): a fine, steady rain.",
     facts: ["MIT", "Node 22+", "Windows · macOS · Linux", `v${VERSION}`],
+    cta: "Install bruine",
   },
   band: {
     title: "Allow bash",
@@ -84,69 +91,62 @@ const en: Dict = {
   session: {
     title: "One session, as it ran.",
     lead: "This is the real bruine in a real terminal on a real project, recorded cell by cell. Scroll, and it plays.",
-    still: "still",
     noscript: "The session plays with JavaScript on. Here it is at the end of the turn.",
     chapters: [
       {
         id: "ask",
         title: "You ask in plain words.",
         body: "Type what you want and press Enter. Here the model is a local Qwen3 Coder on one GPU; it could as well be DeepSeek, Claude or anything behind /v1.",
-        screen: { tape: [0.2, 3.1] },
+        tape: [0.2, 3.1],
       },
       {
         id: "think",
         title: "It thinks out loud, then gets out of the way.",
         body: "Reasoning streams word by word while it happens, then folds into one line: Thought for 1s. The transcript stays readable after an hour.",
-        screen: { tape: [3.1, 4.75] },
+        tape: [3.1, 4.75],
       },
       {
         id: "queue",
         title: "Keep typing while it works.",
         body: "A prompt sent during a turn waits above the box and goes out as its own turn when this one ends. ↑ takes it back to edit; Escape stops the turn and hands the queue back, unsent.",
-        screen: { tape: [4.75, 6.4] },
+        tape: [4.75, 6.4],
       },
       {
         id: "approve",
         title: "Every edit is a diff, and it asks first.",
         body: "The request is the one framed thing on screen: y once, a always, n or Escape no. The turn's clock stops and the rain holds still while it waits for you.",
-        screen: { tape: [6.4, 8.9] },
+        tape: [6.4, 8.9],
       },
       {
         id: "always",
         title: "“Always” says what it covers.",
         body: "For a shell command, always means that exact command for this session, never every command. The gate is a rule table in plain TypeScript, with tests: you can read why it asked.",
-        screen: { tape: [8.9, 11.4] },
+        tape: [8.9, 11.4],
       },
       {
         id: "done",
         title: "Then the next prompt goes out.",
         body: "Each turn ends with what changed and what it cost: tools, time, tokens, cache hits. Then the prompt you queued runs, and the box is yours again.",
-        screen: { tape: [11.4, 14] },
+        tape: [11.4, 14],
       },
-      {
-        id: "retry",
-        title: "A quiet model is retried, out loud.",
-        body: "How long bruine waits depends on what the model was doing, how hard it was asked to think and how many tries it has had. When it gives up, the transcript says why, which attempt, and when.",
-        screen: { still: "retry" },
-      },
-      {
-        id: "image",
-        title: "It shows you what it looks at.",
-        body: "An image the model reads is drawn right in the transcript, in any 24-bit or 256-colour terminal. No graphics protocol, no window: just colour. ctrl+v sends yours the other way.",
-        screen: { still: "image" },
-      },
-      {
-        id: "light",
-        title: "Light or dark, it reads.",
-        body: "bruine asks the terminal for its background and fits every colour to it. On 256-colour terminals the surfaces stay gray instead of turning navy.",
-        screen: { still: "light" },
-      },
-      {
-        id: "weather",
-        title: "It rains as hard as it thinks.",
-        body: "ctrl+e climbs the reasoning effort from low to max: the prompt's border glows, then runs every colour, and the drizzle turns into a storm. The weather is drawn locally, costs no tokens, and /effect off stops it.",
-        screen: { weather: true },
-      },
+    ],
+  },
+  capabilities: {
+    title: ["It shows its work.", "In any terminal."],
+    cards: [
+      { id: "retry", title: "A quiet model is retried, out loud.", body: "How long bruine waits depends on what the model was doing, how hard it was asked to think and how many tries it has had. When it gives up, the transcript says why, which attempt, and when." },
+      { id: "image", title: "It shows you what it looks at.", body: "An image the model reads is drawn right in the transcript, in any 24-bit or 256-colour terminal. No graphics protocol, no window: just colour. ctrl+v sends yours the other way." },
+      { id: "light", title: "Light or dark, it reads.", body: "bruine asks the terminal for its background and fits every colour to it. On 256-colour terminals the surfaces stay gray instead of turning navy." },
+      { id: "weather", title: "It rains as hard as it thinks.", body: "ctrl+e climbs the reasoning effort from low to max: the prompt's border glows, then runs every colour, and the drizzle turns into a storm. The weather is drawn locally, costs no tokens, and /effect off stops it." },
+    ],
+  },
+  devs: {
+    title: "For developers",
+    copy: "Copy",
+    copied: "Copied",
+    cards: [
+      { title: "Start with one command", body: "Install Node 22 or newer, then:", command: "npm install -g bruine\nbruine" },
+      { title: "Build from source", body: "Clone the repository, build it, and link the command.", command: "git clone https://github.com/ziamana/bruine\ncd bruine && pnpm install && pnpm build\nnpm link" },
     ],
   },
   film: {
@@ -213,7 +213,14 @@ const en: Dict = {
       { q: "Why does it rain?", a: "Because it is called bruine. /effect off, or BRUINE_NO_ANIMATION=1, and the sky clears." },
     ],
   },
-  close: { title: "Let it rain.", lead: "One command, then bruine. The setup finds a model server if you run one, or asks for a key." },
+  join: {
+    title: "Let it rain.",
+    lead: "bruine is MIT, young, and built in the open on DeepSeek Harness. Bring your model, your skills and your MCP servers; tell us what is missing.",
+    github: "View on GitHub",
+    guide: "Read the guide",
+    mcp: "MCP servers",
+    compare: "Compare",
+  },
   footer: { line: "A fine, steady rain in your terminal.", built: "Built on DeepSeek Harness.", license: "MIT licensed" },
 };
 
@@ -230,6 +237,7 @@ const fr: Dict = {
       "Branche-le sur llama.cpp sur ta machine, sur une trentaine de fournisseurs cloud, ou sur tout ce qui parle l'API /v1 compatible OpenAI. Il lit et modifie ton code, lance tes commandes, et demande avant tout ce qui est risqué. Pas de compte, et rien ne part ailleurs que là où tu l'as dirigé.",
     said: "bruine (nom féminin) : une pluie fine et régulière.",
     facts: ["MIT", "Node 22+", "Windows · macOS · Linux", `v${VERSION}`],
+    cta: "Installer bruine",
   },
   band: {
     title: "Allow bash",
@@ -244,69 +252,62 @@ const fr: Dict = {
   session: {
     title: "Une session, telle qu'elle s'est passée.",
     lead: "Voici le vrai bruine, dans un vrai terminal, sur un vrai projet, enregistré cellule par cellule. Fais défiler : il se joue.",
-    still: "capture",
     noscript: "La session se joue avec JavaScript activé. La voici à la fin du tour.",
     chapters: [
       {
         id: "ask",
         title: "Tu demandes, avec tes mots.",
         body: "Tape ce que tu veux et appuie sur Entrée. Ici le modèle est un Qwen3 Coder local sur un seul GPU ; ce pourrait être DeepSeek, Claude ou n'importe quoi derrière /v1.",
-        screen: { tape: [0.2, 3.1] },
+        tape: [0.2, 3.1],
       },
       {
         id: "think",
         title: "Il réfléchit à voix haute, puis s'efface.",
         body: "Le raisonnement s'affiche mot à mot pendant qu'il se fait, puis se replie en une ligne : Thought for 1s. La conversation reste lisible au bout d'une heure.",
-        screen: { tape: [3.1, 4.75] },
+        tape: [3.1, 4.75],
       },
       {
         id: "queue",
         title: "Continue de taper pendant qu'il travaille.",
         body: "Un message envoyé pendant un tour attend au-dessus de la boîte et part comme un tour à lui quand celui-ci finit. ↑ le reprend pour le modifier ; Échap arrête le tour et te rend la file, sans l'envoyer.",
-        screen: { tape: [4.75, 6.4] },
+        tape: [4.75, 6.4],
       },
       {
         id: "approve",
         title: "Chaque modification est un diff, et il demande d'abord.",
         body: "La demande est la seule chose encadrée à l'écran : y une fois, a toujours, n ou Échap non. L'horloge du tour s'arrête et la pluie se fige pendant qu'il t'attend.",
-        screen: { tape: [6.4, 8.9] },
+        tape: [6.4, 8.9],
       },
       {
         id: "always",
         title: "« Toujours » dit ce qu'il couvre.",
         body: "Pour une commande shell, toujours veut dire cette commande exacte pour cette session, jamais toutes les commandes. Le contrôle est une table de règles en TypeScript, avec des tests : tu peux lire pourquoi il a demandé.",
-        screen: { tape: [8.9, 11.4] },
+        tape: [8.9, 11.4],
       },
       {
         id: "done",
         title: "Puis le message suivant part.",
         body: "Chaque tour se termine par ce qui a changé et ce que ça a coûté : outils, temps, tokens, cache. Puis le message mis en attente part, et la boîte est de nouveau à toi.",
-        screen: { tape: [11.4, 14] },
+        tape: [11.4, 14],
       },
-      {
-        id: "retry",
-        title: "Un modèle muet est relancé, à voix haute.",
-        body: "Le temps que bruine attend dépend de ce que faisait le modèle, de l'effort de réflexion demandé et du nombre d'essais déjà faits. Quand il abandonne, la conversation dit pourquoi, quel essai, et quand.",
-        screen: { still: "retry" },
-      },
-      {
-        id: "image",
-        title: "Il te montre ce qu'il regarde.",
-        body: "Une image lue par le modèle est dessinée dans la conversation, dans n'importe quel terminal 24 bits ou 256 couleurs. Pas de protocole graphique, pas de fenêtre : juste de la couleur. ctrl+v envoie la tienne dans l'autre sens.",
-        screen: { still: "image" },
-      },
-      {
-        id: "light",
-        title: "Clair ou sombre, il reste lisible.",
-        body: "bruine demande au terminal sa couleur de fond et y ajuste chaque couleur. Sur les terminaux 256 couleurs, les surfaces restent grises au lieu de virer au bleu marine.",
-        screen: { still: "light" },
-      },
-      {
-        id: "weather",
-        title: "Il pleut aussi fort qu'il réfléchit.",
-        body: "ctrl+e fait monter l'effort de raisonnement de low à max : le cadre de la boîte s'illumine, puis passe par toutes les couleurs, et la bruine devient orage. La météo est dessinée en local, ne coûte aucun token, et /effect off l'arrête.",
-        screen: { weather: true },
-      },
+    ],
+  },
+  capabilities: {
+    title: ["Il montre ce qu'il fait.", "Dans n'importe quel terminal."],
+    cards: [
+      { id: "retry", title: "Un modèle muet est relancé, à voix haute.", body: "Le temps que bruine attend dépend de ce que faisait le modèle, de l'effort de réflexion demandé et du nombre d'essais déjà faits. Quand il abandonne, la conversation dit pourquoi, quel essai, et quand." },
+      { id: "image", title: "Il te montre ce qu'il regarde.", body: "Une image lue par le modèle est dessinée dans la conversation, dans n'importe quel terminal 24 bits ou 256 couleurs. Pas de protocole graphique, pas de fenêtre : juste de la couleur. ctrl+v envoie la tienne dans l'autre sens." },
+      { id: "light", title: "Clair ou sombre, il reste lisible.", body: "bruine demande au terminal sa couleur de fond et y ajuste chaque couleur. Sur les terminaux 256 couleurs, les surfaces restent grises au lieu de virer au bleu marine." },
+      { id: "weather", title: "Il pleut aussi fort qu'il réfléchit.", body: "ctrl+e fait monter l'effort de raisonnement de low à max : le cadre de la boîte s'illumine, puis passe par toutes les couleurs, et la bruine devient orage. La météo est dessinée en local, ne coûte aucun token, et /effect off l'arrête." },
+    ],
+  },
+  devs: {
+    title: "Côté développeurs",
+    copy: "Copier",
+    copied: "Copié",
+    cards: [
+      { title: "Une commande pour commencer", body: "Installe Node 22 ou plus récent, puis :", command: "npm install -g bruine\nbruine" },
+      { title: "Depuis les sources", body: "Clone le dépôt, construis-le, et relie la commande.", command: "git clone https://github.com/ziamana/bruine\ncd bruine && pnpm install && pnpm build\nnpm link" },
     ],
   },
   film: {
@@ -373,7 +374,14 @@ const fr: Dict = {
       { q: "Pourquoi il pleut ?", a: "Parce qu'il s'appelle bruine. /effect off, ou BRUINE_NO_ANIMATION=1, et le ciel se dégage." },
     ],
   },
-  close: { title: "Laisse pleuvoir.", lead: "Une commande, puis bruine. La configuration trouve un serveur de modèle si tu en fais tourner un, ou te demande une clé." },
+  join: {
+    title: "Laisse pleuvoir.",
+    lead: "bruine est sous licence MIT, jeune, et construit en public sur DeepSeek Harness. Amène ton modèle, tes skills et tes serveurs MCP ; dis-nous ce qui manque.",
+    github: "Voir sur GitHub",
+    guide: "Lire le guide",
+    mcp: "Serveurs MCP",
+    compare: "Comparer",
+  },
   footer: { line: "Une pluie fine et régulière dans ton terminal.", built: "Construit sur DeepSeek Harness.", license: "Licence MIT" },
 };
 

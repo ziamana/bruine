@@ -192,19 +192,16 @@ video {
 .nav-home {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
-  color: var(--text);
-  text-decoration: none;
-  font-weight: 700;
-  font-size: 1.05rem;
-  letter-spacing: -0.01em;
+  min-height: 44px;
 }
-.nav-drop {
-  width: 9px;
-  height: 14px;
-  background: linear-gradient(180deg, var(--sky), var(--lavender));
-  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
-  transform: rotate(180deg);
+.nav-home img {
+  display: block;
+  height: 24px;
+  width: auto;
+  transition: filter 200ms var(--ease);
+}
+.nav-home:hover img {
+  filter: drop-shadow(0 0 8px rgba(180, 167, 255, 0.45));
 }
 .nav-links {
   display: flex;

@@ -12,6 +12,13 @@ export const SPACE_BUNNY = {
   baseUrl: "https://opencode.ai/zen/v1",
   model: "space-bunny-free",
   contextWindow: 1_000_000,
+  /**
+   * The most the model may write in one answer. The gateway accepts far more (its catalogue says
+   * 524 288), but a route that declares nothing gets the harness default of 32 768, and at the
+   * highest thinking level that is spent on thinking and one large file: the answer is cut off
+   * (`stop length`), the tool call with it, and the turn ends.
+   */
+  maxTokens: 131_072,
   routeName: "opencode-zen",
 } as const;
 
@@ -62,6 +69,7 @@ export function spaceBunnyRoute(): Record<string, unknown> {
         id: SPACE_BUNNY.model,
         name: SPACE_BUNNY.model,
         contextWindow: SPACE_BUNNY.contextWindow,
+        maxTokens: SPACE_BUNNY.maxTokens,
         input: [...SPACE_BUNNY_INPUT],
         reasoningEfforts: { ...SPACE_BUNNY_EFFORTS },
       },
@@ -90,6 +98,7 @@ export function spaceBunnyDiscovered(): Discovered {
     headers: { ...SPACE_BUNNY_HEADERS },
     reasoningEfforts: { ...SPACE_BUNNY_EFFORTS },
     input: [...SPACE_BUNNY_INPUT],
+    maxTokens: SPACE_BUNNY.maxTokens,
   };
 }
 

@@ -42,6 +42,8 @@ export interface Discovered {
   reasoningEfforts?: Record<string, string | null>;
   /** What the route's models take in, when known (`text`, `image`); absent leaves the harness default. */
   input?: string[];
+  /** The most a model of this route may write in one answer, when the harness default is too small. */
+  maxTokens?: number;
 }
 
 /** Which thinking knobs a chat template understands (T34). */

@@ -62,6 +62,11 @@ export async function repairSpaceBunnyRoute(home: string): Promise<boolean> {
       doc.setIn([...ROUTE_PATH, "models", index, "reasoningEfforts"], { ...SPACE_BUNNY_EFFORTS });
       changed = true;
     }
+    // Without a declared limit the harness caps an answer at 32 768 tokens, which cuts a large write short.
+    if (model.maxTokens === undefined) {
+      doc.setIn([...ROUTE_PATH, "models", index, "maxTokens"], SPACE_BUNNY.maxTokens);
+      changed = true;
+    }
     // A model that says nothing about what it takes in is read as text only: images are refused.
     const input = model.input as unknown[] | undefined;
     if (input === undefined || input.length === 0) {

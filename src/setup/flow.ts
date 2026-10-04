@@ -360,6 +360,7 @@ export class SetupFlow {
             ...(contextWindow !== undefined ? { contextWindow } : {}),
             ...(reasoning.compat !== undefined ? { compat: reasoning.compat } : {}),
             ...(d.input !== undefined ? { input: [...d.input] } : {}),
+            ...(d.maxTokens !== undefined ? { maxTokens: d.maxTokens } : {}),
             reasoningEfforts: reasoning.reasoningEfforts,
           });
         }

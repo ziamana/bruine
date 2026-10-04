@@ -454,11 +454,11 @@ video {
 }
 .copy-command code::before {
   content: "$ ";
-  color: var(--lavender);
+  color: var(--faint);
 }
 .copy-command button {
   flex: none;
-  min-height: 32px;
+  min-height: 36px;
   padding: 0 0.7rem;
   border: 1px solid var(--edge);
   border-radius: 6px;
@@ -1330,6 +1330,14 @@ video {
   }
   .doc-toc ol {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* On touch screens every small control gets a full finger's height. */
+@media (pointer: coarse) {
+  .copy-command button,
+  .nav-lang {
+    min-height: 44px !important;
   }
 }
 

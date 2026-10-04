@@ -5,8 +5,14 @@ export const isLang = (value: string): value is Lang => (LANGS as readonly strin
 export const REPO = "https://github.com/ziamana/bruine";
 export const VERSION = "0.1.0";
 
-/** A path inside the site, under the base path the export was built for. */
-export const asset = (path: string): string => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`;
+/** The preview build serves every file by a relative path, so it works under any address. */
+export const PREVIEW = process.env.NEXT_PUBLIC_PREVIEW === "1";
+
+/** A file inside the site, under the base path the export was built for. */
+export const asset = (path: string): string => (PREVIEW ? path.slice(1) : `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`);
+
+/** A page of the site, as the preview build links it: relative, and naming its index.html. */
+export const pagePath = (path: string): string => (PREVIEW ? `${path.slice(1)}${path.endsWith("/") ? "index.html" : ""}` : path);
 
 export type Installer = "npm" | "pnpm" | "bun";
 export const INSTALL: Record<Installer, string> = {

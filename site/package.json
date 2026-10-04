@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/import-tape.mjs && next build",
-    "tape": "node scripts/import-tape.mjs"
+    "tape": "node scripts/import-tape.mjs",
+    "preview": "node scripts/import-tape.mjs && PREVIEW=1 next build && node scripts/preview.mjs"
   },
   "dependencies": {
     "next": "16.3.8",

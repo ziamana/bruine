@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Go } from "@/components/Go";
 import { InstallBand } from "@/components/InstallBand";
 import { Film } from "@/components/Film";
 import { Arrow } from "@/components/Icons";
@@ -70,9 +70,9 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
           ))}
         </ul>
         <p className="behind-fit">{t.behind.fit}</p>
-        <Link className="more" href={`/${lang}/compare/`}>
+        <Go className="more" href={`/${lang}/compare/`}>
           {t.behind.compare} <Arrow />
-        </Link>
+        </Go>
       </section>
 
       <section className="faq" aria-labelledby="faq-title">

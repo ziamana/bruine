@@ -3,3 +3,4 @@ out/
 next-env.d.ts
 *.tsbuildinfo
 public/tape/
+out-preview/

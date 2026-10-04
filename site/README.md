@@ -12,6 +12,9 @@ npm run build      # static site in out/
 `BASE_PATH=/bruine npm run build` builds it for a sub-path (GitHub Pages under `ziamana.github.io/bruine`).
 `out/` can go on any static host as it is.
 
+`npm run preview` builds `out-preview/`: every URL relative and `page.html` as the French home, so it works
+under any address (it is what the claude.ai preview link serves).
+
 ## What is real
 
 Every terminal screen on the site comes from the running app, nothing is drawn by hand:

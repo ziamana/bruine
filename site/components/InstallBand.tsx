@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Go } from "./Go";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DICTS, INSTALL, type Installer, type Lang } from "@/lib/i18n";
 import { ripple } from "@/lib/weather";
@@ -97,11 +97,11 @@ export function InstallBand({ lang, id }: { lang: Lang; id: string }) {
             </button>
           </li>
           <li>
-            <Link ref={laterRef} href={`/${lang}/docs/`} className="band-choice" aria-current={cursor === 2 ? "true" : undefined} onFocus={() => setCursor(2)}>
+            <Go ref={laterRef} href={`/${lang}/docs/`} className="band-choice" aria-current={cursor === 2 ? "true" : undefined} onFocus={() => setCursor(2)}>
               <span className="band-pointer" aria-hidden="true">›</span>
               <kbd>n</kbd>
               <span>{t.later}</span>
-            </Link>
+            </Go>
           </li>
         </ul>
         <p className="band-status" role="status" aria-live="polite">

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Go } from "./Go";
 import { DICTS, REPO, VERSION, type Lang } from "@/lib/i18n";
 
 export function Footer({ lang }: { lang: Lang }) {
@@ -10,15 +10,15 @@ export function Footer({ lang }: { lang: Lang }) {
       </p>
       <ul className="footer-links">
         <li>
-          <Link href={`/${lang}/docs/`}>{t.nav.guide}</Link>
+          <Go href={`/${lang}/docs/`}>{t.nav.guide}</Go>
         </li>
         <li>
-          <Link href={`/${lang}/compare/`}>{t.nav.compare}</Link>
+          <Go href={`/${lang}/compare/`}>{t.nav.compare}</Go>
         </li>
         <li>
-          <Link href={`/${lang}/changelog/`}>
+          <Go href={`/${lang}/changelog/`}>
             {t.nav.changelog} <span className="footer-dim">v{VERSION}</span>
-          </Link>
+          </Go>
         </li>
         <li>
           <a href={REPO}>{t.nav.github}</a>

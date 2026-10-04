@@ -76,6 +76,8 @@ export class Harness {
       displayName?: string;
       /** Put the project at `<fresh home>/<path>` and make that the user's home, for recordings. */
       projectPath?: string;
+      /** Declare that the model reads images (`input: [text, image]`), so `read_image` is allowed. */
+      imageInput?: boolean;
     } = {},
   ) {
     const home = await mkdtemp(join(tmpdir(), "bruine-e2e-home-"));
@@ -111,6 +113,7 @@ export class Harness {
         const provider: any = Object.values(doc["llm-pi-ai"].providers)[0];
         provider.models[0].name = opts.displayName ?? "e2e-model Pretty";
         provider.models[0].contextWindow = 100000;
+        if (opts.imageInput === true) provider.models[0].input = ["text", "image"];
         if (extraModel !== undefined) provider.models.push({ id: extraModel, contextWindow: 50000 });
         await writeFile(join(home, "settings.yaml"), renderSettingsYaml(doc));
       }

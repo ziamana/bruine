@@ -149,3 +149,21 @@ describe("the counter in the header", () => {
     expect(strip(diffCounter(d))).toBe("+2 -1");
   });
 });
+
+describe("the band covers the whole line", () => {
+  afterEach(() => {
+    process.env.BRUINE_COLOR = "basic";
+    resetColorDepth();
+  });
+  test("an added line is green from its number on, sign included; a removed one red", () => {
+    process.env.BRUINE_COLOR = "truecolor";
+    resetColorDepth();
+    const d: FileDiff = { added: 1, removed: 1, lines: [{ kind: "del", text: "old", old: 1 }, { kind: "add", text: "new", n: 1 }] };
+    const [del, add] = renderDiff(d, 40);
+    // The background is the first thing on the line, before the number and the sign.
+    expect(add!.startsWith(bgCode("addBg", "truecolor"))).toBe(true);
+    expect(del!.startsWith(bgCode("delBg", "truecolor"))).toBe(true);
+    expect(strip(add!)).toMatch(/^\s*1 \+ new/);
+    expect(visibleWidth(add!)).toBe(40);
+  });
+});

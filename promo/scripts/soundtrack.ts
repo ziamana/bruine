@@ -21,6 +21,7 @@ import {
   OUTRO,
   PROMISES,
   rainLevelAt,
+  DEMO_KEYS,
   reachedAt,
   SCENES,
   transitions,
@@ -364,31 +365,35 @@ function score(lang: Lang): Mix {
   });
   keyClick(mix, s("models", MODELS.compat), 0.12, 501);
 
-  // Demo: the keys, the reasoning, each tool, the question, the tests.
-  keyFrames(copy.demo.prompt.length, DEMO.typeStart, DEMO.typeCps).forEach((f, i) => keyClick(mix, s("demo", f), copy.demo.prompt[i] === " " ? 0.1 : 0.14, 1000 + i));
+  // Demo: the real session's own moments (src/data/terminal.ts): every key where it was pressed,
+  // the reasoning, the queue, the two questions and their answers, the tests, the replies.
+  const promptText = "Add a retry with backoff to fetchJson, then run the tests";
+  const queuedText = "then document it in the README";
+  DEMO_KEYS.prompt.forEach((f, i) => keyClick(mix, s("demo", f), promptText[i] === " " ? 0.1 : 0.14, 1000 + i));
   keyClick(mix, s("demo", DEMO.submit), 0.3, 1999, true);
-  // The second prompt, typed while the agent works: it queues, then goes out when the turn ends.
-  keyFrames(copy.demo.queued.length, DEMO.queueTypeStart, DEMO.queueCps).forEach((f, i) => keyClick(mix, s("demo", f), copy.demo.queued[i] === " " ? 0.08 : 0.11, 1500 + i));
+  DEMO_KEYS.queued.forEach((f, i) => keyClick(mix, s("demo", f), queuedText[i] === " " ? 0.08 : 0.11, 1500 + i));
   keyClick(mix, s("demo", DEMO.queueSubmit), 0.24, 1998, true);
   blip(mix, s("demo", DEMO.queueSubmit) + 0.04, note("D6"), 0.05, 0.3);
-  ["A5", "D6"].forEach((n, i) => blip(mix, s("demo", DEMO.queueSend) + i * 0.08, note(n), 0.07, 0.2, 0.4));
   {
-    const t0 = s("demo", DEMO.reasonStart);
-    const length = s("demo", DEMO.collapse) - t0;
+    const t0 = s("demo", DEMO.thinking);
+    const length = Math.max(0.4, s("demo", DEMO.thought) - t0);
     const rnd = mulberry32(5);
     const bp = new Biquad("bp", 5200, 2.5);
-    mix.voice(t0, length, 0.05, 0, 0.6, (t) => bp.run(rnd() * 2 - 1) * (0.6 + 0.4 * Math.sin(TAU * 6 * t)) * Math.min(1, t / 0.3, (length - t) / 0.3) * 2);
-    for (let k = 0; k < 9; k += 1) bell(mix, t0 + k * (length / 9), note(["A6", "E6", "F#6", "B6", "D6"][k % 5]!), 0.018, (k % 3) - 1, 0.9, 1.5);
+    mix.voice(t0, length, 0.05, 0, 0.6, (t) => bp.run(rnd() * 2 - 1) * (0.6 + 0.4 * Math.sin(TAU * 6 * t)) * Math.min(1, t / 0.2, (length - t) / 0.2) * 2);
+    for (let k = 0; k < 5; k += 1) bell(mix, t0 + k * (length / 5), note(["A6", "E6", "F#6", "B6", "D6"][k]!), 0.018, (k % 3) - 1, 0.9, 1.5);
   }
-  whoosh(mix, s("demo", DEMO.collapse), 0.35, 1500, 5000, 0.06, 0, 0.3, 9);
+  whoosh(mix, s("demo", DEMO.thought), 0.35, 1500, 5000, 0.06, 0, 0.3, 9);
   blip(mix, s("demo", DEMO.readDone), note("E6"), 0.1, -0.2);
-  blip(mix, s("demo", DEMO.editDone), note("A6"), 0.1, 0.2);
-  copy.demo.diff.forEach((line, i) => blip(mix, s("demo", DEMO.diffStart + i * DEMO.diffStep), line.kind === "del" ? note("D5") : note(["F#5", "A5", "B5", "D6", "E6"][i % 5]!), 0.05, 0.1));
-  bell(mix, s("demo", DEMO.approval), note("B5"), 0.11, 0.1, 0.5, 1.6);
-  bell(mix, s("demo", DEMO.approval) + 0.13, note("E6"), 0.1, 0.1, 0.5, 1.8);
-  keyClick(mix, s("demo", DEMO.approve), 0.3, 2999, true);
-  blip(mix, s("demo", DEMO.approve) + 0.03, note("A5"), 0.08);
+  for (const [i, at] of [DEMO.approval1, DEMO.approval2].entries()) {
+    bell(mix, s("demo", at), note("B5"), 0.11, 0.1, 0.5, 1.6);
+    bell(mix, s("demo", at) + 0.13, note("E6"), 0.1, 0.1, 0.5, 1.8);
+    const press = [DEMO.approve1, DEMO.approve2][i]!;
+    keyClick(mix, s("demo", press), 0.3, 2999 - i, true);
+    blip(mix, s("demo", press) + 0.03, note("A5"), 0.08);
+  }
+  blip(mix, s("demo", DEMO.editDone) + 0.02, note("A6"), 0.1, 0.2);
   ["D5", "F#5", "A5", "D6"].forEach((n, i) => pluck(mix, s("demo", DEMO.bashDone) + i * 0.07, note(n), 0.13, (i - 1.5) * 0.3, 0.5));
+  ["A5", "D6"].forEach((n, i) => blip(mix, s("demo", DEMO.queueSent) + i * 0.08, note(n), 0.07, 0.2, 0.4));
   CAPTION_AT.forEach((f, i) => whoosh(mix, s("demo", f), 0.5, 600, 2400, 0.04, -0.4, 0.3, 300 + i));
 
   // Effort: ctrl+e, a step up each time, and the storm when it reaches max.

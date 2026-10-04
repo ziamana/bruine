@@ -6,6 +6,7 @@
  * Pure data and pure functions only (no React, no Remotion): Node runs this file as it is.
  */
 import { COPY, FADE, RIPPLE_ORIGIN, SCENE_ORDER, sceneFrames, VIDEO, type Lang, type SceneName } from "./config.ts";
+import { TERMINAL } from "./data/terminal.ts";
 
 export const sec = (s: number): number => Math.round(s * VIDEO.fps);
 export const clamp01 = (x: number): number => Math.max(0, Math.min(1, x));
@@ -68,34 +69,43 @@ export const MODELS = {
   footnote: sec(3.55),
 } as const;
 
+/**
+ * The demo is the real bruine, recorded cell by cell (src/data/terminal.ts): its cues are the
+ * moments the recording saw, so the camera, the captions and every sound land on the frame where
+ * the real interface does the thing.
+ */
+const M = TERMINAL.markers;
+/** The recording starts this long after the demo scene does, once the ripple has opened it. */
+export const DEMO_LEAD = sec(0.3);
+const rec = (seconds: number | undefined): number => DEMO_LEAD + Math.round((seconds ?? 0) * VIDEO.fps);
 export const DEMO = {
-  typeStart: sec(0.7),
-  typeCps: 46,
-  submit: sec(2.15),
-  thinking: sec(2.3),
-  reasonStart: sec(2.45),
-  reasonCps: 68,
-  collapse: sec(5.15),
-  readPending: sec(5.45),
-  readDone: sec(5.8),
-  editPending: sec(6.05),
-  editDone: sec(6.35),
-  diffStart: sec(6.4),
-  diffStep: 5,
-  bashPending: sec(7.45),
-  approval: sec(7.6),
-  approve: sec(9.0),
-  bashDone: sec(9.95),
-  answerStart: sec(10.2),
-  answerCps: 80,
-  /** A second prompt typed while the agent works: it waits, then goes out when the turn ends. */
-  queueTypeStart: sec(3.0),
-  queueCps: 30,
-  queueSubmit: sec(4.25),
-  queueSend: sec(11.55),
-  queueAnswerStart: sec(11.85),
+  typeStart: rec(M.typeStart),
+  submit: rec(M.submit),
+  thinking: rec(M.thinking),
+  thought: rec(M.thought),
+  queueTypeStart: rec(M.queueTypeStart),
+  queueSubmit: rec(M.queueSubmit),
+  readDone: rec(M.readDone),
+  approval1: rec(M.approval1),
+  approve1: rec(M.approve1),
+  editDone: rec(M.editDone),
+  approval2: rec(M.approval2),
+  approve2: rec(M.approve2),
+  bashDone: rec(M.bashDone),
+  answer: rec(M.answer),
+  queueSent: rec(M.queueSent),
+  queueAnswer: rec(M.queueAnswer),
+  end: rec(M.end),
 } as const;
-export const CAPTION_AT = [DEMO.thinking, DEMO.queueSubmit, DEMO.readPending, DEMO.editPending + 6, DEMO.bashPending + 4, DEMO.answerStart] as const;
+/** The frame of each key the recording pressed, per typed text. */
+export const DEMO_KEYS = {
+  prompt: (TERMINAL.keys.prompt ?? []).map(rec),
+  queued: (TERMINAL.keys.queued ?? []).map(rec),
+} as const;
+/** The recording's frame at a frame of the demo scene. */
+export const recordingFrame = (frame: number): number =>
+  Math.max(0, Math.min(TERMINAL.frames.length - 1, Math.round(((frame - DEMO_LEAD) / VIDEO.fps) * TERMINAL.fps)));
+export const CAPTION_AT = [DEMO.thinking, DEMO.queueSubmit, DEMO.approval1, DEMO.approval2, DEMO.answer] as const;
 
 export const EFFORT = {
   title: sec(0.3),

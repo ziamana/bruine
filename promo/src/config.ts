@@ -19,7 +19,7 @@ export const TIMING = {
   scenes: {
     intro: 6.6,
     models: 6.2,
-    demo: 13.2,
+    demo: 14.6,
     effort: 5.8,
     promises: 7.2,
     outro: 6.8,
@@ -224,8 +224,7 @@ const en: Copy = {
     callouts: [
       { title: "Thinking, live", body: "The reasoning streams word by word, then folds into one line." },
       { title: "Keep typing", body: "A prompt sent while it works waits, then goes out when the turn ends." },
-      { title: "Tool calls you can read", body: "Each call reads as a sentence, with its duration and a coloured rail." },
-      { title: "Every edit, as a diff", body: "Added and removed lines carry the same weight." },
+      { title: "Every edit, as a diff", body: "Shown before it is written, so you approve what you read." },
       { title: "It asks first", body: "Ask, Auto or Full access, from a rule table you can read." },
       { title: "Measured, live", body: "Context, tok/s and cache hits, timed by Bruine itself." },
     ],
@@ -320,8 +319,7 @@ const fr: Copy = {
     callouts: [
       { title: "La réflexion, en direct", body: "Le raisonnement s'écrit mot à mot, puis se replie en une ligne." },
       { title: "Continuez à écrire", body: "Un prompt envoyé pendant le travail attend, puis part à la fin du tour." },
-      { title: "Des appels lisibles", body: "Chaque outil se lit comme une phrase, avec sa durée et un rail coloré." },
-      { title: "Chaque modification en diff", body: "Lignes ajoutées et retirées, avec le même poids." },
+      { title: "Chaque modification en diff", body: "Montrée avant d'être écrite : vous approuvez ce que vous lisez." },
       { title: "Il demande d'abord", body: "Ask, Auto ou Full access, selon une table de règles lisible." },
       { title: "Mesuré, en direct", body: "Contexte, tok/s et cache, chronométrés par Bruine lui-même." },
     ],

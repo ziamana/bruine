@@ -7,7 +7,7 @@ import { textScript, toolScript, type Script } from "./sse-server.js";
 
 /**
  * The terminal of the presentation video, recorded from the real bruine: the real launcher in a
- * real PTY (100×30, 24-bit colour, the chat weather on), a little project, a scripted model.
+ * real PTY (80×24, 24-bit colour, the chat weather on), a little project, a scripted model.
  * Every cell of the screen (its character, colours, bold, italic, dim, inverse) is captured 45
  * times a second, with the moments that matter (a key, the reasoning, an approval, the tests),
  * into one JSON the video (promo/, on its own branch) draws cell by cell.
@@ -20,8 +20,8 @@ const enabled = process.env.RECORD_VIDEO === "1";
 beforeAll(enabled ? build : () => {}, 60_000);
 
 const FPS = 45;
-const COLS = 100;
-const ROWS = 30;
+const COLS = 80;
+const ROWS = 24;
 
 const HTTP_TS = `export async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(url, init);
@@ -213,11 +213,12 @@ test.skipIf(!enabled)("record the video terminal", async () => {
     mark("queueSubmit");
     await h.until(() => markers.approval1 !== undefined, 30_000, "first approval");
     await delay(1100);
-    h.press("enter");
+    // The approval's own letters: y allows this edit, a remembers this one command.
+    h.type("y");
     mark("approve1");
     await h.until(() => markers.approval2 !== undefined, 30_000, "second approval");
-    await delay(1100);
-    h.press("enter");
+    await delay(1300);
+    h.type("a");
     mark("approve2");
     await h.until(() => markers.queueAnswer !== undefined, 30_000, "the queued answer");
     await delay(1600);

@@ -7,7 +7,7 @@ import { textScript, toolScript, type Script } from "./sse-server.js";
 
 /**
  * The terminal of the presentation video, recorded from the real bruine: the real launcher in a
- * real PTY (80×24, 24-bit colour, the chat weather on), a little project, a scripted model.
+ * real PTY (104×26, 24-bit colour, the chat weather on), a little project, a scripted model.
  * Every cell of the screen (its character, colours, bold, italic, dim, inverse) is captured 45
  * times a second, with the moments that matter (a key, the reasoning, an approval, the tests),
  * into one JSON the video (promo/, on its own branch) draws cell by cell.
@@ -20,8 +20,8 @@ const enabled = process.env.RECORD_VIDEO === "1";
 beforeAll(enabled ? build : () => {}, 60_000);
 
 const FPS = 45;
-const COLS = 80;
-const ROWS = 24;
+const COLS = 104;
+const ROWS = 26;
 
 const HTTP_TS = `export async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(url, init);
@@ -87,7 +87,7 @@ test.skipIf(!enabled)("record the video terminal", async () => {
     "ask",
     false,
     {
-      displayName: "Qwen3 Coder 30B",
+      displayName: "Qwen3 Coder",
       // 24-bit colour, and the chat weather and the turn's ring as a user sees them.
       env: { BRUINE_COLOR: "truecolor", COLORTERM: "truecolor", BRUINE_NO_RIPPLE: "0" },
       bruineJson: { effect: "auto", suggestions: false },
@@ -178,6 +178,8 @@ test.skipIf(!enabled)("record the video terminal", async () => {
     if (/Retries section/.test(screen)) mark("queueAnswer");
   };
 
+  // The harness opens at 100×30; the film is drawn from 104×26, so the app lays itself out there.
+  h.resize(COLS, ROWS);
   await h.waitFor("Qwen3", 30_000);
   // The weather keeps the screen moving even at rest: wait for the header, not for stillness.
   await delay(1500);

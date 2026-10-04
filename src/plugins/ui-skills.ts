@@ -31,6 +31,8 @@ export function uiSkillsHint(text: string, available: readonly string[]): string
     "<system-reminder>",
     `If this task builds or changes a web page, a site or an interface: call the \`skill\` tool for ${list} first, read what they say, and apply it to the design and the details. Do this before writing any code.`,
     "Where the page needs pictures, draw them yourself as detailed inline SVG with depth, light, shadow and texture; never grey boxes, emoji or placeholders.",
+    "When the user asks for a complete or professional site, plan all of it first with todo_write: every page a real site of that kind has, and for each page the features people expect (a shop: a home with many sections, a catalogue with filters, sort and search, a product page, a cart, a checkout, an account, a journal, legal pages, a 404 and a contact page). Build all of it. A first version that works is not the end: go through the pages again to add detail, content and polish.",
+    "Invent the brand name and the content for the business the user describes. The name of the working folder or of this tool is not the brand.",
     "Before you say it is done, open every page in the browser at desktop and at phone width, look at the screenshots, and fix whatever is cut off, overlapping, low in contrast or empty.",
     "</system-reminder>",
   ].join("\n");

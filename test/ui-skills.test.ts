@@ -40,6 +40,8 @@ describe("the reminder", () => {
     expect(hint).toContain("before writing any code");
     expect(hint).toContain("inline SVG");
     expect(hint).toContain("desktop and at phone width");
+    expect(hint).toContain("plan all of it first with todo_write");
+    expect(hint).toContain("not the brand");
     expect(hint).toMatch(/^If this task|If this task/m);
     expect(hint.startsWith("<system-reminder>")).toBe(true);
     expect(hint.endsWith("</system-reminder>")).toBe(true);

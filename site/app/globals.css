@@ -21,7 +21,7 @@
   --sans: var(--font-sans), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   --gutter: clamp(16px, 4vw, 48px);
-  --column: 1180px;
+  --column: 1280px;
   --measure: 68ch;
   --step: clamp(5.5rem, 12vw, 10rem);
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
@@ -388,8 +388,10 @@ video {
 .window-film {
   position: relative;
 }
-/* The film clip takes the same box as a 56 x 16 terminal, on the clip's own dark ground. */
-.window-clip-body {
+/* The film clip takes the same box as a 56 x 16 terminal: it fills the window body edge to edge on the
+   clip's own dark ground, its edges faded into it so no inner frame shows. */
+.window-body.window-clip-body {
+  padding: 0;
   background: #0d1019;
 }
 .window-clip {
@@ -397,6 +399,10 @@ video {
   width: 100%;
   aspect-ratio: 33.6 / 21.12;
   object-fit: contain;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent), linear-gradient(to bottom, transparent, #000 10%, #000 90%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent), linear-gradient(to bottom, transparent, #000 10%, #000 90%, transparent);
+  mask-composite: intersect;
 }
 
 /* For developers: two ways in, each one command to copy. */
@@ -622,7 +628,7 @@ video {
 }
 .session-stage {
   display: grid;
-  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr);
   grid-template-areas:
     "pin head"
     "pin chapters";

@@ -35,6 +35,29 @@ bruine
 The first launch opens a setup wizard: it finds a local model server if you run one, asks for API
 keys if you want a cloud route, lets you pick skills, and writes `~/.bruine/`.
 
+## Install
+
+You need **Node 22 or newer** and npm (it comes with Node). Check with `node --version`.
+
+| | Get Node 22+ | Install bruine | Open it in |
+|---|---|---|---|
+| **Linux** | your package manager (`sudo pacman -S nodejs npm`, `sudo apt install nodejs npm` if it is 22+) or [nvm](https://github.com/nvm-sh/nvm) | `npm install -g @ziamana/bruine` | any terminal |
+| **macOS** | `brew install node`, or the installer from [nodejs.org](https://nodejs.org) | `npm install -g @ziamana/bruine` | Terminal or iTerm2 |
+| **Windows** | `winget install OpenJS.NodeJS.LTS`, or the installer from [nodejs.org](https://nodejs.org) | `npm install -g @ziamana/bruine` | Windows Terminal (PowerShell) |
+
+Then type `bruine` in your project's folder. The command is `bruine`; `@ziamana/bruine` is only the
+name npm knows it by.
+
+- **Permission denied (`EACCES`) on Linux or macOS**: do not use `sudo`. Point npm at a folder you own:
+  `npm config set prefix ~/.local`, and make sure `~/.local/bin` is on your `PATH`.
+- **Update**: `bruine update` (or `/update` in a session). **Remove**: `npm uninstall -g @ziamana/bruine`,
+  and delete `~/.bruine` if you want your settings gone too.
+- **Where it was tested**: Linux every day. On macOS the unit tests pass on the CI runner and the
+  terminal tests are being fixed; on Windows both are being fixed, and it has not yet been run by hand
+  on a real Windows machine. If something breaks there,
+  [open an issue](https://github.com/ziamana/bruine/issues) with your terminal and `bruine --version`.
+  [docs/PLATFORMS.md](docs/PLATFORMS.md) lists what was checked.
+
 ## See it
 
 <img src="docs/demo/bruine.svg" alt="bruine in a terminal: a prompt, the model's reasoning streaming then folding away, a file read, an edit shown as a diff, two permission prompts, the tests passing, and a second prompt that was queued while it worked going out after" width="100%">

@@ -49,6 +49,9 @@ export interface RunRow {
   outputTokens: number | null;
   inputTokens: number | null;
   toolCalls: number | null;
+  /** `edit` calls and the ones the tool refused; absent in result files written before they were counted. */
+  editCalls?: number | null;
+  editErrors?: number | null;
   errors: string[];
   /** check.sh exit code; 70 = the check could not run here. */
   checkExit: number | null;

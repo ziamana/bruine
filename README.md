@@ -177,11 +177,29 @@ task denies any tool action that would need a permission prompt; use `--permissi
 only when that task should run with full access.
 
 Inside a session, `/` opens the command palette: `/new`, `/resume`, `/verify`, `/compact`, `/plan`, `/permissions`,
-`/model`, `/provider`, `/effort`, `/skills`, `/mcp`, `/reload`, `/help`, `/exit`. `f2` walks the routes you
+`/model`, `/provider`, `/effort`, `/skills`, `/plugins`, `/mcp`, `/update`, `/reload`, `/help`, `/exit`. `f2` walks the routes you
 used recently. You can keep typing while bruine works: a prompt sent during a turn waits above the
 box and goes out, as its own turn, when the current one ends (`↑` on an empty box takes the last one
 back to edit; `escape` stops the turn and puts the queued prompts back in the box, unsent). `ctrl+t` shows the task list, `ctrl+o` expands tool output, `ctrl+e` cycles the
 reasoning effort, `ctrl+v` pastes an image (`alt+v` in Windows Terminal, which keeps `ctrl+v` for its own paste).
+
+## Updates
+
+Once a day, bruine asks npm for the latest version (one plain GET, nothing about you). When there
+is a newer one, the session says so above the box: `/update` installs it after a yes, through the
+installer bruine was installed with (npm, pnpm or bun), and `bruine update` does the same from a
+shell. A git checkout is never touched. `"updateCheck": false` in `bruine.json` turns the check off.
+What changed is in [CHANGELOG.md](CHANGELOG.md).
+
+## When the model goes quiet
+
+A model can be silent for a long time and still be working: thinking at a high effort, or writing a
+large file whose content the server sends at once. It can also simply have stopped. bruine gives
+each silence a budget that depends on what the model was doing (more time for a model that has not
+started, has just finished thinking, or is writing a big tool call; less in the middle of a
+sentence), scaled by the effort and doubled on every retry. Past it, the request is retried, and the
+transcript says so: "The model has not answered for 3m. Retry 2/5 in 1.2s." The route's
+`streamIdleTimeoutMs` in `settings.yaml` stays the hard ceiling.
 
 ## Environment
 
@@ -197,6 +215,7 @@ reasoning effort, `ctrl+v` pastes an image (`alt+v` in Windows Terminal, which k
 | `BRUINE_TOOL_SUMMARIES=0` | Disable readable tool descriptions (also `"toolSummaries": false` in `bruine.json`). Summaries reuse existing arguments and make no model calls. |
 | `BRUINE_BG=0` | Never paint a background, whatever the terminal reports |
 | `BRUINE_NO_UPDATE_CHECK=1` | Never contact the npm registry to check for a version |
+| `BRUINE_SILENCE=off` | Keep the adapters' fixed stream timeout instead of bruine's adaptive silence budget |
 
 ## Three promises
 

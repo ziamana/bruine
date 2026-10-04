@@ -77,6 +77,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   noticeForStartup,
+  newerVersion,
+  pendingUpdateCheck,
+  formatUpdateNotice,
   readBruineJsonDoc,
   readUpdateCache,
   resolveDshHome,
@@ -1475,8 +1478,16 @@ export class BruineUi {
       // The TUI shell only exists on an interactive terminal, so the TTY
       // gate was already passed by the launcher.
       if (!updateCheckEnabled({ doc, isTTY: true })) return;
-      const text = noticeForStartup({ cache: await readUpdateCache(home), current: version });
-      if (text !== undefined) this.showPersistentNotice(text);
+      // What the cache already knew; otherwise the launch's check, the moment it answers.
+      let text = noticeForStartup({ cache: await readUpdateCache(home), current: version });
+      if (text === undefined) {
+        const latest = newerVersion(await pendingUpdateCheck(), version);
+        if (latest !== undefined) text = formatUpdateNotice(latest, version);
+      }
+      if (text !== undefined && !this.#closed) {
+        this.showPersistentNotice(text);
+        this.requestRender();
+      }
     } catch {
       // an update notice must never break the session
     }

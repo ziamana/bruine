@@ -39,6 +39,7 @@ import { NO_VISION_NOTICE } from "../image/vision.js";
 import { availableSkillNames, withUiSkillsHint } from "./ui-skills.js";
 import type { ClipboardImage } from "../image/clipboard.js";
 import type { DshContext, BruineRepl, BruineStartup } from "./ctx.js";
+import { checkForUpdate, installKindOf, lastLine, newerVersion, runInstaller, updateCommand, type CheckOutcome, type InstallKind, type InstallResult } from "../update.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../../package.json") as { version: string };
@@ -67,6 +68,7 @@ export const BRUINE_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/full", description: "Switch permissions directly" },
   { name: "/skills", description: "List available skills" },
   { name: "/plugins", description: "List the plugins this session loaded" },
+  { name: "/update", description: "Install the latest bruine (asks first)" },
   { name: "/config", description: "Open settings.yaml and bruine.json in your editor" },
   { name: "/tasks", description: "List background tasks (commands and sub-agents); /tasks kill <id> stops one" },
   { name: "/reload", description: "Re-read settings.yaml and the terminal background" },
@@ -673,6 +675,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/provider  List the providers (also /provider all)",
           "/skills  List available skills (or /skills <name>)",
           "/plugins  List the plugins this session loaded",
+          "/update  Install the latest version of bruine (asks first)",
           "/config  Open settings.yaml and bruine.json in your editor (/config path lists them)",
           "/tasks  List background tasks; /tasks kill <id> stops one",
           "/reload  Re-read settings.yaml and the terminal background",
@@ -691,6 +694,10 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       const message = await runEffectCommand(clean.slice(cmd.length), ui, runtimeHome());
       if (ui === undefined) reply(message);
       else ui.showNotice(message);
+      return;
+    }
+    if (cmd === "/update") {
+      reply(await runUpdateCommand({ current: pkg.version, ui, notice: (t) => ui?.showNotice(t) }));
       return;
     }
     if (cmd === "/plugins") {
@@ -1049,4 +1056,41 @@ export function apply(ctx: DshContext): void {
     console.error(`bruine: ${error instanceof Error ? error.message : String(error)}`);
     exit(1);
   });
+}
+
+/**
+ * `/update`, from inside a session: ask the registry now (whatever the daily cache says), and if a
+ * newer bruine exists, say what will run and run it on an explicit yes. The running session keeps
+ * the code it started with, so the answer ends with how to restart. A git checkout is never
+ * touched, and a terminal-less session is told the command instead.
+ */
+export async function runUpdateCommand(deps: {
+  current: string;
+  ui?: { askChoice(title: string, items: Array<{ value: string; label: string }>): Promise<number> } | undefined;
+  notice?: (text: string) => void;
+  kind?: InstallKind;
+  check?: () => Promise<CheckOutcome>;
+  install?: (cmd: readonly string[]) => Promise<InstallResult>;
+}): Promise<string> {
+  const kind = deps.kind ?? installKindOf();
+  const cmd = updateCommand(kind);
+  if (cmd === undefined) return "This is a developer install (a git checkout): update it with git pull && pnpm build.";
+  deps.notice?.("Checking for a new version of bruine…");
+  const outcome = await (deps.check ?? (() => checkForUpdate({ dshHome: runtimeHome(), force: true, isTTY: true, doc: {}, env: {} })))();
+  if (!("cache" in outcome)) return `Could not reach the npm registry. To update by hand: ${cmd.join(" ")}`;
+  const latest = newerVersion(outcome, deps.current);
+  if (latest === undefined) return `bruine ${deps.current} is the latest version.`;
+  if (deps.ui === undefined) return `bruine ${latest} is available (you have ${deps.current}). To install it: ${cmd.join(" ")}`;
+  const choice = await deps.ui.askChoice(`Update bruine ${deps.current} → ${latest}? This runs: ${cmd.join(" ")}`, [
+    { value: "update", label: "Update now" },
+    { value: "later", label: "Not now" },
+  ]);
+  if (choice !== 0) return "Not updated. /update when you are ready.";
+  deps.notice?.(`Updating bruine to ${latest}…`);
+  const result = await (deps.install ?? runInstaller)(cmd);
+  if (!result.ok) {
+    const why = lastLine(result.output);
+    return `The update failed${result.code === null ? "" : ` (exit ${String(result.code)})`}${why === "" ? "" : `: ${why}`}. Run it yourself: ${cmd.join(" ")}`;
+  }
+  return `Updated to bruine ${latest}. This session keeps running ${deps.current}: restart to use it (ctrl+d, then bruine).`;
 }

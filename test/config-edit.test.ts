@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { configFiles, openInEditor, resolveEditor, type Spawner } from "../src/plugins/config-edit.js";
 
@@ -16,8 +16,8 @@ afterEach(() => { for (const h of homes.splice(0)) rmSync(h, { recursive: true, 
 
 /** A PATH that holds exactly these programs. */
 const withPrograms = (...names: string[]) => ({
-  env: { PATH: "/bin:/usr/bin" } as NodeJS.ProcessEnv,
-  exists: (p: string) => names.some((n) => p === `/usr/bin/${n}`),
+  env: { PATH: ["/bin", "/usr/bin"].join(delimiter) } as NodeJS.ProcessEnv,
+  exists: (p: string) => names.some((n) => p.replaceAll("\\", "/") === `/usr/bin/${n}`),
 });
 
 describe("configFiles", () => {

@@ -11,7 +11,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-b4a7ff)](LICENSE)
 [![Node 22+](https://img.shields.io/badge/node-22%2B-7dcfff)](https://nodejs.org)
-![Windows · macOS · Linux](https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-supported-8fe3a3)
+![Linux tested · macOS and Windows in progress](https://img.shields.io/badge/Linux-tested-8fe3a3) ![macOS · Windows](https://img.shields.io/badge/macOS%20%C2%B7%20Windows-in%20progress-f5c97a)
 [![Changelog](https://img.shields.io/badge/version-0.1.2-ff9ed2)](CHANGELOG.md)
 
 <a href="docs/media/bruine-film.mp4"><img src="docs/media/hero.webp" alt="The bruine film: the word bruine becomes the logo in the rain, then the effort climbs from low to max and the rain turns into a storm" width="100%"></a>
@@ -144,7 +144,7 @@ training), and the offer can end without notice, so keep another model in reach.
 | `/model` and `/provider` | Switch model mid-session from the server's own live catalogue |
 | Skills | Reuses the skills you already wrote for Claude Code, OpenCode, pi or `~/.agents/skills` |
 | Context and speed | A footer that shows context used, tok/s, prefill and cache hit rate |
-| Works on | Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal |
+| Works on | Linux (Konsole, GNOME Terminal), tested every day. Written for macOS Terminal, iTerm2, Windows Terminal and PowerShell too, not yet checked by hand there |
 | herdr | Works with herdr: shows up as `bruine` in `herdr agent list`. |
 
 ## The weather
@@ -215,8 +215,11 @@ turn it on in the setup. Network discovery of model servers is opt-in and only t
 compatible server) with a context of 32k or more. Small models can chat but tend to lose the thread in
 long agent loops. The setup detects what the server's chat template supports (thinking, effort levels).
 
-**Does it work on Windows?** Yes: Windows Terminal, PowerShell and the classic console; commands run in
-PowerShell there. [docs/PLATFORMS.md](docs/PLATFORMS.md) lists what was checked and what still has limits.
+**Does it work on Windows or macOS?** It is written for them (on Windows, commands run in PowerShell) and
+the unit tests run on both in CI, but nobody has used it by hand on a real Windows or macOS machine yet,
+and the terminal tests on Windows still fail. Linux is the one platform used every day. If it breaks on
+yours, [open an issue](https://github.com/ziamana/bruine/issues). [docs/PLATFORMS.md](docs/PLATFORMS.md)
+lists what was checked and what still has limits.
 
 **How do I make it ask less?** `/auto` lets a fast model judge the routine actions (risky ones still
 ask), the approval's `a` (Always) remembers one exact command for the session and says which, and

@@ -15,7 +15,7 @@ describe("!command (UI polish 2026-09-26)", () => {
   test("runs in the cwd, shows output and exit code, never claims it went to the model", async () => {
     const dir = mkdtempSync(join(tmpdir(), "bruine-shell-"));
     writeFileSync(join(dir, "hello.txt"), "hi\n");
-    const r = await runShell(process.platform === "win32" ? "dir /b" : "ls", dir);
+    const r = await runShell(process.platform === "win32" ? "dir" : "ls", dir);
     expect(r.code).toBe(0);
     const text = formatShell("ls", r);
     expect(text).toContain("hello.txt");

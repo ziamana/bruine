@@ -207,7 +207,7 @@ test("T35: existing install → menu → Theme → light → Save and exit (only
     expect(h.text()).toContain("Bruine setup");
     expect(h.text()).toContain("Choose a setting to edit.");
     expect(h.text()).toContain("↑/↓ move");
-    expect(h.text()).toContain("Ornith 1.5 9B · 127.0.0.1");
+    await h.waitFor("Ornith 1.5 9B · 127.0.0.1"); // the model line is drawn a frame after the menu
     expect(h.text()).not.toContain("Welcome to Bruine");
     await h.dump("t35-menu");
 
@@ -605,9 +605,11 @@ test("the rain behind the setup follows the option under the cursor: heavy on Qu
     };
     const heavy = await sample();
     await h.pressN("down", 2);
-    const lines = h.screen();
-    const marker = lines.findIndex((l) => l.includes("› ╭"));
-    expect(lines[marker + 1]).toContain("Set up later");
+    await h.until(() => {
+      const rows = h.screen();
+      const at = rows.findIndex((l) => l.includes("› ╭"));
+      return at >= 0 && (rows[at + 1] ?? "").includes("Set up later");
+    }, 10_000, "the cursor on Set up later");
     await delay(900); // the rain eases to its new weather
     const light = await sample();
     expect(heavy, `heavy ${String(heavy)} light ${String(light)}`).toBeGreaterThan(0);

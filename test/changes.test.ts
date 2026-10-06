@@ -82,7 +82,8 @@ describe("reading the workspace (T59)", () => {
 
 const NUMSTAT = ["7\t2\tsrc/b.ts", "-\t-\tlogo.png"].join("\0") + "\0";
 /** `strip` plus the OSC 8 wrapper: the link URI is invisible but has characters. */
-const shown = (text: string): string => strip(text).replace(/\x1b]8;;[^\x1b]*\x1b\\/g, "");
+/** What the row says, with `/` for the separator: Windows paths are drawn with `\\`, the claim is the same. */
+const shown = (text: string): string => strip(text).replace(/\x1b]8;;[^\x1b]*\x1b\\/g, "").replaceAll("\\", "/");
 
 describe("reading the counts (T59)", () => {
   test("numstat is read per path, and a binary is left uncounted", () => {

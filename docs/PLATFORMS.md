@@ -1,5 +1,8 @@
 # Windows and macOS: audit
 
+> **Status.** Everything below was found by reading the code and pinned by unit tests; none of it has
+> been run by hand on a real Windows or macOS machine. Linux is the platform used every day.
+
 An audit of paths, keys, colours, glyphs, clipboard and shells for Windows Terminal, the classic
 Windows console, PowerShell, macOS Terminal and iTerm2, against the product constraints in
 [ARCHITECTURE.md](ARCHITECTURE.md). It was done by reading the code, with every fix pinned by a

@@ -189,20 +189,27 @@ export function readMcpServers(home: string, projectDir: string, env: NodeJS.Pro
 }
 
 /**
- * What a server runs or reaches, as one hash: approving a project server approves exactly this,
- * and any change to its command, arguments, environment or address asks again.
+ * What a server runs or reaches, and what it may do without asking, as one hash: approving a
+ * project server approves exactly this, and any change to its command, arguments, environment,
+ * address, `alwaysAllow` or `readOnly` asks again. The last two matter as much as the command: a
+ * repository that could widen them after the approval would run its tools unasked.
  */
 export function fingerprint(server: McpServer): string {
+  const may = { alwaysAllow: [...server.alwaysAllow].sort(), readOnly: server.readOnly };
   const what = server.transport === "stdio"
-    ? { t: "stdio", command: server.command, args: server.args ?? [], env: server.env ?? {}, cwd: server.cwd ?? "" }
-    : { t: "http", url: server.url, headers: server.headers ?? {} };
+    ? { t: "stdio", command: server.command, args: server.args ?? [], env: server.env ?? {}, cwd: server.cwd ?? "", may }
+    : { t: "http", url: server.url, headers: server.headers ?? {}, may };
   return createHash("sha256").update(JSON.stringify(what)).digest("hex").slice(0, 16);
 }
 
 /** One line that says what a server is, for a prompt or the /mcp list. Never prints env values or headers. */
 export function describeServer(server: McpServer): string {
-  if (server.transport === "stdio") return [server.command, ...(server.args ?? [])].join(" ");
-  return server.url ?? "";
+  const where = server.transport === "stdio" ? [server.command, ...(server.args ?? [])].join(" ") : server.url ?? "";
+  const may = [
+    ...(server.readOnly ? ["marked read-only: usable in Plan mode, never asks"] : []),
+    ...(server.alwaysAllow.length > 0 ? [`runs without asking: ${server.alwaysAllow.join(", ")}`] : []),
+  ];
+  return may.length === 0 ? where : `${where} (${may.join("; ")})`;
 }
 
 /** The config dsh's MCP client takes for a server. */

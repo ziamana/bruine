@@ -286,9 +286,9 @@ export async function writeEnvVar(
     text = "";
   }
   const line = `${key}=${value}`;
-  const re = new RegExp(`^${key}=.*$`, "m");
+  const re = new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=.*$`, "m");
   const next = re.test(text)
-    ? text.replace(re, line)
+    ? text.replace(re, () => line) // a function: a key with `$&` or `$1` in it is not a replacement pattern
     : text === "" || text.endsWith("\n")
       ? `${text}${line}\n`
       : `${text}\n${line}\n`;

@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { expandEnv, fingerprint, parseMcpServers, readMcpServers, serverId, toDshConfig } from "../src/mcp/config.js";
+import { describeServer, expandEnv, fingerprint, parseMcpServers, readMcpServers, serverId, toDshConfig } from "../src/mcp/config.js";
 import { approve, isApproved, planMcp, projectKey, readMcpState, setEnabled, writeMcpState } from "../src/mcp/state.js";
 import { approveProjectServers } from "../src/mcp/approve.js";
 import { formatMcpList, runMcpCommand } from "../src/mcp/command.js";
@@ -259,8 +259,19 @@ describe("/mcp", () => {
   });
 });
 
-test("fingerprints ignore what does not change what runs", () => {
-  const [a] = parseMcpServers({ s: { command: "x", alwaysAllow: ["t"] } }, "project", "f", {}).servers;
-  const [b] = parseMcpServers({ s: { command: "x" } }, "project", "f", {}).servers;
-  expect(fingerprint(a!)).toBe(fingerprint(b!));
+test("a project server's fingerprint covers what it may do unasked, not what is only a setting", () => {
+  const server = (row: Record<string, unknown>) => parseMcpServers({ s: { command: "x", ...row } }, "project", "f", {}).servers[0]!;
+  const plain = fingerprint(server({}));
+  // A repository must not be able to widen a server after the user approved it.
+  expect(fingerprint(server({ alwaysAllow: ["t"] }))).not.toBe(plain);
+  expect(fingerprint(server({ readOnly: true }))).not.toBe(plain);
+  // The order of the list and a timeout change nothing about what runs or what is allowed.
+  expect(fingerprint(server({ alwaysAllow: ["a", "b"] }))).toBe(fingerprint(server({ alwaysAllow: ["b", "a"] })));
+  expect(fingerprint(server({ timeout: 5000 }))).toBe(plain);
+});
+
+test("the approval prompt says what a server would run without asking", () => {
+  const server = parseMcpServers({ s: { command: "npx", args: ["-y", "x"], readOnly: true, alwaysAllow: ["write_row"] } }, "project", "f", {}).servers[0]!;
+  expect(describeServer(server)).toBe("npx -y x (marked read-only: usable in Plan mode, never asks; runs without asking: write_row)");
+  expect(describeServer(parseMcpServers({ s: { command: "npx" } }, "project", "f", {}).servers[0]!)).toBe("npx");
 });

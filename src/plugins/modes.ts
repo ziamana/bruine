@@ -10,6 +10,7 @@ import { decide, parseArgs, ruleKey, type PermissionMode } from "../gate/rules.j
 import type { DshContext, BruineRepl } from "./ctx.js";
 import { BRUINE_MCP_SERVICE, type BruineMcpService } from "./mcp.js";
 import { toolPrefix } from "../mcp/config.js";
+import { readAvailableSkills } from "../setup/skills.js";
 
 /** The gate's view of an MCP tool: is its server read-only, is the tool on its alwaysAllow list. */
 export function mcpPolicy(service: BruineMcpService | undefined, tool: string): { readOnly: boolean; allowed: boolean } | undefined {
@@ -368,6 +369,22 @@ export function apply(ctx: DshContext): void {
     }
   };
 
+  // The folders of the skills this session can load: a skill's own files are read with `read`, and
+  // reading anything else outside the project asks. Listed again every half minute, not per call.
+  let skillRoots: { at: number; roots: string[] } | undefined;
+  const readRoots = async (): Promise<string[]> => {
+    if (skillRoots !== undefined && Date.now() - skillRoots.at < 30_000) return skillRoots.roots;
+    let roots: string[] = [];
+    try {
+      const home = join(runtimeHome(), "skills");
+      roots = [home, ...(await readAvailableSkills(home, process.cwd())).map((skill) => skill.dir)];
+    } catch {
+      roots = [];
+    }
+    skillRoots = { at: Date.now(), roots };
+    return roots;
+  };
+
   ctx.on("tools/pre-execute", async (exec: any, next: () => Promise<any>) => {
     // T42: the gate governs the REPL agent *and* whatever agent a headless run
     // registered. It used to bail out when there was no REPL, which meant a
@@ -384,6 +401,7 @@ export function apply(ctx: DshContext): void {
       plan: modes.plan,
       sessionAllowed: modes.sessionAllowed,
       projectDir: process.cwd(),
+      readRoots: await readRoots(),
       mcp: (tool) => mcpPolicy(ctx.get(BRUINE_MCP_SERVICE) as BruineMcpService | undefined, tool),
     });
 

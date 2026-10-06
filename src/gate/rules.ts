@@ -49,6 +49,9 @@ export const READONLY_COMMANDS: ReadonlySet<string> = new Set([
   "diff", "file", "stat", "type", "alias", "ps",
 ]);
 
+/** `ps e` / `ps eww` / `ps auxe` print every process's environment, API keys included. */
+const PS_ENVIRONMENT = /^ps\s(?:[^\n]*\s)?(?!-)[A-Za-z]*e[A-Za-z]*(?:\s|$)|^ps\b[^\n]*--environment/;
+
 /** Characters that turn "one simple read-only command" into anything goes (T18.1). */
 const NOT_SIMPLE = /[;&|<>`]|\$\(|\n/;
 /** These options can execute a helper, even though the command looks read-only. */
@@ -184,6 +187,12 @@ export const SENSITIVE_PATTERNS: readonly RegExp[] = [
   /(^|[/\\])\.profile\b/,
   /(^|[/\\])\.zprofile\b/,
   /(^|[/\\])\.config[/\\]fish[/\\]/,
+  // Cloud, cluster and registry credentials, and the tool's own config (MCP tokens may sit in it).
+  /(^|[/\\])\.(aws|gnupg|kube|azure)([/\\]|$)/,
+  /(^|[/\\])\.config[/\\](gh|gcloud|glab-cli)([/\\]|$)/,
+  /(^|[/\\])\.docker[/\\]config\.json\b/,
+  /(^|[/\\])\.(netrc|git-credentials)\b|(^|[/\\])_netrc\b/,
+  /(^|[/\\])(bruine|kumo)\.json\b/,
 ];
 
 export interface DecisionContext {
@@ -193,6 +202,8 @@ export interface DecisionContext {
   sessionAllowed: ReadonlySet<string>;
   /** Absolute project dir. */
   projectDir: string;
+  /** Folders outside the project that may be read without asking (the installed skills). */
+  readRoots?: readonly string[];
   /**
    * What the user said about the MCP server a tool comes from, when it is one (`mcp__<server>__…`):
    * `readOnly` servers only read, `allowed` is a tool on the server's `alwaysAllow` list.
@@ -290,6 +301,7 @@ export function isReadonlyBash(command: string): boolean {
   const words = command.trim().split(/\s+/);
   const first = words[0] ?? "";
   if (first === "find") return !FIND_MUTATING.test(command);
+  if (first === "ps") return !PS_ENVIRONMENT.test(command.trim());
   if (first === "git") return gitReadonly(words, command);
   return READONLY_COMMANDS.has(first);
 }
@@ -396,6 +408,55 @@ export function isPathInside(target: string, projectDir: string): boolean {
   return rel !== "" && !rel.startsWith("..") && !mod.isAbsolute(rel) ? true : rel === "";
 }
 
+/** The tools that look at files and take a path: reading outside the project is the user's call. */
+const FILE_LOOKUP_TOOLS: ReadonlySet<string> = new Set(["read", "read_image", "glob", "grep"]);
+
+/** Where a file-lookup call points: its path, or an absolute/home glob pattern. */
+function lookupTargets(name: string, args: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  for (const key of ["path", "file_path", "directory"]) if (typeof args[key] === "string") out.push(args[key] as string);
+  if (name === "glob" && typeof args.pattern === "string" && /^(?:[/\\~]|[A-Za-z]:)/.test(args.pattern)) out.push(args.pattern);
+  return out;
+}
+
+/** Does a file-lookup call touch a secret, or leave the project and the readable roots? */
+export function lookupLeaks(name: string, args: Record<string, unknown>, projectDir: string, readRoots: readonly string[] = []): boolean {
+  for (const raw of lookupTargets(name, args)) {
+    const target = expandHome(raw.trim());
+    if (isSensitiveTarget(target, projectDir)) return true;
+    if (!isPathInside(target, projectDir) && !readRoots.some((root) => isPathInside(target, root))) return true;
+  }
+  return false;
+}
+
+/**
+ * A URL web_fetch must not reach without asking: this machine, the LAN, a link-local or cloud
+ * metadata address, or a URL with a password in it. The URL parser has already turned 2130706433
+ * and 0x7f.1 into 127.0.0.1. A name that merely resolves to a private address is not caught here.
+ */
+export function isPrivateUrl(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return false;
+  }
+  if (url.username !== "" || url.password !== "") return true;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (host === "" || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".lan") || host.endsWith(".home.arpa")) return true;
+  if (!host.includes(".") && !host.includes(":")) return true; // an intranet name: "nas", "router"
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host);
+  if (v4 !== null) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a >= 224;
+  }
+  if (host.includes(":")) {
+    if (host === "::" || host === "::1" || /^f[cd]/.test(host) || /^fe[89ab]/.test(host)) return true;
+    return host.startsWith("::ffff:"); // an IPv4 address in IPv6 clothes: ask, whichever it is
+  }
+  return false;
+}
+
 /**
  * Decide a tool call under the current mode (T18.5 order: plan → full →
  * dangerous & sensitive → session rules → the rest). "judge" means: consult
@@ -444,11 +505,11 @@ export function decide(
   if (WRITE_TOOLS.has(name)) {
     const target = String(execArgs.path ?? execArgs.file_path ?? "");
     if (isSensitive(target)) return "ask";
+    // "Always for this session" on write/edit is for this project: a path outside it asks every time.
+    if (!isPathInside(target, ctx.projectDir)) return "ask";
   }
-  if (name === "read" || name === "read_image") {
-    const target = String(execArgs.path ?? execArgs.file_path ?? "");
-    if (isSensitiveTarget(target, ctx.projectDir)) return "ask";
-  }
+  if (FILE_LOOKUP_TOOLS.has(name) && lookupLeaks(name, execArgs, ctx.projectDir, ctx.readRoots)) return "ask";
+  if (name === "web_fetch" && isPrivateUrl(String(execArgs.url ?? ""))) return "ask";
   // BOS review 2026-09-26: secrets and outside reads that a "read-only" command
   // still leaks into the model's context (and so to a cloud provider).
   if (isShell && bashLeaks(command, ctx.projectDir)) return "ask";

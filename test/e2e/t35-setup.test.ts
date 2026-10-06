@@ -386,9 +386,9 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
     h.type("s");
     await h.until(() => h.text().includes("Summary"), 20_000, "summary step");
     await h.dump("t35-first-install-summary");
-    expect(h.text()).toMatch(/Search\s+none/);
-    expect(h.text()).toMatch(/Theme\s+dark/);
-    expect(h.text()).toMatch(/Telemetry\s+no/);
+    await h.until(() => /Search\s+none/.test(h.text()), 15_000, "/Search\s+none/");
+    await h.until(() => /Theme\s+dark/.test(h.text()), 15_000, "/Theme\s+dark/");
+    await h.until(() => /Telemetry\s+no/.test(h.text()), 15_000, "/Telemetry\s+no/");
     h.press("enter");
     await h.waitFor("bruine: configuration saved.");
 
@@ -434,8 +434,8 @@ test("first install → Yes to Space Bunny Free → its own route, nothing asked
     h.press("enter");
     await h.waitFor("Free model");
     // The notice says where the code goes and that the offer can end.
-    expect(h.text()).toMatch(/sent to/i);
-    expect(h.text()).toMatch(/end without notice/i);
+    await h.until(() => /sent to/i.test(h.text()), 15_000, "/sent to/i");
+    await h.until(() => /end without notice/i.test(h.text()), 15_000, "/end without notice/i");
     await h.pressN("down", 1);
     expect(await h.selectedLine()).toContain("Yes, use Space Bunny Free");
     h.press("enter");
@@ -547,7 +547,7 @@ test("first install → Groq from the catalog → model, key, saved as a catalog
     await h.until(() => h.text().includes("Filter: groq_"), 20_000, "filtered providers");
     h.press("enter");
     await h.waitFor("Model on Groq");
-    expect(h.text()).toMatch(/\(\S+\)\s+·\s+\d+k ctx/);
+    await h.until(() => /\(\S+\)\s+·\s+\d+k ctx/.test(h.text()), 15_000, "/\(\S+\)\s+·\s+\d+k ctx/");
     h.press("enter"); // first model
     await h.until(() => h.text().includes("Role: fast"), 20_000, "fast role");
     h.press("enter"); // use main
@@ -567,7 +567,7 @@ test("first install → Groq from the catalog → model, key, saved as a catalog
     await h.until(() => h.text().includes("Share anonymous usage data"), 20_000, "telemetry step");
     h.type("s");
     await h.until(() => h.text().includes("Summary"), 20_000, "summary step");
-    expect(h.text()).toMatch(/Main\s+groq/);
+    await h.until(() => /Main\s+groq/.test(h.text()), 15_000, "/Main\s+groq/");
     h.press("enter");
     await h.waitFor("bruine: configuration saved.");
     const settings = parseYaml(await readFile(join(home, "settings.yaml"), "utf8")) as Record<string, any>;
@@ -651,7 +651,7 @@ test.skipIf(process.platform === "win32")("fresh setup offers Set up later and e
     await h.waitFor("Set up later");
     await h.waitFor("Set up later");
     await h.pressN("down", 2);
-    expect(h.text()).toMatch(/›\s+╭/);
+    await h.until(() => /›\s+╭/.test(h.text()), 15_000, "/›\s+╭/");
     h.press("enter");
     await h.waitFor("configuration postponed");
     expect(h.exit?.exitCode).toBe(0);

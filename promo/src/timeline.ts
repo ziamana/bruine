@@ -136,7 +136,7 @@ export const OUTRO = {
   sweep: sec(1.55),
   box: sec(1.4),
   installStart: sec(1.7),
-  installCps: 30,
+  installCps: 40, // "npm install -g @ziamana/bruine" is typed by 2.45s, before the Enter at 2.55s
   enter1: sec(2.55),
   runStart: sec(2.7),
   runCps: 18,

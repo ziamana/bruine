@@ -42,7 +42,9 @@ export const Outro: React.FC<{ copy: Copy["outro"] }> = ({ copy }) => {
               border: `1px solid ${ran > 0 ? `rgba(180,167,255,${0.25 + 0.4 * ran})` : COLORS.windowEdge}`,
               borderRadius: 18,
               padding: "24px 44px",
-              width: 700,
+              // Wide enough for "$ npm install -g @ziamana/bruine" and the cursor on one line.
+              width: 860,
+              whiteSpace: "nowrap",
               boxShadow: `0 30px 90px rgba(0,0,0,0.5), 0 0 ${60 * ran}px rgba(180,167,255,${0.2 * ran})`,
               lineHeight: 1.6,
             }}

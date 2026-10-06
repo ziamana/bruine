@@ -3,7 +3,7 @@ export type Lang = (typeof LANGS)[number];
 export const isLang = (value: string): value is Lang => (LANGS as readonly string[]).includes(value);
 
 export const REPO = "https://github.com/ziamana/bruine";
-export const VERSION = "0.1.1";
+export const VERSION = "0.1.2";
 
 /** The preview build serves every file by a relative path, so it works under any address. */
 export const PREVIEW = process.env.NEXT_PUBLIC_PREVIEW === "1";

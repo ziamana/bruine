@@ -3,6 +3,17 @@
 Every version that reaches npm, newest first. bruine checks for a new one once a day and offers
 `/update` in the session (or `bruine update` from a shell).
 
+## 0.1.2
+
+### Skills
+
+- **Every skill that ships with bruine starts on, except remotion.** `code-review`, `git-workflow`,
+  `impeccable`, `make-interfaces-feel-better`, `playwright-cli`, `systematic-debugging`,
+  `thermo-nuclear-code-quality-review`, `write-tests` and `youtube-transcript` are checked in the
+  setup, and kept when you skip that step or take the simple route. A launch that never chose
+  skills turns them on once. Uncheck one in `bruine setup` to turn it off; a saved choice is never
+  touched.
+
 ## 0.1.1
 
 ### First launch

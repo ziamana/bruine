@@ -228,7 +228,8 @@ export class Harness {
       await delay(25);
     } while (true);
   }
-  waitFor(text: string, ms = 15_000) { return this.until(() => this.screen().join("\n").includes(text), ms, JSON.stringify(text)); }
+  /** Windows runners start a terminal program several times slower than Linux ones. */
+  waitFor(text: string, ms = process.platform === "win32" ? 40_000 : 15_000) { return this.until(() => this.screen().join("\n").includes(text), ms, JSON.stringify(text)); }
   async waitStable(ms: number, timeoutMs = 1000) {
     const deadline = Date.now() + timeoutMs;
     await this.flush();

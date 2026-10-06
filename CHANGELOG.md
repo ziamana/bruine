@@ -3,6 +3,26 @@
 Every version that reaches npm, newest first. bruine checks for a new one once a day and offers
 `/update` in the session (or `bruine update` from a shell).
 
+## 0.1.3
+
+### Security
+
+An audit of the permission gate, the file and web tools and MCP (see `docs/SECURITY-AUDIT.md`).
+
+- **`read`, `glob`, `grep` and `read_image` ask for a path outside the project, or for a secret.**
+  They used to read `~/.aws/credentials` or `/etc/passwd` without asking, in every mode. The skills
+  you have installed stay readable.
+- **"Always for this session" on `write` and `edit` stays inside the project.** A path outside it
+  asks every time.
+- **`web_fetch` asks for this machine, the local network and cloud metadata addresses** (`localhost`,
+  `192.168.x.x`, `169.254.169.254`, `*.local`, IPv6 and numeric forms, URLs with a password).
+- **A project's `.mcp.json` can no longer widen an approved server.** `alwaysAllow` and `readOnly`
+  are part of what you approve, and the approval prompt shows them. Servers you approved before ask
+  once more.
+- More places count as secrets (`~/.aws`, `~/.kube`, `~/.gnupg`, `~/.docker/config.json`, `~/.netrc`,
+  `~/.config/gh`, `bruine.json`), `ps` with an environment flag is no longer treated as read-only, a
+  `$` in an API key is stored as typed, and `sharp` is updated past CVE-2026-96889.
+
 ## 0.1.2
 
 ### Skills

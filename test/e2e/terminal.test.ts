@@ -912,9 +912,9 @@ test.skipIf(process.platform === "win32")("approval: Auto runs bash ls without a
     await h.waitFor("Allow bash");
     // The approval band: the tool on its frame, the command inside, a letter per answer.
     expect(h.screen().some((line) => /│ ls\s+│/.test(line))).toBe(true);
-    expect(h.screen().join("\n")).toContain("y  Allow once");
+    await h.waitFor("y  Allow once");
     expect(h.screen().join("\n")).toContain('a  Always allow "ls" this session');
-    expect(h.screen().join("\n")).toContain("Waiting for you");
+    await h.waitFor("Waiting for you");
     h.press("enter");
     await h.waitFor("ASK_LS_DONE");
   }, false, "ask");

@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import { afterEach, describe, expect, test } from "vitest";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { decodeImage, decodePng, describeImage, halfBlocks, imageSize, previewSize, sniffImage, type Pixels } from "../src/ui/image-preview.js";
+import { decodeImage, decodePng, describeImage, encodePng, halfBlocks, imageSize, previewSize, shrink, sniffImage, terminalImageFile, type Pixels } from "../src/ui/image-preview.js";
+import { imageProtocolFor, imageRows, splitImageLine } from "../src/ui/term-images.js";
+import { setCapabilities, resetCapabilitiesCache, setCapabilityOverrides } from "@earendil-works/pi-tui";
 import { ToolCallComponent } from "../src/ui/tool-call-component.js";
 import { UNICODE_ICONS } from "../src/render/chars.js";
 import { resetColorDepth } from "../src/ui/palette.js";
@@ -136,4 +138,85 @@ test("a tool name longer than the column does not push the header past the edge"
   const head = strip(call.render(60)[0]!);
   expect(head).toMatch(/^✓ read_image  design\/missing\.png\s*$/);
   expect(visibleWidth(head)).toBeLessThanOrEqual(60);
+});
+
+describe("a terminal that can show the image itself", () => {
+  afterEach(() => {
+    setCapabilityOverrides({});
+    resetCapabilitiesCache();
+  });
+  const gradient = (w: number, h: number): number[][] => Array.from({ length: h }, (_, y) => Array.from({ length: w }, (_, x) => [x * 10, y * 10, 200]).flat());
+
+  test("PNG out of decoded pixels reads back the same, and shrinking keeps the proportions", () => {
+    const img = decodePng(png(6, 4, 2, 8, gradient(6, 4)))!;
+    const back = decodePng(encodePng(img))!;
+    expect([back.width, back.height]).toEqual([6, 4]);
+    expect(pixel(back, 5, 3)).toEqual(pixel(img, 5, 3));
+    const small = shrink(img, 3);
+    expect([small.width, small.height]).toEqual([3, 2]);
+    expect(shrink(img, 10)).toBe(img);
+  });
+
+  test("kitty is sent a PNG, iTerm2 the file as it is", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bruine-image-"));
+    const jpegPath = join(dir, "shot.jpg");
+    const jpeg = createRequire(import.meta.url)("jpeg-js") as typeof import("jpeg-js");
+    writeFileSync(jpegPath, jpeg.encode({ width: 8, height: 4, data: Buffer.alloc(8 * 4 * 4, 120) }, 90).data);
+    expect(terminalImageFile(jpegPath, "iterm2")).toMatchObject({ mimeType: "image/jpeg", widthPx: 8, heightPx: 4, description: "JPEG 8×4" });
+    const forKitty = terminalImageFile(jpegPath, "kitty")!;
+    expect(forKitty.mimeType).toBe("image/png");
+    expect(sniffImage(new Uint8Array(Buffer.from(forKitty.base64, "base64")))).toBe("image/png");
+    const pngPath = join(dir, "shot.png");
+    const bytes = png(4, 2, 2, 8, gradient(4, 2));
+    writeFileSync(pngPath, bytes);
+    expect(terminalImageFile(pngPath, "kitty")!.base64).toBe(Buffer.from(bytes).toString("base64"));
+  });
+
+  test("the card draws the real image in kitty and iTerm2, and the sketch elsewhere", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bruine-image-"));
+    const file = join(dir, "shot.png");
+    writeFileSync(file, png(40, 20, 2, 8, gradient(40, 20)));
+    const card = (): string[] => {
+      const call = new ToolCallComponent("read_image", () => 0, UNICODE_ICONS);
+      call.setArgs(JSON.stringify({ path: file }));
+      call.result(true, "<image attached>");
+      return call.render(80);
+    };
+    setCapabilities({ images: "kitty", trueColor: true, hyperlinks: false });
+    const kitty = card();
+    expect(kitty.filter((l) => l.includes("\x1b_G"))).toHaveLength(1);
+    expect(kitty.some((l) => l.includes("▀"))).toBe(false);
+    expect(strip(kitty.at(-1)!)).toMatch(/PNG 40×20/);
+    setCapabilities({ images: "iterm2", trueColor: true, hyperlinks: false });
+    const iterm = card();
+    const at = iterm.findIndex((l) => l.includes("\x1b]1337;File="));
+    expect(at).toBeGreaterThan(1);
+    // The image is drawn from its last row, after moving up over the rows reserved above it.
+    expect(iterm[at]).toMatch(/\x1b\[\d+A\x1b\]1337;File=/);
+    expect([...imageRows(iterm)].sort((a, b) => a - b)[0]).toBeGreaterThan(0);
+    setCapabilities({ images: null, trueColor: true, hyperlinks: false });
+    process.env.BRUINE_COLOR = "truecolor";
+    resetColorDepth();
+    expect(card().some((l) => l.includes("▀"))).toBe(true);
+  });
+
+  test("Konsole gets the iTerm2 protocol, BRUINE_IMAGES decides anywhere, and a multiplexer gets none", () => {
+    expect(imageProtocolFor({ KONSOLE_VERSION: "230805" })).toBe("iterm2");
+    expect(imageProtocolFor({ KONSOLE_VERSION: "211200" })).toBeUndefined();
+    expect(imageProtocolFor({ KONSOLE_VERSION: "230805", TMUX: "/tmp/tmux" })).toBeUndefined();
+    expect(imageProtocolFor({ BRUINE_IMAGES: "kitty" })).toBe("kitty");
+    expect(imageProtocolFor({ BRUINE_IMAGES: "blocks", KONSOLE_VERSION: "230805" })).toBeNull();
+    expect(imageProtocolFor({})).toBeUndefined();
+  });
+
+  test("the rows an image covers are known, for the rain to stay off them", () => {
+    expect([...imageRows(["a", "\x1b_Ga=T,f=100,C=1,c=10,r=3;AAAA\x1b\\", "", "", "b"])]).toEqual([1, 2, 3]);
+    expect([...imageRows(["", "", "\x1b[2A\x1b]1337;File=inline=1:AAAA\x07", "x"])].sort()).toEqual([0, 1, 2]);
+  });
+
+  test("a line is split at its image, cursor-up included, so the layout never clips the base64", () => {
+    expect(splitImageLine("    \x1b[2A\x1b]1337;File=inline=1:AAAA\x07")).toEqual({ before: "    ", sequence: "\x1b[2A\x1b]1337;File=inline=1:AAAA\x07" });
+    expect(splitImageLine("  \x1b_Ga=T,f=100;AAAA\x1b\\")).toEqual({ before: "  ", sequence: "\x1b_Ga=T,f=100;AAAA\x1b\\" });
+    expect(splitImageLine("plain text")).toBeUndefined();
+  });
 });

@@ -53,6 +53,8 @@ export class Harness {
   exit: { exitCode: number; signal?: number } | undefined;
   private pending = Promise.resolve();
   readonly emojiScreens: string[] = [];
+  /** Everything the app wrote, as bytes the terminal received (the last 4 MB). */
+  raw = "";
   /** The fresh user home a recording's project lives in, removed with it. */
   userHome: string | undefined;
   private constructor(readonly home: string, readonly project: string, readonly server: Awaited<ReturnType<typeof startServer>>) {}
@@ -71,7 +73,7 @@ export class Harness {
       /** Extra top-level bruine.json keys (e.g. mcpServers), merged over the defaults. */
       bruineJson?: Record<string, unknown>;
       /** Files to write into the project before bruine starts, by relative path. */
-      files?: Record<string, string>;
+      files?: Record<string, string | Uint8Array>;
       /** The model's display name (settings.yaml `name:`), for recordings. */
       displayName?: string;
       /** Put the project at `<fresh home>/<path>` and make that the user's home, for recordings. */
@@ -171,6 +173,7 @@ export class Harness {
       ensureSpawnHelper();
       h.child = pty.spawn(process.execPath, [join(root, "dist", "bin.js")], { name: "xterm-256color", cols: 100, rows: 30, cwd: project, env });
       h.child.onData((data) => {
+        h.raw = (h.raw + data).slice(-4 * 1024 * 1024);
         // A real terminal answers "what is your background?" (OSC 11); the headless one does not.
         if (opts.background !== undefined && data.includes("\x1b]11;?")) {
           const [r, g, b] = [1, 3, 5].map((i) => opts.background!.slice(i, i + 2).repeat(2));

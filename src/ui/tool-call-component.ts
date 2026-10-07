@@ -1,4 +1,4 @@
-import type { Component } from "@earendil-works/pi-tui";
+import { Image, type Component } from "@earendil-works/pi-tui";
 import stringWidth from "string-width";
 import { isAbsolute, relative, resolve } from "node:path";
 import { clipCells, sanitize, spinnerFrame } from "../render/reasoning.js";
@@ -10,7 +10,8 @@ import { ansi } from "./theme.js";
 import { diffCounter, diffForCall, renderDiff, type FileDiff } from "./diff-view.js";
 import { parsePartialJson } from "./partial-json.js";
 import { readableToolSummary, toolSummariesEnabled } from "./tool-summary.js";
-import { previewImageFile } from "./image-preview.js";
+import { previewImageFile, terminalImageFile } from "./image-preview.js";
+import { imageProtocol } from "./term-images.js";
 
 /** Tools whose result is an image the model looked at: the transcript shows it too. */
 const IMAGE_TOOLS = new Set(["read_image", "view_image"]);
@@ -19,6 +20,9 @@ const IMAGE_FILE = /\.(png|jpe?g|gif|webp)$/i;
 /** The most room an image takes in the transcript, in cells. */
 export const IMAGE_PREVIEW_COLS = 64;
 export const IMAGE_PREVIEW_ROWS = 16;
+/** The room a real image (kitty, iTerm2) takes: it has pixels to spare, so a little more. */
+export const IMAGE_PICTURE_COLS = 72;
+export const IMAGE_PICTURE_ROWS = 20;
 
 const SUMMARY_KEYS = ["command", "cmd", "path", "file_path", "url", "query", "pattern", "name"];
 /** T59: the tools whose call is a change to the workspace. */
@@ -79,6 +83,8 @@ export class ToolCallComponent implements ChatToolCall {
   #diff: FileDiff | undefined;
   /** The image file a successful image read showed the model. */
   #image: string | undefined;
+  /** That image, prepared once for the terminal's graphics protocol (null: it could not be). */
+  #picture: { key: string; image: Image; description: string } | null | undefined;
   #readableSummaries: boolean;
   constructor(readonly tool: string, private now: () => number = Date.now, private icons: BruineIcons = bruineIcons(), opts: { readableSummaries?: boolean } = {}) {
     this.#startTime = now();
@@ -287,6 +293,12 @@ export class ToolCallComponent implements ChatToolCall {
       return out;
     }
     if (this.#image !== undefined) {
+      const picture = this.#pictureLines(width);
+      if (picture !== undefined) {
+        out.push(...picture.lines.map((l) => `    ${l}`));
+        out.push(ansi.gray(clipCells(`    ${picture.description}${dur === undefined ? "" : ` ${this.icons.think === "*" ? "-" : "·"} ${dur}`}`, width)));
+        return out;
+      }
       const preview = previewImageFile(this.#image, Math.min(IMAGE_PREVIEW_COLS, Math.max(1, width - 6)), IMAGE_PREVIEW_ROWS);
       if (preview !== undefined) {
         if (preview.lines !== undefined) out.push(...preview.lines.map((l) => `    ${l}`));
@@ -299,6 +311,30 @@ export class ToolCallComponent implements ChatToolCall {
     if (this.#done.rest > 0) out.push(ansi.gray(clipCells(`    ${this.icons.think === "*" ? "..." : "…"} ${this.#done.rest} more lines`, width)));
     if (dur !== undefined) out.push(ansi.gray(clipCells(`Took ${dur}`, width)));
     return out;
+  }
+  /**
+   * The image itself, through the terminal's graphics protocol, when it has one: Kitty, Ghostty,
+   * WezTerm, Warp, iTerm2, Konsole. pi-tui places it and keeps its rows; the half-block sketch
+   * stays for every other terminal.
+   */
+  #pictureLines(width: number): { lines: string[]; description: string } | undefined {
+    const protocol = imageProtocol();
+    if (protocol === null || this.#image === undefined) return undefined;
+    const key = `${protocol}:${this.#image}`;
+    if (this.#picture === undefined || (this.#picture !== null && this.#picture.key !== key)) {
+      const file = terminalImageFile(this.#image, protocol);
+      this.#picture =
+        file === undefined
+          ? null
+          : {
+              key,
+              description: file.description,
+              image: new Image(file.base64, file.mimeType, { fallbackColor: ansi.gray }, { maxWidthCells: IMAGE_PICTURE_COLS, maxHeightCells: IMAGE_PICTURE_ROWS }, { widthPx: file.widthPx, heightPx: file.heightPx }),
+            };
+    }
+    if (this.#picture === null) return undefined;
+    // Four cells of indent and two of margin: the image's own width is what is left, at most 72.
+    return { lines: this.#picture.image.render(Math.max(3, Math.min(IMAGE_PICTURE_COLS + 2, width - 4))), description: this.#picture.description };
   }
   invalidate(): void {}
 }

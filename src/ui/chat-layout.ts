@@ -10,6 +10,7 @@ import stringWidth from "string-width";
 import { bruineIcons, withoutEmoji, type BruineIcons } from "../render/chars.js";
 import { blendHex, bgEnabled, boxLine, colorDepth, fillLine, inkHex, paintHex, type PaletteRole } from "./palette.js";
 import { reasoningStyle } from "../render/reasoning.js";
+import { splitImageLine } from "./term-images.js";
 import { ansi } from "./theme.js";
 
 /** Collapse thresholds matching pi-tui Editor (T27.5): >10 lines or >1000 chars. */
@@ -176,6 +177,16 @@ export class ChatTranscript extends Container {
         }
         for (const [i, line] of block.entries()) {
           const clean = (child as Component & { transcriptStyle?: string }).transcriptStyle === "reasoning" ? reasoningStyle(withoutEmoji(line)) : withoutEmoji(line);
+          // An image the terminal draws itself: paint the row, step back to where the image
+          // starts, and send it last. Its base64 is not text: clipped, the image is lost.
+          const picture = splitImageLine(clean);
+          if (picture !== undefined) {
+            const lead = rail === undefined ? `  ${picture.before}` : `${showRail ? railPaint(rail, railChar, (i + 1) / railSpan) : " "} ${picture.before}`;
+            const row = rail === undefined ? lead : card(role, lead);
+            const back = rail === undefined ? 0 : cardCells - visibleWidth(lead);
+            piece.push(`${row}${back > 0 ? `\x1b[${String(back)}D` : ""}${picture.sequence}`);
+            continue;
+          }
           if (rail === undefined) {
             piece.push(truncateToWidth(`  ${clean}`, width - 2));
           } else {

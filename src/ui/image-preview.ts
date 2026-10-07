@@ -1,17 +1,17 @@
 import { readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
-import { inflateSync } from "node:zlib";
+import { crc32, deflateSync, inflateSync } from "node:zlib";
 import { bgEnabled, colorDepth, to256, type ColorDepth } from "./palette.js";
 
 /**
  * An image the model read, shown in the transcript as the image itself.
  *
- * Every pixel pair becomes one `▀`: the upper pixel is the glyph's colour, the lower one its
- * background. That is text, so it scrolls, wraps into the transcript, is skipped by the rain
- * (a line with a background is opaque) and works in any terminal that has 24-bit or 256
- * colours, where the graphics protocols (kitty, iTerm2) would each need a terminal of their own
- * and fight a layout that redraws itself. PNG and JPEG are decoded here; other formats, and a
- * terminal with only 16 colours, get a line that says what the image is.
+ * A terminal that speaks a graphics protocol (kitty, iTerm2: Kitty, Ghostty, WezTerm, Warp,
+ * iTerm2, Konsole) is sent the image, at its own resolution: `terminalImageFile` prepares it.
+ * Everywhere else every pixel pair becomes one `▀`: the upper pixel is the glyph's colour, the
+ * lower one its background. That is text, so it works in any terminal with 24-bit or 256
+ * colours, but it is a sketch: a 64-column preview is 64 pixels wide. PNG and JPEG are decoded
+ * here; other formats, and a terminal with only 16 colours, get a line that says what it is.
  */
 
 /** Decoded pixels, 8 bits per channel, RGBA, row by row. */
@@ -260,6 +260,86 @@ export function previewImageFile(path: string, cols: number, rows: number): { li
     const img = decodeImage(bytes);
     const lines = img === undefined ? undefined : halfBlocks(img, cols, rows);
     return lines === undefined ? { description } : { lines, description };
+  } catch {
+    return undefined;
+  }
+}
+
+/** A PNG of `img`: RGBA, no filter, deflated. Enough for a terminal to show what was decoded. */
+export function encodePng(img: Pixels): Uint8Array {
+  const chunk = (type: string, data: Uint8Array): Buffer => {
+    const out = Buffer.alloc(12 + data.length);
+    out.writeUInt32BE(data.length, 0);
+    out.write(type, 4, "ascii");
+    Buffer.from(data).copy(out, 8);
+    out.writeUInt32BE(crc32(Buffer.concat([Buffer.from(type, "ascii"), Buffer.from(data)])), 8 + data.length);
+    return out;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(img.width, 0);
+  header.writeUInt32BE(img.height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  const stride = img.width * 4;
+  const raw = Buffer.alloc((stride + 1) * img.height);
+  for (let y = 0; y < img.height; y += 1) Buffer.from(img.data.buffer, img.data.byteOffset + y * stride, stride).copy(raw, y * (stride + 1) + 1);
+  return new Uint8Array(Buffer.concat([Buffer.from(PNG_SIGNATURE), chunk("IHDR", header), chunk("IDAT", deflateSync(raw)), chunk("IEND", new Uint8Array())]));
+}
+
+/** `img` scaled down to fit `max` pixels on its longer side, each pixel the average of its box. */
+export function shrink(img: Pixels, max: number): Pixels {
+  const scale = Math.min(1, max / Math.max(img.width, img.height));
+  if (scale >= 1) return img;
+  const width = Math.max(1, Math.round(img.width * scale));
+  const height = Math.max(1, Math.round(img.height * scale));
+  const data = new Uint8Array(width * height * 4);
+  const sx = img.width / width;
+  const sy = img.height / height;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const sum = [0, 0, 0, 0];
+      let n = 0;
+      for (let yy = Math.floor(y * sy); yy < Math.min(img.height, Math.ceil((y + 1) * sy)); yy += 1) {
+        for (let xx = Math.floor(x * sx); xx < Math.min(img.width, Math.ceil((x + 1) * sx)); xx += 1) {
+          const o = (yy * img.width + xx) * 4;
+          for (let c = 0; c < 4; c += 1) sum[c]! += img.data[o + c]!;
+          n += 1;
+        }
+      }
+      for (let c = 0; c < 4; c += 1) data[(y * width + x) * 4 + c] = Math.round(sum[c]! / Math.max(1, n));
+    }
+  }
+  return { width, height, data };
+}
+
+/** Past this many bytes or pixels on a side, the image is re-encoded smaller before it is sent. */
+const SEND_MAX_BYTES = 2 * 1024 * 1024;
+const SEND_MAX_SIDE = 1600;
+
+/**
+ * An image file ready for a graphics protocol: base64, its type and size, and what it is.
+ * Kitty takes PNG only, so a JPEG is re-encoded; a large image is sent at most 1600 pixels on a
+ * side. A format that cannot be re-encoded where it must be (GIF, WebP to kitty) is undefined.
+ */
+export function terminalImageFile(
+  path: string,
+  protocol: "kitty" | "iterm2",
+): { base64: string; mimeType: string; widthPx: number; heightPx: number; description: string } | undefined {
+  try {
+    if (statSync(path).size > MAX_PREVIEW_BYTES) return undefined;
+    const bytes = new Uint8Array(readFileSync(path));
+    const mimeType = sniffImage(bytes);
+    const size = imageSize(bytes);
+    if (mimeType === undefined || size === undefined) return undefined;
+    const description = describeImage(bytes);
+    const tooBig = bytes.length > SEND_MAX_BYTES || Math.max(size.width, size.height) > SEND_MAX_SIDE;
+    if (!tooBig && (protocol === "iterm2" || mimeType === "image/png")) {
+      return { base64: Buffer.from(bytes).toString("base64"), mimeType, widthPx: size.width, heightPx: size.height, description };
+    }
+    const img = decodeImage(bytes);
+    if (img === undefined) return undefined;
+    const sent = shrink(img, SEND_MAX_SIDE);
+    return { base64: Buffer.from(encodePng(sent)).toString("base64"), mimeType: "image/png", widthPx: sent.width, heightPx: sent.height, description };
   } catch {
     return undefined;
   }

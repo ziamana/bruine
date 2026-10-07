@@ -3,6 +3,15 @@
 Every version that reaches npm, newest first. bruine checks for a new one once a day and offers
 `/update` in the session (or `bruine update` from a shell).
 
+## Unreleased
+
+### Fixed
+
+- **An image the model reads is shown as the image itself, not as a grid of coloured squares**, in
+  terminals that can draw pictures: Konsole 22.04 and later (iTerm2 protocol), Kitty, Ghostty,
+  WezTerm and Warp (kitty protocol), iTerm2. Other terminals, and tmux, keep the half-block sketch.
+  `BRUINE_IMAGES=kitty`, `iterm2` or `blocks` picks for any terminal.
+
 ## 0.1.3
 
 ### Security

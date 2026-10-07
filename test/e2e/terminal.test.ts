@@ -1742,3 +1742,37 @@ test("/model <route> sets directly and /provider lists them all (T37, T39)", asy
     { server: { models: ["e2e-model", "e2e-model-2"] }, extraModel: "e2e-model-2" },
   );
 }, 120_000);
+
+test("in Konsole an image the model reads is sent as the image itself (iTerm2 protocol), and the transcript goes on below it", async () => {
+  // A 64-column half-block sketch is 64 pixels wide: Konsole can show the real image, so it gets it.
+  const { deflateSync, crc32 } = await import("node:zlib");
+  const chunk = (type: string, data: Buffer): Buffer => {
+    const out = Buffer.alloc(12 + data.length);
+    out.writeUInt32BE(data.length, 0);
+    out.write(type, 4, "ascii");
+    data.copy(out, 8);
+    out.writeUInt32BE(crc32(Buffer.concat([Buffer.from(type, "ascii"), data])), 8 + data.length);
+    return out;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(32, 0);
+  header.writeUInt32BE(16, 4);
+  header[8] = 8;
+  header[9] = 2;
+  const rows = Buffer.concat(Array.from({ length: 16 }, (_, y) => Buffer.from([0, ...Array.from({ length: 32 }, (_, x) => [x * 8, y * 16, 200]).flat()])));
+  const image = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+  await serverScenario(
+    "konsole-image",
+    [toolScript("read_image", { file_path: "shot.png" }), textScript("IMAGE_SEEN")],
+    async (h) => {
+      await h.prompt("Look at the screenshot");
+      await h.waitFor("IMAGE_SEEN", 30_000);
+      expect(h.raw).toContain("\x1b]1337;File=");
+      expect(h.raw).toContain(image.toString("base64"));
+      const screen = h.screen().join("\n");
+      expect(screen).toContain("PNG 32×16");
+      expect(screen).not.toContain("▀");
+    },
+    { env: { KONSOLE_VERSION: "230805", BRUINE_COLOR: "truecolor", COLORTERM: "truecolor" }, imageInput: true, files: { "shot.png": image } },
+  );
+}, 90_000);

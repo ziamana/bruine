@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { configReadPath, configWritePath } from "../compat.js";
 import { visibleWidth, type Component } from "@earendil-works/pi-tui";
+import { imageRows } from "./term-images.js";
 import { Weather, currentEffortName, effortIsStorm, hash01, rainGrid, rainIntoBlanks, rainLevel, type RainInk } from "./rain.js";
 import { terminalMotionAllowed } from "./logo-motion.js";
 import { ansi } from "./theme.js";
@@ -143,9 +144,13 @@ export class WeatherBackdrop implements Component {
     // From xhigh up the near drops turn violet; the wind and the lightning are the storm's alone.
     const ink = storm || this.#weather.level >= 0.85 ? STORM_INK : QUIET_INK;
     const out = [...lines];
+    // An image sent through a graphics protocol is drawn by the terminal over its rows: a drop
+    // written there would punch a hole in it.
+    const pictures = imageRows(lines);
     for (let y = 0; y < height; y += 1) {
       const row = from + y;
       if (row >= controlsFrom && row < content.length) continue;
+      if (pictures.has(row)) continue;
       const line = lines[from + y]!;
       // Cards are opaque, and the original control band stays clear of the weather.
       if (hasBackground(line)) continue;

@@ -1,4 +1,5 @@
 import { appEnv, runtimeHome, configReadPath } from "../compat.js";
+import { applyImageProtocol } from "./term-images.js";
 import { parse as parseYaml } from "yaml";
 import {
   Container,
@@ -818,6 +819,8 @@ export class BruineUi {
     if (process.stdout.isTTY === true && process.env.CI !== "1" && appEnv("NO_CLEAR") !== "1") {
       this.terminal.clearScreen();
     }
+    // Before the terminal starts: pi-tui asks for the cell size only when images are on.
+    applyImageProtocol();
     this.tui.start();
     // T56: ask for the mouse, so a drag can be seen and copied. BRUINE_MOUSE_SELECT=0
     // and a form both keep the terminal's.

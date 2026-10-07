@@ -14,17 +14,49 @@ export const CHANGELOG: Record<Lang, { title: string; lead: string; latest: stri
     latest: "latest",
     releases: [
       {
-        version: "Next",
+        version: "0.1.3",
+        latest: true,
         groups: [
           {
-            title: "Not released yet",
-            items: [<>An image the model reads is drawn right in the transcript, in any 24-bit or 256-colour terminal.</>, <>A diff's green and red bands cover the whole line, sign included.</>, <>On a light terminal, every card gets the light theme's ink.</>],
+            title: "Security",
+            items: [
+              <>An audit of the permission gate, the file and web tools and MCP, published in <code>docs/SECURITY-AUDIT.md</code>.</>,
+              <><strong><code>read</code>, <code>glob</code>, <code>grep</code> and <code>read_image</code> ask for a path outside the project, or for a secret.</strong> They used to read <code>~/.aws/credentials</code> or <code>/etc/passwd</code> without asking.</>,
+              <><strong>“Always for this session” on <code>write</code> and <code>edit</code> stays inside the project.</strong> A path outside it asks every time.</>,
+              <><strong><code>web_fetch</code> asks for this machine, the local network and cloud metadata addresses.</strong></>,
+              <><strong>A project's <code>.mcp.json</code> can no longer widen an approved server:</strong> <code>alwaysAllow</code> and <code>readOnly</code> are part of what you approve.</>,
+              <>More places count as secrets, <code>ps</code> with an environment flag is no longer read-only, and <code>sharp</code> is updated past CVE-2026-96889.</>,
+            ],
+          },
+        ],
+      },
+      {
+        version: "0.1.2",
+        groups: [
+          {
+            title: "Skills",
+            items: [<><strong>Every skill that ships with bruine starts on, except remotion.</strong> Uncheck one in <code>bruine setup</code> to turn it off; a saved choice is never touched.</>],
+          },
+        ],
+      },
+      {
+        version: "0.1.1",
+        groups: [
+          {
+            title: "First launch",
+            items: [
+              <><strong>Setting up the first time no longer needs pnpm.</strong> It links the copies that came with the install, with no network.</>,
+              <><strong>The package is <code>@ziamana/bruine</code>.</strong> Install with <code>npm install -g @ziamana/bruine</code>; the command is still <code>bruine</code>.</>,
+            ],
+          },
+          {
+            title: "Websites",
+            items: [<>Asked for a complete site, the agent plans every page first, builds them all, then polishes, and invents a brand name instead of taking the folder's.</>],
           },
         ],
       },
       {
         version: "0.1.0",
-        latest: true,
         groups: [
           {
             title: "When the model goes quiet",
@@ -46,7 +78,7 @@ export const CHANGELOG: Record<Lang, { title: string; lead: string; latest: stri
           },
           {
             title: "Look and feel",
-            items: [<>Readable on light terminals: the colours follow the terminal's background.</>, <>256-colour terminals get gray surfaces instead of navy and black.</>],
+            items: [<>Readable on light terminals: the colours follow the terminal's background, on every card.</>, <>An image the model reads is drawn right in the transcript, in any 24-bit or 256-colour terminal.</>, <>A diff's green and red bands cover the whole line, sign included.</>, <>256-colour terminals get gray surfaces instead of navy and black.</>],
           },
         ],
       },
@@ -59,17 +91,49 @@ export const CHANGELOG: Record<Lang, { title: string; lead: string; latest: stri
     latest: "dernière",
     releases: [
       {
-        version: "Prochaine",
+        version: "0.1.3",
+        latest: true,
         groups: [
           {
-            title: "Pas encore publié",
-            items: [<>Une image lue par le modèle est dessinée dans la conversation, dans n'importe quel terminal 24 bits ou 256 couleurs.</>, <>Les bandes vertes et rouges d'un diff couvrent toute la ligne, signe compris.</>, <>Sur un terminal clair, chaque carte reçoit l'encre du thème clair.</>],
+            title: "Sécurité",
+            items: [
+              <>Un audit du contrôle des permissions, des outils fichiers et web et de MCP, publié dans <code>docs/SECURITY-AUDIT.md</code>.</>,
+              <><strong><code>read</code>, <code>glob</code>, <code>grep</code> et <code>read_image</code> demandent pour un chemin hors du projet, ou pour un secret.</strong> Ils lisaient <code>~/.aws/credentials</code> ou <code>/etc/passwd</code> sans demander.</>,
+              <><strong>« Toujours pour cette session » sur <code>write</code> et <code>edit</code> reste dans le projet.</strong> Un chemin hors du projet demande à chaque fois.</>,
+              <><strong><code>web_fetch</code> demande pour cette machine, le réseau local et les adresses de métadonnées cloud.</strong></>,
+              <><strong>Le <code>.mcp.json</code> d'un projet ne peut plus élargir un serveur approuvé :</strong> <code>alwaysAllow</code> et <code>readOnly</code> font partie de ce que tu approuves.</>,
+              <>Plus d'emplacements comptent comme secrets, <code>ps</code> avec une option d'environnement n'est plus en lecture seule, et <code>sharp</code> passe au-delà de la CVE-2026-96889.</>,
+            ],
+          },
+        ],
+      },
+      {
+        version: "0.1.2",
+        groups: [
+          {
+            title: "Skills",
+            items: [<><strong>Tous les skills livrés avec bruine sont activés, sauf remotion.</strong> Décoche-en un dans <code>bruine setup</code> pour le couper ; un choix enregistré n'est jamais modifié.</>],
+          },
+        ],
+      },
+      {
+        version: "0.1.1",
+        groups: [
+          {
+            title: "Premier lancement",
+            items: [
+              <><strong>La première configuration n'a plus besoin de pnpm.</strong> Elle relie les copies livrées avec l'installation, sans réseau.</>,
+              <><strong>Le paquet s'appelle <code>@ziamana/bruine</code>.</strong> Installe avec <code>npm install -g @ziamana/bruine</code> ; la commande reste <code>bruine</code>.</>,
+            ],
+          },
+          {
+            title: "Sites web",
+            items: [<>Quand tu demandes un site complet, l'agent planifie toutes les pages, les construit toutes, puis les peaufine, et invente un nom de marque au lieu de prendre celui du dossier.</>],
           },
         ],
       },
       {
         version: "0.1.0",
-        latest: true,
         groups: [
           {
             title: "Quand le modèle se tait",
@@ -91,7 +155,7 @@ export const CHANGELOG: Record<Lang, { title: string; lead: string; latest: stri
           },
           {
             title: "Apparence",
-            items: [<>Lisible sur les terminaux clairs : les couleurs suivent le fond du terminal.</>, <>Les terminaux 256 couleurs ont des surfaces grises au lieu de bleu marine et noir.</>],
+            items: [<>Lisible sur les terminaux clairs : les couleurs suivent le fond du terminal, sur chaque carte.</>, <>Une image lue par le modèle est dessinée dans la conversation, dans n'importe quel terminal 24 bits ou 256 couleurs.</>, <>Les bandes vertes et rouges d'un diff couvrent toute la ligne, signe compris.</>, <>Les terminaux 256 couleurs ont des surfaces grises au lieu de bleu marine et noir.</>],
           },
         ],
       },

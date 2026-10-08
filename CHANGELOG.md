@@ -3,7 +3,7 @@
 Every version that reaches npm, newest first. bruine checks for a new one once a day and offers
 `/update` in the session (or `bruine update` from a shell).
 
-## Unreleased
+## 0.1.4
 
 ### Fixed
 

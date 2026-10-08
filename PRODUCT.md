@@ -37,7 +37,7 @@ Terminal (Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME T
 
 ## Capabilities and Constraints
 
-- Version 0.1.3, MIT. Young: no checkpoints or rewind, no IDE integration, MCP tools only (no resources or prompts), no LSP.
+- Version 0.1.4, MIT. Young: no checkpoints or rewind, no IDE integration, MCP tools only (no resources or prompts), no LSP.
 - Any OpenAI-compatible `/v1` server, llama.cpp, about thirty cloud providers.
 - Published on npm as `@ziamana/bruine` since 0.1.0 (4 October 2026; npm refused the plain name); the repository `ziamana/bruine` is public, with a GitHub release per version. Releases are published by the release workflow (trusted publishing). Site links must still not promise what is not live: the website is not deployed yet.
 - A security audit of the gate, the file and web tools and MCP is published in `docs/SECURITY-AUDIT.md`; its open items (Auto as the default mode, `web_fetch` to public addresses, project skills loaded without approval) are product decisions still to make.

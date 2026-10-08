@@ -14,8 +14,19 @@ export const CHANGELOG: Record<Lang, { title: string; lead: string; latest: stri
     latest: "latest",
     releases: [
       {
-        version: "0.1.3",
+        version: "0.1.4",
         latest: true,
+        groups: [
+          {
+            title: "Fixed",
+            items: [
+              <><strong>An image the model reads is shown as the image itself, not as a grid of coloured squares</strong>, in terminals that can draw pictures: Konsole 22.04 and later, Kitty, Ghostty, WezTerm, Warp and iTerm2. Other terminals, and tmux, keep the half-block sketch. <code>BRUINE_IMAGES=kitty</code>, <code>iterm2</code> or <code>blocks</code> picks for any terminal.</>,
+            ],
+          },
+        ],
+      },
+      {
+        version: "0.1.3",
         groups: [
           {
             title: "Security",
@@ -91,8 +102,19 @@ export const CHANGELOG: Record<Lang, { title: string; lead: string; latest: stri
     latest: "dernière",
     releases: [
       {
-        version: "0.1.3",
+        version: "0.1.4",
         latest: true,
+        groups: [
+          {
+            title: "Corrigé",
+            items: [
+              <><strong>Une image lue par le modèle s'affiche telle quelle, et non plus en carrés de couleur</strong>, dans les terminaux qui savent dessiner des images : Konsole 22.04 et plus, Kitty, Ghostty, WezTerm, Warp et iTerm2. Les autres terminaux, et tmux, gardent le croquis en demi-blocs. <code>BRUINE_IMAGES=kitty</code>, <code>iterm2</code> ou <code>blocks</code> choisit pour n'importe quel terminal.</>,
+            ],
+          },
+        ],
+      },
+      {
+        version: "0.1.3",
         groups: [
           {
             title: "Sécurité",

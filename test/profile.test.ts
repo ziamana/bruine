@@ -4,7 +4,7 @@ import path, { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { existsSync } from "node:fs";
 import { symlink } from "node:fs/promises";
-import { ensureProfile, linkProfileBundles, profilePaths, resolveDshBaseDir } from "../src/profile.js";
+import { bundleIsCurrent, ensureProfile, linkProfileBundles, profilePaths, resolveDshBaseDir } from "../src/profile.js";
 
 describe("profilePaths (T14.4)", () => {
   test("win32 home uses backslash separators", () => {
@@ -175,5 +175,71 @@ describe("linkProfileBundles (first run without pnpm)", () => {
     const dir = resolveDshBaseDir();
     expect(dir).toBeDefined();
     expect(existsSync(join(dir as string, "package.json"))).toBe(true);
+  });
+});
+
+describe("bundleIsCurrent (an update must reach the profile)", () => {
+  const NAME = "@ziamana/bruine";
+  async function install(version: string): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "bruine-current-"));
+    await writeFile(join(dir, "package.json"), JSON.stringify({ name: NAME, version }));
+    return dir;
+  }
+  const profileAt = async (): Promise<string> => join(await mkdtemp(join(tmpdir(), "bruine-prof-")), "profiles", "bruine");
+  const linkTo = async (profile: string, target: string): Promise<void> => {
+    await mkdir(join(profile, "node_modules", "@ziamana"), { recursive: true });
+    await symlink(target, join(profile, "node_modules", "@ziamana", "bruine"), "dir");
+  };
+
+  test("a profile with no bundle yet is not current", async () => {
+    expect(bundleIsCurrent(await profileAt(), NAME, { root: await install("0.1.4"), version: "0.1.4" })).toBe(false);
+  });
+
+  test("a link to the running install is current", async () => {
+    const root = await install("0.1.4");
+    const profile = await profileAt();
+    await linkTo(profile, root);
+    expect(bundleIsCurrent(profile, NAME, { root, version: "0.1.4" })).toBe(true);
+  });
+
+  test("a link to another copy is not: the session would load the old plugins and say the old version", async () => {
+    const old = await install("0.1.3");
+    const running = await install("0.1.4");
+    const profile = await profileAt();
+    await linkTo(profile, old);
+    expect(bundleIsCurrent(profile, NAME, { root: running, version: "0.1.4" })).toBe(false);
+    // relinking it makes it current
+    expect(linkProfileBundles(profile, { name: NAME, root: running }, await install("0.0.0"))).toBe(true);
+    expect(bundleIsCurrent(profile, NAME, { root: running, version: "0.1.4" })).toBe(true);
+  });
+
+  test("a link whose path stayed while the folder was replaced in place is current", async () => {
+    const root = await install("0.1.3");
+    const profile = await profileAt();
+    await linkTo(profile, root);
+    await writeFile(join(root, "package.json"), JSON.stringify({ name: NAME, version: "0.1.4" }));
+    expect(bundleIsCurrent(profile, NAME, { root, version: "0.1.4" })).toBe(true);
+  });
+
+  test("a copy dsh installed is current at the same version and not at another", async () => {
+    const profile = await profileAt();
+    const copy = join(profile, "node_modules", "@ziamana", "bruine");
+    await mkdir(copy, { recursive: true });
+    await writeFile(join(copy, "package.json"), JSON.stringify({ name: NAME, version: "0.1.3" }));
+    const root = await install("0.1.4");
+    expect(bundleIsCurrent(profile, NAME, { root, version: "0.1.3" })).toBe(true);
+    expect(bundleIsCurrent(profile, NAME, { root, version: "0.1.4" })).toBe(false);
+  });
+
+  test("when the running folder is unknown, what is there is kept", async () => {
+    const profile = await profileAt();
+    await linkTo(profile, await install("0.1.3"));
+    expect(bundleIsCurrent(profile, NAME, { root: undefined, version: "0.1.4" })).toBe(true);
+  });
+
+  test("a link that points nowhere is not current", async () => {
+    const profile = await profileAt();
+    await linkTo(profile, join(tmpdir(), "bruine-gone-for-good"));
+    expect(bundleIsCurrent(profile, NAME, { root: await install("0.1.4"), version: "0.1.4" })).toBe(false);
   });
 });

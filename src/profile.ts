@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 
@@ -265,6 +265,32 @@ export function linkProfileBundles(
     link(own.root, path.join(modules, own.name));
     link(dshBaseDir, path.join(modules, "@deepseek-ai", "dsh-base"));
     return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the bundle the profile loads is the one that is running. The profile holds a link to
+ * the install it was set up from; after an update (or a switch between a global install and a
+ * checkout) that link can still point at the old copy, and the session then loads the old plugins
+ * and says the old version however often it is restarted. A link to the same folder is current;
+ * so is a copy dsh installed when it is the same version; anything else is relinked. When this
+ * package's own folder is unknown, an existing bundle is left alone.
+ */
+export function bundleIsCurrent(
+  profileDir: string,
+  name: string,
+  own: { root: string | undefined; version: string },
+): boolean {
+  const at = path.join(profileDir, "node_modules", name);
+  const marker = path.join(at, "package.json");
+  if (!existsSync(marker)) return false;
+  if (own.root === undefined) return true;
+  try {
+    if (realpathSync(at) === realpathSync(own.root)) return true;
+    if (lstatSync(at).isSymbolicLink()) return false;
+    return (JSON.parse(readFileSync(marker, "utf8")) as { version?: unknown }).version === own.version;
   } catch {
     return false;
   }

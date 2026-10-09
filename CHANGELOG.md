@@ -3,6 +3,21 @@
 Every version that reaches npm, newest first. bruine checks for a new one once a day and offers
 `/update` in the session (or `bruine update` from a shell).
 
+## 0.1.5
+
+### Fixed
+
+- **`/update` now reaches the session.** The profile kept the first link it was given (a checkout, or
+  the previous global copy), and bruine left it alone as long as it existed. After an update the session
+  still loaded the old plugins, said the old version and offered `/update` again, however often you
+  restarted. At launch bruine now checks that the profile points at the install that is running, and
+  relinks it when it does not.
+
+### Added
+
+- **Background commands show in the footer as `task N`**, next to `subagents N`, for as long as they
+  run (a command started with `run_in_background`, or a dev server). It goes when they end.
+
 ## 0.1.4
 
 ### Fixed

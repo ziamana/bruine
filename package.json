@@ -1,6 +1,6 @@
 {
   "name": "@ziamana/bruine",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Interactive terminal coding agent that runs your own models, local or OpenAI-compatible",
   "type": "module",
   "license": "MIT",

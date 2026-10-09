@@ -23,6 +23,58 @@ for (const icons of [UNICODE_ICONS, ASCII_ICONS]) test.each([100, 60, 30])("suba
   footer.set({ subagents: 0 }); expect(footer.render(width).map(strip).join("\n")).not.toContain("subagents");
 });
 
+for (const icons of [UNICODE_ICONS, ASCII_ICONS]) test.each([100, 60, 30])("background task count sits below the model at %i columns", width => {
+  const footer = new FooterComponent(icons, { cwd: "/tmp" });
+  footer.set({ modelName: "qwen 3.8 flash", backgroundTasks: 1, tps: 14 });
+  expect(strip(footer.render(width)[2]!)).toMatch(/task 1$/);
+  footer.set({ subagents: 1 });
+  const rows = footer.render(width);
+  expect(strip(rows[2]!)).toMatch(/task 1  subagents 1$/);
+  expect(visibleWidth(rows[2]!)).toBe(width);
+  for (const row of rows) expect(visibleWidth(row)).toBeLessThanOrEqual(width);
+  footer.set({ backgroundTasks: 0 });
+  expect(footer.render(width).map(strip).join("\n")).not.toContain("task ");
+});
+
+test("background jobs update their count, follow the current owner, and unsubscribe", () => {
+  const root = { session: { id: "root" } };
+  const other = { session: { id: "other" } };
+  let current = root;
+  let changed: (() => void) | undefined;
+  const unsubscribe = vi.fn(() => { changed = undefined; });
+  const jobs = [
+    { owner: root, kind: "bash", status: "running" },
+    { owner: root, kind: "bash", status: "completed" },
+    { owner: root, kind: "subagent", status: "running" },
+    { owner: other, kind: "bash", status: "running" },
+  ];
+  const fake = fakeCtx({ jobs: {
+    list: (owner: unknown) => jobs.filter(job => job.owner === owner),
+    onJobsChanged: (listener: () => void) => { changed = listener; return unsubscribe; },
+  } });
+  const footer = new FooterComponent(UNICODE_ICONS, { cwd: "/tmp" });
+  const repaint = vi.fn();
+  const ui = { footer, icons: UNICODE_ICONS, requestRender: repaint, addChat() {} };
+  const detach = attachTui(fake.ctx, root, ui as never, {}, () => current);
+  try {
+    expect(footer.state.backgroundTasks).toBe(1);
+    jobs[1]!.status = "running"; changed?.();
+    expect(footer.state.backgroundTasks).toBe(2);
+    jobs[0]!.status = "stopping"; changed?.();
+    expect(footer.state.backgroundTasks).toBe(2);
+    jobs[0]!.status = "killed"; changed?.();
+    expect(footer.state.backgroundTasks).toBe(1);
+    jobs[1]!.status = "failed"; changed?.();
+    expect(footer.state.backgroundTasks).toBe(0);
+    current = other;
+    fake.emit("session/event", current.session, { type: "turn/start", data: {} });
+    expect(footer.state.backgroundTasks).toBe(1);
+  } finally { detach(); }
+  expect(footer.state.backgroundTasks).toBe(0);
+  expect(unsubscribe).toHaveBeenCalledOnce();
+  expect(changed).toBeUndefined();
+});
+
 test("agent lifecycle counts owned running children, ignores other sessions, and cleans up", () => {
   type Agent = { session: { id: string }; status: string };
   const root: Agent = { session: { id: "root" }, status: "running" };

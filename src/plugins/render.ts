@@ -18,6 +18,7 @@ import type { TurnActivity } from "../ui/turn-activity.js";
 import { SessionSpend } from "../ui/spend.js";
 import { ansi } from "../ui/theme.js";
 import { TaskPanel, taskItems, type TaskItem } from "../ui/task-panel.js";
+import type { JobsLike } from "./tasks.js";
 import { readSettingsRoute } from "../ui/bruine-ui.js";
 import { appendErrorLog, describeLlmError, fetchAvailableModels, formatK } from "../ui/errors.js";
 import type { DshContext, BruineRepl } from "./ctx.js";
@@ -289,6 +290,26 @@ export function attachTui(
     return reading === undefined ? undefined : { quietMs: Date.now() - reading.quietSince, budgetMs: reading.budget };
   });
 
+  let backgroundTaskCount = 0;
+  const jobs = ctx.get("jobs") as (JobsLike & {
+    onJobsChanged?(listener: () => void): () => void;
+  }) | undefined;
+  const refreshBackgroundTasks = (): void => {
+    let count = 0;
+    try {
+      count = (jobs?.list(liveAgent()) ?? []).filter(job =>
+        job.kind !== "subagent" && (job.status === "running" || job.status === "stopping")).length;
+    } catch {
+      // An unavailable listing must not break the terminal UI.
+    }
+    if (count === backgroundTaskCount) return;
+    backgroundTaskCount = count;
+    ui.footer.set({ backgroundTasks: count });
+    ui.requestRender();
+  };
+  const offJobsChanged = jobs?.onJobsChanged?.(refreshBackgroundTasks);
+  refreshBackgroundTasks();
+
   let subagentCount = 0;
   const refreshSubagents = (): void => {
     type LiveAgent = { session?: { id?: unknown }; status?: string };
@@ -478,6 +499,7 @@ export function attachTui(
       }
       case "turn/start":
         refreshSubagents();
+        refreshBackgroundTasks();
         tps.reset();
         ui.footer.set({ tps: 0, tpsEstimated: false, pp: undefined, cachePct: undefined, cacheFirst: false });
         turnStartWall = Date.now();
@@ -745,6 +767,8 @@ export function attachTui(
     offAgentCreated();
     offAgentStatus();
     offAgentDisposed();
+    offJobsChanged?.();
+    if (backgroundTaskCount > 0) { ui.footer.set({ backgroundTasks: 0 }); ui.requestRender(); }
     if (subagentCount > 0) { ui.footer.set({ subagents: 0 }); ui.requestRender(); }
     offStream();
     offSession();

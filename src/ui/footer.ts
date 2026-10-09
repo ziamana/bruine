@@ -44,6 +44,8 @@ export interface FooterState {
   cacheRead?: number;
   /** Running agents owned by this conversation. */
   subagents?: number;
+  /** Active background jobs owned by this conversation. */
+  backgroundTasks?: number;
 }
 
 function formatK(n: number): string {
@@ -281,7 +283,11 @@ export class FooterComponent implements Component {
     const turn = this.#turnRow(w);
     const rows = [place, turn.line];
     const count = this.state.subagents ?? 0;
-    const agents = count > 0 ? this.#ink("sky")(`subagents ${Math.floor(count)}`) : "";
+    const tasks = this.state.backgroundTasks ?? 0;
+    const agents = [
+      tasks > 0 ? this.#ink("sky")(`task ${Math.floor(tasks)}`) : "",
+      count > 0 ? this.#ink("sky")(`subagents ${Math.floor(count)}`) : "",
+    ].filter(Boolean).join("  ");
     const firstRoom = agents ? Math.max(1, w - visibleWidth(agents) - GAP) : w;
     const speeds = this.#speedRows(w, firstRoom);
     if (agents) {

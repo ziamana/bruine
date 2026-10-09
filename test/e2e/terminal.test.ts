@@ -280,6 +280,18 @@ test("todo_write uses the task panel and collapses to one completion line", asyn
   }, false, "full");
 });
 
+test("a command left running in the background shows as `task 1` in the footer, and goes when it ends", async () => {
+  await scenario("background-task", [
+    toolScript("bash", { command: "sleep 12", description: "wait in the background", run_in_background: true }, "bg_1"), textScript("BG_STARTED"),
+  ], async (h) => {
+    await h.prompt("Start something in the background");
+    await h.waitFor("BG_STARTED");
+    await h.until(() => h.screen().some((line) => /task 1\s*$/.test(line.trimEnd())), 15_000, "task 1 in the footer");
+    expect(h.screen().join("\n")).not.toContain("subagents");
+    await h.until(() => !h.screen().some((line) => /task \d/.test(line)), 30_000, "the footer without a task once the command ends");
+  }, false, "full");
+});
+
 test("tool call: read note.txt and send the real tool result back", async () => {
   await scenario("tool-call", [toolScript("read", { file_path: "note.txt" }), textScript("READ_FINISHED")], async (h) => {
     await h.prompt("Read note.txt");

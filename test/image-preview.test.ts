@@ -209,6 +209,13 @@ describe("a terminal that can show the image itself", () => {
     expect(imageProtocolFor({})).toBeUndefined();
   });
 
+  test("inside herdr the picture is not drawn, whatever terminal it runs in: the rows stay blank and the screen is drawn again and again", () => {
+    expect(imageProtocolFor({ KONSOLE_VERSION: "260801", HERDR_ENV: "1" })).toBeNull();
+    expect(imageProtocolFor({ KITTY_WINDOW_ID: "3", HERDR_PANE_ID: "w1:p2" })).toBeNull();
+    // the user can still ask for it, if their herdr passes it through
+    expect(imageProtocolFor({ KONSOLE_VERSION: "260801", HERDR_ENV: "1", BRUINE_IMAGES: "iterm2" })).toBe("iterm2");
+  });
+
   test("the rows an image covers are known, for the rain to stay off them", () => {
     expect([...imageRows(["a", "\x1b_Ga=T,f=100,C=1,c=10,r=3;AAAA\x1b\\", "", "", "b"])]).toEqual([1, 2, 3]);
     expect([...imageRows(["", "", "\x1b[2A\x1b]1337;File=inline=1:AAAA\x07", "x"])].sort()).toEqual([0, 1, 2]);

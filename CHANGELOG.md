@@ -3,6 +3,17 @@
 Every version that reaches npm, newest first. bruine checks for a new one once a day and offers
 `/update` in the session (or `bruine update` from a shell).
 
+## 0.1.6
+
+### Fixed
+
+- **In herdr, the screen no longer draws itself two or three times.** Since 0.1.4 a picture the model
+  reads is shown as the picture in Konsole, Kitty and iTerm2. herdr runs inside those terminals,
+  inherits their variables, and does not pass the picture on: the rows it was given stayed blank and
+  the task list, the status bar and the prompt were drawn again and again, one copy per frame. bruine
+  now draws images as blocks inside herdr. `BRUINE_IMAGES=iterm2` (or `kitty`) turns the picture back
+  on if your herdr passes it through.
+
 ## 0.1.5
 
 ### Fixed

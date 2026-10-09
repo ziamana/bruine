@@ -14,6 +14,10 @@ export function imageProtocolFor(env: NodeJS.ProcessEnv = process.env): ImagePro
   const asked = env.BRUINE_IMAGES?.trim().toLowerCase();
   if (asked === "kitty" || asked === "iterm2") return asked;
   if (asked === "blocks" || asked === "off" || asked === "none" || asked === "0") return null;
+  // herdr is a multiplexer too, and it inherits the host terminal's variables (KONSOLE_VERSION,
+  // KITTY_WINDOW_ID…): the picture is not passed through, and the rows it was given stay behind as
+  // blank boxes while the live area is drawn again and again. Blocks, unless BRUINE_IMAGES says otherwise.
+  if (env.HERDR_ENV !== undefined || env.HERDR_PANE_ID !== undefined) return null;
   // Under a multiplexer the sequences are not passed through reliably: pi-tui says no, and so do we.
   if (env.TMUX !== undefined || (env.TERM ?? "").startsWith("tmux") || (env.TERM ?? "").startsWith("screen")) return undefined;
   const konsole = Number.parseInt(env.KONSOLE_VERSION ?? "", 10);

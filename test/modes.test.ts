@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { apply, Modes, PLAN_OFF_TEXT, PLAN_ON_TEXT } from "../src/plugins/modes.js";
 import { askJudge, judgePrompt } from "../src/gate/judge.js";
 import { fakeCtx } from "./fakes.js";
@@ -422,5 +422,33 @@ describe("judge (T16.C.3, T18.7)", () => {
     const long = "node -e " + "x".repeat(3000);
     expect((await preExecute("bash", { command: long })).kind).toBe("ask");
     expect(called).toBe(0);
+  });
+});
+
+describe("fs/write-intent: a deleted file can be written again", () => {
+  async function intentFor(stat: (target: unknown) => Promise<unknown>) {
+    const fake = fakeCtx({ fs: { stat } });
+    apply(fake.ctx as never);
+    const next = vi.fn(() => ({ kind: "replaceIfVersion", version: "v1" }));
+    const intent = await fake.emit("fs/write-intent", { displayPath: "/p/data.js" }, {}, next);
+    return { intent, next };
+  }
+
+  test("a path that is not there is created, whatever version was seen before it was removed", async () => {
+    const { intent, next } = await intentFor(async () => undefined);
+    expect(intent).toEqual({ kind: "createIfAbsent" });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("a path that is there keeps dsh's own freshness check", async () => {
+    const { intent, next } = await intentFor(async () => ({ version: "v2", type: "file" }));
+    expect(next).toHaveBeenCalledOnce();
+    expect(intent).toEqual({ kind: "replaceIfVersion", version: "v1" });
+  });
+
+  test("when the file system cannot be asked, dsh decides", async () => {
+    const { intent, next } = await intentFor(async () => { throw new Error("boom"); });
+    expect(next).toHaveBeenCalledOnce();
+    expect(intent).toEqual({ kind: "replaceIfVersion", version: "v1" });
   });
 });

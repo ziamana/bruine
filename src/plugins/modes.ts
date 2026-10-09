@@ -369,6 +369,21 @@ export function apply(ctx: DshContext): void {
     }
   };
 
+  // A file the model read (or wrote) and that is then deleted (an `rm`, a script) can never be
+  // written again: dsh's observation policy keeps the version it saw and answers "no longer exists
+  // — re-read the file, then retry", and a file that is not there cannot be re-read. The model
+  // spends a whole generation on each try (minutes, for a big file). A write onto a path that is
+  // absent clobbers nothing, so it creates it; any other path keeps dsh's own freshness check.
+  ctx.on("fs/write-intent", async (target: unknown, _actor: unknown, next: () => unknown) => {
+    try {
+      const fs = ctx.get("fs") as { stat?(target: unknown, signal?: AbortSignal): Promise<unknown> } | undefined;
+      if (fs?.stat !== undefined && (await fs.stat(target)) === undefined) return { kind: "createIfAbsent" };
+    } catch {
+      // Not knowing is not a reason to skip dsh's check.
+    }
+    return next();
+  }, { prepend: true });
+
   // The folders of the skills this session can load: a skill's own files are read with `read`, and
   // reading anything else outside the project asks. Listed again every half minute, not per call.
   let skillRoots: { at: number; roots: string[] } | undefined;

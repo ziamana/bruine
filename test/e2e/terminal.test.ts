@@ -1502,6 +1502,26 @@ async function serverScenario(
   }
 }
 
+test("a file the model wrote and then deleted can be written again (it used to be stuck on 'no longer exists')", async () => {
+  await scenario(
+    "write-after-rm",
+    [
+      toolScript("write", { file_path: "data.js", content: "first\n" }, "w1"),
+      toolScript("bash", { command: process.platform === "win32" ? "Remove-Item data.js" : "rm data.js", description: "remove it" }, "rm1"),
+      toolScript("write", { file_path: "data.js", content: "second\n" }, "w2"),
+      textScript("REWRITE_DONE"),
+    ],
+    async (h) => {
+      await h.prompt("Write data.js, remove it, write it again");
+      await h.waitFor("REWRITE_DONE", 60_000);
+      expect(readFileSync(join(h.project, "data.js"), "utf8")).toBe("second\n");
+      expect(h.screen().join("\n")).not.toContain("no longer exists");
+    },
+    false,
+    "full",
+  );
+}, 120_000);
+
 test("errors: 401 then 404 print the exact two lines (T33b)", async () => {
   await serverScenario(
     "errors-401-404",

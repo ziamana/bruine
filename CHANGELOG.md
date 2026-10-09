@@ -3,6 +3,17 @@
 Every version that reaches npm, newest first. bruine checks for a new one once a day and offers
 `/update` in the session (or `bruine update` from a shell).
 
+## 0.1.7
+
+### Fixed
+
+- **A file the model wrote and then deleted can be written again.** After an `rm` (or any script that
+  removes the file), `write` answered "file no longer exists - re-read the file, then retry", and a
+  file that is not there cannot be read: the model was stuck, and each attempt cost a whole generation
+  (55 seconds for a big data file, three times in a row). A write onto a path that does not exist now
+  creates it. A file that does exist keeps the freshness check, so what you or another tool changed is
+  still not overwritten by surprise.
+
 ## 0.1.6
 
 ### Fixed

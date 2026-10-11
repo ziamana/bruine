@@ -42,6 +42,15 @@ describe("describeLlmError (T33b table)", () => {
     }
   });
 
+  test("403 from OpenCode's free tier → says the free model is closed to other tools, not that the key is wrong", () => {
+    const r = describeLlmError(
+      { code: "AUTH", message: '403: {"type":"FreeTierError","message":"OpenCode\'s free tier can only be used from within OpenCode"}' },
+      route,
+    );
+    expect(r.message).toBe("Ornith 1.5 9B (home server) no longer serves its free models to other tools");
+    expect(r.hint).toBe("Pick another model: /model, or bruine setup");
+  });
+
   test("404 → model not found, caller asked to list models", () => {
     const r = describeLlmError({ code: "PI_AI_ERROR", message: "404 no deployment found", status: 404 }, route);
     expect(r.message).toBe('Model "ornith.gguf" not found on http://192.168.1.64:8081/v1');

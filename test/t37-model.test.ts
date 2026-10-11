@@ -656,136 +656,24 @@ describe("wiring (T37)", () => {
   });
 });
 
-describe("Space Bunny Free in /model", () => {
-  const freeRowLabel = /Space Bunny Free/;
-
-  test("a home that never added it is offered it as the last row of the provider list", async () => {
+describe("no free model is offered in /model", () => {
+  test("the provider list holds only the configured routes", async () => {
     const h = harness({ picks: [-1] });
     await attach(h, { settings: SETTINGS });
     await h.picker.runCommand("/model");
-    const items = h.asked[0]!.items;
-    expect(items[items.length - 1]!.label).toMatch(freeRowLabel);
-    expect(items.slice(0, -1).every((i) => !freeRowLabel.test(i.label))).toBe(true);
+    expect(h.asked[0]!.items.map((i) => i.label).join("\n")).not.toMatch(/space bunny|opencode zen/i);
   });
 
-  test("a home that already has the route is not offered it twice", async () => {
-    const h = harness({ picks: [-1] });
-    await attach(h, {
-      settings: SETTINGS.replace("agent-default-model:", [
-        "    opencode-zen:",
-        "      baseURL: 'https://opencode.ai/zen/v1'",
-        "      models:",
-        "        - id: 'space-bunny-free'",
-        "agent-default-model:",
-      ].join("\n")),
-    });
-    await h.picker.runCommand("/model");
-    expect(h.asked[0]!.items.some((i) => freeRowLabel.test(i.label))).toBe(false);
-  });
-
-  test("picking it tells the user where their code goes, and writes nothing on a no", async () => {
-    const h = harness({ picks: [2, 0] }); // the free row, then "No"
-    const home = await attach(h, { settings: SETTINGS });
-    const before = await readFile(join(home, "settings.yaml"), "utf8");
-    const reply = await h.picker.runCommand("/model");
-    expect(reply).toBe("Space Bunny Free: not added.");
-    expect(h.asked[1]!.title).toMatch(/sent to/i);
-    expect(h.asked[1]!.title).toMatch(/end without notice/i);
-    expect(await readFile(join(home, "settings.yaml"), "utf8")).toBe(before);
-    expect(existsSync(join(home, ".env"))).toBe(false);
-    expect(h.saved).toEqual([]);
-  });
-
-  test("a yes adds the route and its public key, keeps everything else, and switches to it once it is mounted", async () => {
-    const h = harness({ picks: [2, 1] });
-    const mounted: Array<{ id: string; name?: string }> = [
-      { id: "local", name: "Local Server" },
-      { id: "openrouter", name: "OpenRouter" },
-    ];
-    (h.llm as { listProviders: () => unknown }).listProviders = () => mounted;
-    (h.llm as { listModels: (p: string) => Promise<unknown> }).listModels = async (p: string) => (p === "opencode-zen" ? [{ id: "space-bunny-free" }] : []);
-    const home = await attach(h, { settings: SETTINGS });
-    // dsh hot-reloads settings.yaml: the route appears a moment after the write.
-    setTimeout(() => mounted.push({ id: "opencode-zen", name: "OpenCode Zen" }), 250);
-    const reply = await h.picker.runCommand("/model");
-    const yaml = await readFile(join(home, "settings.yaml"), "utf8");
-    expect(yaml).toContain("opencode-zen:");
-    expect(yaml).toContain("https://opencode.ai/zen/v1");
-    expect(yaml).toContain("Authorization: Bearer public");
-    expect(yaml).not.toContain("apiKeyEnv: BRUINE_ZEN_API_KEY");
-    expect(yaml).toContain("space-bunny-free");
-    expect(yaml).toContain("xhigh");
-    expect(yaml).toContain("Ornith.gguf"); // what was there is still there
-    expect(yaml).toContain("agent-default-model:");
-    // No key variable: nothing to write to .env, and nothing the running session could miss.
-    expect(existsSync(join(home, ".env"))).toBe(false);
-    expect(h.holder.current).toMatchObject({ provider: "opencode-zen", model: "space-bunny-free" });
-    expect(reply).toMatch(/space-bunny-free/);
-    expect(process.env.BRUINE_ZEN_API_KEY).toBeUndefined();
-  });
-
-  test("if the runtime does not mount the route in time, the user is told the one command that finishes it", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout"] });
-    try {
-      const h = harness({ picks: [2, 1] });
-      await attach(h, { settings: SETTINGS });
-      let reply: string | undefined;
-      const pending = h.picker.runCommand("/model").then((r: string) => { reply = r; });
-      // The poll starts after the file writes finish, which is real I/O: turn the clock until it ends.
-      const deadline = Date.now() + 20_000;
-      while (reply === undefined && Date.now() < deadline) {
-        await vi.advanceTimersByTimeAsync(100);
-        await new Promise((resolve) => setImmediate(resolve));
-      }
-      await pending;
-      expect(reply).toMatch(/\/reload/);
-      expect(reply).toMatch(/space-bunny/);
-      expect(h.holder.current).toMatchObject({ provider: "local" });
-    } finally {
-      vi.useRealTimers();
-    }
-  }, 30_000);
-
-  test("/model space-bunny does the same by name, and is refused without a terminal to ask in", async () => {
-    const h = harness({ picks: [0] });
-    const home = await attach(h, { settings: SETTINGS });
-    expect(await h.picker.runCommand("/model space-bunny")).toBe("Space Bunny Free: not added.");
-    expect(existsSync(join(home, ".env"))).toBe(false);
-    const quiet = harness();
-    (quiet.ui as { askChoice?: unknown }).askChoice = undefined;
-    await attach(quiet, { settings: SETTINGS });
-    expect(await quiet.picker.runCommand("/model space-bunny")).toMatch(/needs a yes or no/);
-  });
-
-  test("a route an earlier version wrote (a key variable, two levels) is mended when the picker starts", async () => {
-    const h = harness({ picks: [-1] });
-    const home = await attach(h, {
-      settings: SETTINGS.replace("agent-default-model:", [
-        "    opencode-zen:",
-        "      displayName: OpenCode Zen",
-        "      api: openai-completions",
-        "      baseURL: 'https://opencode.ai/zen/v1'",
-        "      apiKeyEnv: BRUINE_ZEN_API_KEY",
-        "      models:",
-        "        - id: space-bunny-free",
-        "          reasoningEfforts:",
-        "            off: null",
-        "            low: low",
-        "agent-default-model:",
-      ].join("\n")),
-    });
-    await vi.waitFor(async () => expect(await readFile(join(home, "settings.yaml"), "utf8")).toContain("Authorization: Bearer public"));
-    const yaml = await readFile(join(home, "settings.yaml"), "utf8");
-    expect(yaml).not.toContain("apiKeyEnv: BRUINE_ZEN_API_KEY");
-    expect(yaml).toContain("xhigh");
-    expect(yaml).toContain("Ornith.gguf");
-  });
-
-  test("the plain listing says how to add it", async () => {
+  test("the plain listing does not mention one either", async () => {
     const h = harness();
     (h.ui as { askChoice?: unknown }).askChoice = undefined;
     await attach(h, { settings: SETTINGS });
-    const text = await h.picker.runCommand("/model");
-    expect(text).toMatch(/\/model space-bunny/);
+    expect(await h.picker.runCommand("/model")).not.toMatch(/space.?bunny/i);
+  });
+
+  test("/model space-bunny is an unknown route like any other", async () => {
+    const h = harness();
+    await attach(h, { settings: SETTINGS });
+    expect(await h.picker.runCommand("/model space-bunny")).toMatch(/unknown/i);
   });
 });

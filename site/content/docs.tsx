@@ -75,10 +75,6 @@ const en: DocSection[] = [
           The first launch opens a setup wizard. It finds a model server on your machine if you run one (llama.cpp, or anything that speaks <code>/v1</code>), asks for API keys
           if you want a cloud route, lets you pick skills, and writes <code>~/.bruine/</code>. <code>bruine setup</code> runs it again, pre-filled.
         </p>
-        <p>
-          It also asks, as a plain yes or no, whether to use Space Bunny Free: a model OpenCode serves at no charge for a limited time, with no account and no key. The answer starts
-          on No. Saying yes sends your prompts and files to OpenCode's provider, and the offer can end without notice, so keep another model in reach.
-        </p>
       </>
     ),
   },
@@ -256,11 +252,6 @@ const fr: DocSection[] = [
         <p>
           Le premier lancement ouvre un assistant. Il trouve un serveur de modèle sur ta machine si tu en fais tourner un (llama.cpp, ou tout ce qui parle <code>/v1</code>), demande
           des clés d'API si tu veux une route cloud, te laisse choisir des skills, et écrit <code>~/.bruine/</code>. <code>bruine setup</code> le relance, prérempli.
-        </p>
-        <p>
-          Il demande aussi, par un simple oui ou non, si tu veux utiliser Space Bunny Free : un modèle qu'OpenCode sert gratuitement pour un temps limité, sans compte ni clé. La
-          réponse par défaut est Non. Dire oui envoie tes prompts et tes fichiers au fournisseur d'OpenCode, et l'offre peut s'arrêter sans préavis : garde un autre modèle sous la
-          main.
         </p>
       </>
     ),

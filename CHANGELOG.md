@@ -3,6 +3,21 @@
 Every version that reaches npm, newest first. bruine checks for a new one once a day and offers
 `/update` in the session (or `bruine update` from a shell).
 
+## 0.1.8
+
+### Removed
+
+- **Space Bunny Free is gone from setup, `/model` and the docs.** OpenCode now refuses its free
+  models to every tool but its own: the gateway answers `403 FreeTierError: OpenCode's free tier can
+  only be used from within OpenCode`, so a first message with that route failed at once. Setup no
+  longer offers the free model, `/model` no longer adds it, and `/model space-bunny` is an unknown
+  route. A route already in your `settings.yaml` is left as it is: pick another model with `/model`.
+
+### Fixed
+
+- A turn that ends on that 403 now says so ("opencode-zen no longer serves its free models to other
+  tools", with `/model` or `bruine setup` as the way out) instead of blaming the API key.
+
 ## 0.1.7
 
 ### Fixed

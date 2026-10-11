@@ -4,7 +4,6 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_OFFICIAL, loadCloudProviders } from "./cloud.js";
 import { fetchProps, type TemplateCaps } from "./discover.js";
-import { SPACE_BUNNY, SPACE_BUNNY_NOTICE, spaceBunnySettings } from "./spacebunny.js";
 
 /** Ports probed on 127.0.0.1 for an OpenAI-compatible model server. */
 export const PROBE_PORTS = [
@@ -308,7 +307,6 @@ export type SetupOutcome =
   | { kind: "deepseek" }
   | { kind: "openrouter" }
   | { kind: "cloud"; provider: string; model: string }
-  | { kind: "free" }
   | { kind: "skipped" };
 
 export interface SearchChoice {
@@ -412,14 +410,6 @@ async function askProviderKey(
   io.write(`Saved. Your API key is stored in ${join(dshHome, ".env")} (owner-only).\n`);
   await askSearch(dshHome, io, opts);
   return { kind: provider };
-}
-
-/** The free model, after a yes: its route, its public key, then the web search offer. */
-async function useSpaceBunny(dshHome: string, io: SetupIO, opts: { fetchImpl?: FetchLike }): Promise<SetupOutcome> {
-  await writeAtomic(join(dshHome, "settings.yaml"), renderSettingsYaml(spaceBunnySettings()), 0o600);
-  io.write("Using Space Bunny Free through OpenCode Zen.\n");
-  await askSearch(dshHome, io, opts);
-  return { kind: "free" };
 }
 
 /** Any other provider of the catalog: its name, its key, one of its models. */
@@ -531,10 +521,6 @@ export async function simpleSetup(
   }
 
   io.write("No local model server found.\n");
-  // The free model is offered once, as a yes or no that starts on no: the answer decides
-  // where the user's code goes.
-  const free = (await io.question(`${SPACE_BUNNY_NOTICE}\n[y/N] `)).trim().toLowerCase();
-  if (free.startsWith("y")) return useSpaceBunny(dshHome, io, opts);
   for (;;) {
     const choice = (
       await io.question("Setup:  1) Enter a server address   2) DeepSeek   3) OpenRouter   4) Other cloud provider   [1] ")

@@ -40,7 +40,6 @@ import {
   type Theme,
 } from "./flow.js";
 import { DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_OFFICIAL, loadCloudProviders, type CloudProvider } from "./cloud.js";
-import { SPACE_BUNNY_NOTICE, spaceBunnyPick } from "./spacebunny.js";
 import {
   LOCAL_PORTS,
   cidr24Of,
@@ -1147,23 +1146,7 @@ export async function runFullSetup(
   async function stepRoles(): Promise<StepResult> {
     displayStep = "roles";
     const roles: SetupAnswers["roles"] = {};
-    // A first setup, with nothing chosen yet, offers the free model once as a yes or no. It is
-    // never preselected: the answer decides where the user's code goes.
-    let main: Skippable<RolePick | undefined> | undefined;
-    if (flow.answers.roles.main === undefined) {
-      const answer = await selectStep(
-        "Free model (you can still change it later)",
-        [
-          { value: "no", label: "No, I will choose my own model" },
-          { value: "yes", label: "Yes, use Space Bunny Free" },
-        ],
-        (i) => i,
-        { initial: 0, above: new Text(SPACE_BUNNY_NOTICE.split("\n").map((line, i) => (i === 0 ? line : ansi.gray(line))).join("\n"), 0, 0) },
-      );
-      if (answer === BACK || answer === CANCEL) return answer;
-      if (answer === 1) main = spaceBunnyPick();
-    }
-    main ??= await askRole("main", { required: true });
+    const main = await askRole("main", { required: true });
     if (main === BACK || main === CANCEL) return main;
     if (main === SKIP) return {};
     roles.main = main as RolePick;
@@ -1236,7 +1219,6 @@ export async function runFullSetup(
     discoveries.forEach((d, i) =>
       items.push({ value: `s${String(i)}`, label: `${discoveredLabel(d)}  ·  ${d.baseUrl}` }),
     );
-    items.push({ value: "spacebunny", label: "Space Bunny Free  (OpenCode Zen, free for now; your prompts go to OpenCode's provider)" });
     items.push({ value: "cloud", label: "Cloud provider…  (DeepSeek, Anthropic, OpenAI, Google, OpenRouter, Groq, and more; needs an API key)" });
     // T35: Skip (keep current) on the main pick skips the whole Roles step.
     // Preselect the current role so `bruine setup` shows what is there.
@@ -1278,7 +1260,6 @@ export async function runFullSetup(
     if (item.value === "skip") return SKIP;
     if (item.value === "none") return undefined;
     if (item.value === "main") return opts.useMainDefault;
-    if (item.value === "spacebunny") return spaceBunnyPick();
     if (item.value === "cloud") return askCloud(label, opts.required === true ? flow.answers.roles.main : flow.answers.roles.fast);
     const d = discoveries[Number(item.value.slice(1))] as Discovered;
     const modelItems: SelectItem[] = d.models.map((m) => {

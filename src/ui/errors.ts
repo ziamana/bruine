@@ -74,6 +74,10 @@ export function describeLlmError(failure: LlmFailure, route: ErrorRoute): ErrorL
   const server = route.baseUrl;
   const at = server === undefined ? "the model server" : `your model server at ${server}`;
 
+  // OpenCode's gateway answers 403 to its free models when the caller is not OpenCode itself.
+  if (/free tier can only be used from within OpenCode/i.test(message)) {
+    return { message: `${route.provider} no longer serves its free models to other tools`, hint: "Pick another model: /model, or bruine setup" };
+  }
   if (code === "AUTH" || status === 401 || status === 403 || /\b40[13]\b/.test(message)) {
     return { message: `The API key was refused by ${route.provider}`, hint: "Set a new key: bruine setup" };
   }

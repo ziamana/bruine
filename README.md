@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-b4a7ff)](LICENSE)
 [![Node 22+](https://img.shields.io/badge/node-22%2B-7dcfff)](https://nodejs.org)
 ![Linux tested · macOS and Windows in progress](https://img.shields.io/badge/Linux-tested-8fe3a3) ![macOS · Windows](https://img.shields.io/badge/macOS%20%C2%B7%20Windows-in%20progress-f5c97a)
-[![Changelog](https://img.shields.io/badge/version-0.1.7-ff9ed2)](CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/version-0.1.8-ff9ed2)](CHANGELOG.md)
 
 <a href="docs/media/bruine-film.mp4"><img src="docs/media/hero.webp" alt="The bruine film: the word bruine becomes the logo in the rain, then the effort climbs from low to max and the rain turns into a storm" width="100%"></a>
 
@@ -123,11 +123,6 @@ it; on 256-colour terminals the surfaces stay gray instead of turning navy.</p>
 | Use your MCP servers | `mcpServers` in `bruine.json` or `.mcp.json`, then `/mcp` |
 | Reuse your skills | Claude Code, OpenCode, pi and `~/.agents/skills` skills are picked up |
 | Script it | `bruine -p "task" --output-format json` |
-
-A first setup also asks, as a plain yes or no, whether to use Space Bunny Free: a model OpenCode serves
-at no charge for a limited time through its Zen gateway, with no account and no key. The answer starts on
-No. Saying yes sends your prompts and files to OpenCode's provider (which states zero retention and no
-training), and the offer can end without notice, so keep another model in reach.
 
 ## What it does
 

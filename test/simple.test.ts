@@ -194,11 +194,11 @@ describe("simpleSetup", () => {
   // T11.1 — the key must NEVER go through the echoing question() prompt.
   test("no server, TTY → DeepSeek: key is read via secret(), never question()", async () => {
     const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
-    const { io, asked, secretsAsked } = fakeIO({ answers: ["n", "2"], secrets: ["sk-abc"] });
+    const { io, asked, secretsAsked } = fakeIO({ answers: ["2"], secrets: ["sk-abc"] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "deepseek" });
-    expect(asked.length).toBe(3); // the free model, the menu, the web search offer
-    expect(asked.slice(1).some((q) => /key/i.test(q))).toBe(false);
+    expect(asked.length).toBe(2); // the menu, the web search
+    expect(asked.some((q) => /key/i.test(q))).toBe(false);
     expect(secretsAsked).toEqual(["DeepSeek API key: "]);
     const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
     expect(parsed["agent-default-model"]).toEqual({
@@ -210,7 +210,7 @@ describe("simpleSetup", () => {
 
   test("no server, TTY → OpenRouter key flow via secret()", async () => {
     const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
-    const { io, secretsAsked } = fakeIO({ answers: ["n", "3"], secrets: ["sk-or-1"] });
+    const { io, secretsAsked } = fakeIO({ answers: ["3"], secrets: ["sk-or-1"] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "openrouter" });
     expect(secretsAsked).toEqual(["OpenRouter API key: "]);
@@ -219,45 +219,9 @@ describe("simpleSetup", () => {
     expect(await readFile(join(home, ".env"), "utf8")).toBe("OPENROUTER_API_KEY=sk-or-1\n");
   });
 
-  test("no server, TTY → the free model is offered first, as a yes or no that starts on no", async () => {
-    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
-    const { io, asked } = fakeIO({ answers: ["", "2"], secrets: ["sk-abc"] });
-    await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
-    expect(asked[0]).toContain("Space Bunny Free");
-    expect(asked[0]).toContain("[y/N]");
-    expect(asked[0]).toMatch(/sent to/i);
-    expect(asked[0]).toMatch(/end without notice/i);
-    // The empty answer was a no: the next question is the menu.
-    expect(asked[1]).toContain("Setup:");
-  });
-
-  test("yes to the free model → its route and its public key, no key asked", async () => {
-    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
-    const { io, secretsAsked } = fakeIO({ answers: ["y"] });
-    const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
-    expect(outcome).toEqual({ kind: "free" });
-    expect(secretsAsked).toEqual([]);
-    const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
-    expect(parsed["agent-default-model"]).toEqual({ provider: "opencode-zen", model: "space-bunny-free" });
-    expect(parsed["llm-pi-ai"].providers["opencode-zen"]).toMatchObject({
-      baseURL: "https://opencode.ai/zen/v1",
-      headers: { Authorization: "Bearer public" },
-    });
-    expect(Object.keys(parsed["llm-pi-ai"].providers["opencode-zen"].models[0].reasoningEfforts)).toEqual(["off", "low", "medium", "high", "xhigh", "max"]);
-    // No key variable, so no .env line to write.
-    await expect(stat(join(home, ".env"))).rejects.toThrow();
-  });
-
-  test("a local server found → the free model is not even mentioned", async () => {
-    const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
-    const { io, asked } = fakeIO();
-    await simpleSetup(home, io, { ports: [8080], fetchImpl: okFetch([{ id: "llama3" }]) });
-    expect(asked.some((q) => q.includes("Space Bunny"))).toBe(false);
-  });
-
   test("4) Other cloud provider → a catalog provider by name, its key, a model by number", async () => {
     const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
-    const { io, secretsAsked, out } = fakeIO({ answers: ["n", "4", "groq", "2"], secrets: ["gsk-1"] });
+    const { io, secretsAsked, out } = fakeIO({ answers: ["4", "groq", "2"], secrets: ["gsk-1"] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome.kind).toBe("cloud");
     expect(secretsAsked).toEqual(["Groq API key: "]);
@@ -271,7 +235,7 @@ describe("simpleSetup", () => {
 
   test("4) an unknown provider goes back to the menu", async () => {
     const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
-    const { io, out } = fakeIO({ answers: ["n", "4", "nonesuch", "2"], secrets: ["sk-1"] });
+    const { io, out } = fakeIO({ answers: ["4", "nonesuch", "2"], secrets: ["sk-1"] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(out.join("")).toContain('No provider named "nonesuch"');
     expect(outcome).toEqual({ kind: "deepseek" });
@@ -279,7 +243,7 @@ describe("simpleSetup", () => {
 
   test("empty key → skipped, nothing written", async () => {
     const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
-    const { io } = fakeIO({ answers: ["n", "2"], secrets: [""] });
+    const { io } = fakeIO({ answers: ["2"], secrets: [""] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "skipped" });
     await expect(stat(join(home, "settings.yaml"))).rejects.toThrow();
@@ -326,7 +290,7 @@ describe("simpleSetup", () => {
     try {
       const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
       // menu default (empty → 1), then the URL (without /v1), then pick model 2
-      const { io } = fakeIO({ answers: ["n", "", `127.0.0.1:${port}`, "2", ""] });
+      const { io } = fakeIO({ answers: ["", `127.0.0.1:${port}`, "2", ""] });
       const outcome = await simpleSetup(home, io, { ports: [] });
       expect(outcome).toEqual({
         kind: "local",
@@ -344,7 +308,7 @@ describe("simpleSetup", () => {
 
   test("unreachable address → error, menu again, then a provider works", async () => {
     const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
-    const { io, out } = fakeIO({ answers: ["n", "1", "http://127.0.0.1:1", "2"], secrets: ["sk-1"] });
+    const { io, out } = fakeIO({ answers: ["1", "http://127.0.0.1:1", "2"], secrets: ["sk-1"] });
     const outcome = await simpleSetup(home, io, { ports: [] });
     expect(outcome).toEqual({ kind: "deepseek" });
     expect(out.join("")).toContain("Could not reach");
@@ -355,7 +319,7 @@ describe("simpleSetup", () => {
   test("Brave key during search step → bruine.json + .env", async () => {
     const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, secretsAsked } = fakeIO({
-      answers: ["n", "2", "3"],
+      answers: ["2", "3"],
       secrets: ["sk-abc", "brave-1"],
     });
     await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
@@ -369,7 +333,7 @@ describe("simpleSetup", () => {
 
   test("Tavily key during search step", async () => {
     const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
-    const { io } = fakeIO({ answers: ["n", "2", "4"], secrets: ["sk-abc", "tav-1"] });
+    const { io } = fakeIO({ answers: ["2", "4"], secrets: ["sk-abc", "tav-1"] });
     await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     const bruineJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
     expect(bruineJson.search).toEqual({ provider: "tavily", apiKeyEnv: "TAVILY_API_KEY" });

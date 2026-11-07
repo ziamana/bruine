@@ -3,7 +3,7 @@ export type Lang = (typeof LANGS)[number];
 export const isLang = (value: string): value is Lang => (LANGS as readonly string[]).includes(value);
 
 export const REPO = "https://github.com/ziamana/bruine";
-export const VERSION = "0.1.8";
+export const VERSION = "0.2.0";
 
 /** The preview build serves every file by a relative path, so it works under any address. */
 export const PREVIEW = process.env.NEXT_PUBLIC_PREVIEW === "1";
@@ -74,7 +74,7 @@ const en: Dict = {
     title: "A coding agent for your terminal that runs your own models.",
     lead: "Point it at llama.cpp, any /v1 server or about thirty cloud providers. It edits, runs, and asks before anything risky.",
     said: "bruine (French, /bʁɥin/): a fine, steady rain.",
-    facts: ["MIT", "Node 22+", "Windows · macOS · Linux", `v${VERSION}`],
+    facts: ["MIT", "Node 24.9+", "Windows · macOS · Linux", `v${VERSION}`],
     cta: "Install bruine",
   },
   band: {
@@ -144,7 +144,7 @@ const en: Dict = {
     copy: "Copy",
     copied: "Copied",
     cards: [
-      { title: "Start with one command", body: "Install Node 22 or newer, then:", command: "npm install -g @ziamana/bruine\nbruine" },
+      { title: "Start with one command", body: "Install Node 24.9 or newer, then:", command: "npm install -g @ziamana/bruine\nbruine" },
       { title: "Build from source", body: "Clone the repository, build it, and link the command.", command: "git clone https://github.com/ziamana/bruine\ncd bruine && pnpm install && pnpm build\nnpm link" },
     ],
   },
@@ -234,7 +234,7 @@ const fr: Dict = {
     title: "Un agent de code pour ton terminal, avec tes propres modèles.",
     lead: "Branche-le sur llama.cpp, un serveur /v1 ou une trentaine de fournisseurs cloud. Il modifie, lance, et demande avant tout ce qui est risqué.",
     said: "bruine (nom féminin) : une pluie fine et régulière.",
-    facts: ["MIT", "Node 22+", "Windows · macOS · Linux", `v${VERSION}`],
+    facts: ["MIT", "Node 24.9+", "Windows · macOS · Linux", `v${VERSION}`],
     cta: "Installer bruine",
   },
   band: {
@@ -304,7 +304,7 @@ const fr: Dict = {
     copy: "Copier",
     copied: "Copié",
     cards: [
-      { title: "Une commande pour commencer", body: "Installe Node 22 ou plus récent, puis :", command: "npm install -g @ziamana/bruine\nbruine" },
+      { title: "Une commande pour commencer", body: "Installe Node 24.9 ou plus récent, puis :", command: "npm install -g @ziamana/bruine\nbruine" },
       { title: "Depuis les sources", body: "Clone le dépôt, construis-le, et relie la commande.", command: "git clone https://github.com/ziamana/bruine\ncd bruine && pnpm install && pnpm build\nnpm link" },
     ],
   },

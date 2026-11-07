@@ -10,7 +10,7 @@
 *bruine* (French, /bʁɥin/): a fine, steady rain.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-b4a7ff)](LICENSE)
-[![Node 22+](https://img.shields.io/badge/node-22%2B-7dcfff)](https://nodejs.org)
+[![Node 24.9+](https://img.shields.io/badge/node-24.9%2B-7dcfff)](https://nodejs.org)
 ![Linux tested · macOS and Windows in progress](https://img.shields.io/badge/Linux-tested-8fe3a3) ![macOS · Windows](https://img.shields.io/badge/macOS%20%C2%B7%20Windows-in%20progress-f5c97a)
 [![Changelog](https://img.shields.io/badge/version-0.1.8-ff9ed2)](CHANGELOG.md)
 
@@ -37,11 +37,12 @@ keys if you want a cloud route, lets you pick skills, and writes `~/.bruine/`.
 
 ## Install
 
-You need **Node 22 or newer** and npm (it comes with Node). Check with `node --version`.
+You need **Node 24.9 or newer** and npm (it comes with Node). Check with `node --version`. bruine 0.1
+ran on Node 22; if you must stay there, `npm install -g @ziamana/bruine@0.1` keeps that line.
 
-| | Get Node 22+ | Install bruine | Open it in |
+| | Get Node 24.9+ | Install bruine | Open it in |
 |---|---|---|---|
-| **Linux** | your package manager (`sudo pacman -S nodejs npm`, `sudo apt install nodejs npm` if it is 22+) or [nvm](https://github.com/nvm-sh/nvm) | `npm install -g @ziamana/bruine` | any terminal |
+| **Linux** | your package manager (`sudo pacman -S nodejs npm`, `sudo apt install nodejs npm` if it is 24.9+) or [nvm](https://github.com/nvm-sh/nvm) | `npm install -g @ziamana/bruine` | any terminal |
 | **macOS** | `brew install node`, or the installer from [nodejs.org](https://nodejs.org) | `npm install -g @ziamana/bruine` | Terminal or iTerm2 |
 | **Windows** | `winget install OpenJS.NodeJS.LTS`, or the installer from [nodejs.org](https://nodejs.org) | `npm install -g @ziamana/bruine` | Windows Terminal (PowerShell) |
 
@@ -52,9 +53,9 @@ name npm knows it by.
   `npm config set prefix ~/.local`, and make sure `~/.local/bin` is on your `PATH`.
 - **Update**: `bruine update` (or `/update` in a session). **Remove**: `npm uninstall -g @ziamana/bruine`,
   and delete `~/.bruine` if you want your settings gone too.
-- **Where it was tested**: Linux every day. On macOS the unit tests pass on the CI runner and the
-  terminal tests are being fixed; on Windows both are being fixed, and it has not yet been run by hand
-  on a real Windows machine. If something breaks there,
+- **Where it was tested**: Linux every day. On macOS and Windows the unit and terminal tests pass on
+  the CI runners; it has not yet been run by hand on a real Windows or macOS machine. If something
+  breaks there,
   [open an issue](https://github.com/ziamana/bruine/issues) with your terminal and `bruine --version`.
   [docs/PLATFORMS.md](docs/PLATFORMS.md) lists what was checked.
 
@@ -272,7 +273,7 @@ each silence a budget that depends on what the model was doing (more time for a 
 started, has just finished thinking, or is writing a big tool call; less in the middle of a
 sentence), scaled by the effort and doubled on every retry. Past it, the request is retried, and the
 transcript says so: "The model has not answered for 3m. Retry 2/5 in 1.2s." The route's
-`streamIdleTimeoutMs` in `settings.yaml` stays the hard ceiling.
+`streamIdleTimeoutMs` in the route's settings (`~/.bruine/profiles/bruine/cordis.patch.yml`) stays the hard ceiling.
 
 ## Environment
 
@@ -309,7 +310,7 @@ touches private ranges (10/8, 172.16/12, 192.168/16, and Tailscale 100.64/10).
 
 ## Requirements
 
-Node 22 or newer. Windows, macOS, or Linux.
+Node 24.9 or newer. Windows, macOS, or Linux.
 
 ## License
 

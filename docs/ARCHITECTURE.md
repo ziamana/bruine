@@ -16,10 +16,10 @@ bruine is a **public product** for **Windows, macOS and Linux**, not a personal 
 | Privacy | dsh telemetry is ON by default: bruine sets `DSH_TELEMETRY_DISABLED=1` unless the user opts in during setup. Network discovery is **opt-in**, private ranges only (10/8, 172.16/12, 192.168/16, 100.64/10 Tailscale). |
 | Secrets | OS keyring (`@napi-rs/keyring`: Windows Credential Manager, macOS Keychain, Linux Secret Service). Fallback file chmod 600 (Linux/macOS) with a warning. Never echo a key. |
 | Terminals | Must work in Windows Terminal, PowerShell, macOS Terminal, iTerm2, Konsole, GNOME Terminal. Provide an ASCII fallback (`*` for `💭`, `>` for `›`) when `BRUINE_ASCII=1` or the terminal is not UTF-8. |
-| CI | GitHub Actions matrix: ubuntu, windows, macos × Node 22 and 24. A ticket is done only when CI is green on all 3. |
+| CI | GitHub Actions matrix: ubuntu, windows, macos × Node 24 and 26. A ticket is done only when CI is green on all 3. |
 | **Prompt cache (critical for local models)** | The request prefix must stay byte-identical across a session. **Never** change the system prompt or the tools array mid-session (modes, skills, MCP, settings). New information (new skill, AGENTS.md change, mode switch) is **appended as a message at the end**. Compaction keeps the same system prompt and tools. No timestamps / token counts / mode badges in the prompt. Source: youtu.be/AkwItxJ9AbA (Cache Hunter test, 2026-09): dsh itself keeps the cache perfectly; Pi lost it by swapping tools on plan→build. |
 | **Thinking effort (T34)** | `chat_template_kwargs.preserve_thinking: true` is bruine's default when the local template supports it: it keeps the prefix stable across turns (a template that strips old thinking would rewrite it; the cost is more context, and compaction handles it). Switching effort (`/effort`, ctrl+e) changes ONLY request parameters, never the system prompt or the tools; it applies to the next message. |
-| **Route switch (T37)** | `/model` replaces `.current` on dsh's selection ref — the same seam as the effort — so bruine itself rewrites nothing: the persona is composed at boot (T36) and still names the first model. dsh appends its own durable `[model changed: …]` notice at the end of the history, which is the cache-safe mechanism. What does change is the wire role label (`developer` vs `system`), because that is pi-ai's per-model convention, so a route switch costs one cache rebuild, exactly like `/new` would. Only a model the route DECLARES in settings.yaml may be chosen: `dsh-llm-pi-ai` throws `UNKNOWN_MODEL` otherwise, so an unrecorded model is refused at the command, not at the next turn. |
+| **Route switch (T37)** | `/model` sets `.current` on bruine's selection holder — the same seam as the effort — which since dsh 0.2 records the choice with `agent.model.select()` in the session log, so bruine itself rewrites nothing: the persona is composed at boot (T36) and still names the first model. dsh appends its own durable `[model changed: …]` notice at the end of the history, which is the cache-safe mechanism. What does change is the wire role label (`developer` vs `system`), because that is pi-ai's per-model convention, so a route switch costs one cache rebuild, exactly like `/new` would. Only a model the route DECLARES in the settings (rows of the profile patch since dsh 0.2) may be chosen: `dsh-llm-pi-ai` throws `UNKNOWN_MODEL` otherwise, so an unrecorded model is refused at the command, not at the next turn. |
 | **MCP** | `bruine-mcp` (src/plugins/mcp.ts) mounts one `@deepseek-ai/dsh-mcp-client` per server from `mcpServers` in bruine.json and the project's `.mcp.json` (Claude Code format, src/mcp/config.ts). Every server connects before the first turn (20 s budget) so the tools array is fixed for the session; config changes apply to the next session. Project servers run only after the launcher showed what they run and the user approved (per project, per fingerprint, `mcp-state.json`). `mcp__*` tools go through bruine's gate: ask/judge by mode, Plan denies unless the server is `readOnly`, `alwaysAllow` per tool. A server that changes its own tool list mid-session is re-synced by dsh, which can cost one cache rebuild. |
 | Honest numbers | The footer's tok/s is computed by bruine from its own timestamps, never copied from dsh (the same test found dsh's figure overstated: 79 shown vs 60 real). |
 | Business model (Aron, 2026-09-25) | **Open source first (MIT), paid features later.** Everything that runs locally stays free and MIT forever. Future paid features must be hosted services (sync, team, cloud), never a lock on a local feature. Dependencies must stay MIT/BSD/Apache (checked 2026-09-25: dsh MIT, pi-tui MIT, all 147 deps MIT or BSD-3). |
@@ -33,7 +33,7 @@ bruine is a **public product** for **Windows, macOS and Linux**, not a personal 
 $ bruine [args]
    │
    ├─ first run? ──► setup wizard (plain Node, before dsh boots)
-   │                  writes ~/.bruine/bruine.json, ~/.bruine/settings.yaml,
+   │                  writes ~/.bruine/bruine.json, the settings rows of the profile patch,
    │                  ~/.bruine/profiles/bruine/{package.json,cordis.patch.yml}
    │
    └─ spawn: DSH_HOME=~/.bruine  dsh --profile bruine [args]
@@ -148,7 +148,7 @@ bruine/
   cordis.patch.yml      bundle patch (inserts the 4 plugins)
   test/                 vitest, one test file per module
 ```
-Stack: TypeScript, ESM, `tsup` build, `vitest`, `pnpm`. Node ≥ 22.
+Stack: TypeScript, ESM, `tsup` build, `vitest`, `pnpm`. Node ≥ 24.9 (dsh 0.2 needs it).
 
 ⚠️ The repo lives in `~/projets/bruine` (btrfs). Never on the exFAT drive: pnpm needs symlinks.
 

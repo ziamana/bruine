@@ -1,6 +1,6 @@
 {
   "name": "@ziamana/bruine",
-  "version": "0.1.8",
+  "version": "0.2.0",
   "description": "Interactive terminal coding agent that runs your own models, local or OpenAI-compatible",
   "type": "module",
   "license": "MIT",
@@ -49,7 +49,7 @@
     }
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24.9"
   },
   "packageManager": "pnpm@12.4.2",
   "files": [
@@ -74,14 +74,14 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
-    "@deepseek-ai/dsh": "0.1.5-rc.3",
-    "@deepseek-ai/dsh-agent": "0.1.5-rc.3",
-    "@deepseek-ai/dsh-attachment": "0.1.5-rc.3",
-    "@deepseek-ai/dsh-cmdline": "0.1.5-rc.3",
-    "@deepseek-ai/dsh-llm": "0.1.5-rc.3",
-    "@deepseek-ai/dsh-mcp-client": "0.1.5-rc.3",
-    "@deepseek-ai/dsh-session": "0.1.5-rc.3",
-    "@earendil-works/pi-ai": "0.85.1",
+    "@deepseek-ai/dsh": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-agent": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-attachment": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-cmdline": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-mcp-client": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session": "0.2.2-rc.1",
+    "@earendil-works/pi-ai": "1.5.0",
     "@earendil-works/pi-tui": "0.85.1",
     "commander": "^15.0.0",
     "diff": "^9.0.0",

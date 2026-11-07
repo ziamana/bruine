@@ -1,6 +1,6 @@
 import { appEnv, runtimeHome, configReadPath } from "../compat.js";
 import { applyImageProtocol } from "./term-images.js";
-import { parse as parseYaml } from "yaml";
+import { readSettingsDoc } from "../settings-store.js";
 import {
   Container,
   Editor,
@@ -312,10 +312,7 @@ export interface SettingsProvider {
  */
 export function readSettingsProviders(dshHome?: string): SettingsProvider[] {
   try {
-    const home = dshHome ?? runtimeHome();
-    const p = join(home, "settings.yaml");
-    if (!existsSync(p)) return [];
-    const doc = parseYaml(readFileSync(p, "utf8")) as any;
+    const doc = readSettingsDoc(dshHome ?? runtimeHome()) as any;
     const providers = doc?.["llm-pi-ai"]?.providers;
     if (providers === null || typeof providers !== "object") return [];
     const out: SettingsProvider[] = [];
@@ -343,22 +340,18 @@ export function readSettingsProviders(dshHome?: string): SettingsProvider[] {
   }
 }
 
-/** settings.yaml reader: default route + baseURL/name/window (real YAML parser; the hand-written one broke on bruine's own list style). */
+/** The default route + baseURL/name/window, from the settings (the profile patch, or a settings.yaml not imported yet). */
 export function readSettingsRoute(dshHome?: string): SettingsRoute | undefined {
   try {
-    const home = dshHome ?? runtimeHome();
-    const p = join(home, "settings.yaml");
-    if (!existsSync(p)) return undefined;
-    const doc = parseBruineSettingsYaml(readFileSync(p, "utf8"));
-    if (doc === undefined) return undefined;
-    return doc;
+    const doc = readSettingsDoc(dshHome ?? runtimeHome());
+    return doc === undefined ? undefined : settingsRouteOf(doc);
   } catch {
     return undefined;
   }
 }
 
-function parseBruineSettingsYaml(text: string): SettingsRoute | undefined {
-  const doc = parseYaml(text) as any;
+function settingsRouteOf(settings: Record<string, unknown>): SettingsRoute | undefined {
+  const doc = settings as any;
   const def = doc?.["agent-default-model"];
   const provider = typeof def?.provider === "string" ? def.provider : undefined;
   const model = typeof def?.model === "string" ? def.model : undefined;

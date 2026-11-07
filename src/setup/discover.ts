@@ -5,9 +5,8 @@
  */
 import { readFileSync } from "node:fs";
 import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
-import { join } from "node:path";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { parse as parseYaml } from "yaml";
+import { readSettingsDoc } from "../settings-store.js";
 
 export type DiscoverySource = "localhost" | "network" | "tailscale" | "manual" | "settings";
 
@@ -403,7 +402,7 @@ export function localDefaultRoute(
   read: (p: string) => string = (p) => readFileSync(p, "utf8"),
 ): boolean {
   try {
-    const doc = parseYaml(read(join(dshHome, "settings.yaml"))) as Record<string, any>;
+    const doc = readSettingsDoc(dshHome, read) as Record<string, any> | undefined;
     const def = doc?.["agent-default-model"];
     const base = doc?.["llm-pi-ai"]?.providers?.[def?.provider]?.baseURL;
     if (typeof base !== "string" || base === "") return false;

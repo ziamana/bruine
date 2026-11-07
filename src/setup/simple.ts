@@ -1,9 +1,9 @@
 import { configReadPath, configWritePath } from "../compat.js";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_OFFICIAL, loadCloudProviders } from "./cloud.js";
 import { fetchProps, type TemplateCaps } from "./discover.js";
+import { hasSettings, writeSettingsDoc } from "../settings-store.js";
 
 /** Ports probed on 127.0.0.1 for an OpenAI-compatible model server. */
 export const PROBE_PORTS = [
@@ -402,9 +402,7 @@ async function askProviderKey(
     io.write("No key entered. Skipping. You can add one later in the bruine home .env file\n");
     return { kind: "skipped" };
   }
-  const settingsPath = join(dshHome, "settings.yaml");
-  const doc = provider === "deepseek" ? deepseekSettings() : openrouterSettings();
-  await writeAtomic(settingsPath, renderSettingsYaml(doc), 0o600);
+  await writeSettingsDoc(dshHome, provider === "deepseek" ? deepseekSettings() : openrouterSettings());
   const envKey = provider === "deepseek" ? "DEEPSEEK_API_KEY" : "OPENROUTER_API_KEY";
   await writeEnvVar(join(dshHome, ".env"), envKey, key);
   io.write(`Saved. Your API key is stored in ${join(dshHome, ".env")} (owner-only).\n`);
@@ -452,7 +450,7 @@ async function askOtherCloud(
     ...(provider.id === DEEPSEEK_OFFICIAL.id ? {} : { "llm-pi-ai": { providers: { [provider.id]: { apiKeyEnv: provider.keyEnv } } } }),
     "agent-default-model": { provider: provider.id, model },
   };
-  await writeAtomic(join(dshHome, "settings.yaml"), renderSettingsYaml(doc), 0o600);
+  await writeSettingsDoc(dshHome, doc);
   await writeEnvVar(join(dshHome, ".env"), provider.keyEnv, key);
   io.write(`Saved. Your API key is stored in ${join(dshHome, ".env")} (owner-only).\n`);
   await askSearch(dshHome, io, opts);
@@ -480,8 +478,7 @@ async function askServerAddress(
   const n = Number.parseInt(pick.trim(), 10);
   const index = Number.isNaN(n) ? 0 : Math.min(Math.max(n - 1, 0), hit.models.length - 1);
   const model = hit.models[index] ?? "";
-  const settingsPath = join(dshHome, "settings.yaml");
-  await writeAtomic(settingsPath, renderSettingsYaml(localServerSettings(hit, model)), 0o600);
+  await writeSettingsDoc(dshHome, localServerSettings(hit, model));
   await writeEnvVar(join(dshHome, ".env"), LOCAL_API_KEY_ENV, "local");
   io.write(`Using model: ${model} at ${baseUrl}\n`);
   await askSearch(dshHome, io, opts);
@@ -490,22 +487,21 @@ async function askServerAddress(
 
 /**
  * First-run setup: find a local OpenAI-compatible server, else offer a manual
- * server address or one API key. Idempotent: an existing settings.yaml is
- * never touched.
+ * server address or one API key. Idempotent: existing settings (the profile
+ * patch's rows, or a settings.yaml not imported yet) are never touched.
  */
 export async function simpleSetup(
   dshHome: string,
   io: SetupIO,
   opts: ProbeOptions & { ports?: number[] } = {},
 ): Promise<SetupOutcome> {
-  const settingsPath = join(dshHome, "settings.yaml");
-  if (existsSync(settingsPath)) return { kind: "skipped" };
+  if (hasSettings(dshHome)) return { kind: "skipped" };
 
   io.write("bruine setup: looking for a local model server…\n");
   const hit = await discoverLocalServer(opts.ports ?? PROBE_PORTS, opts);
   if (hit !== undefined) {
     const model = pickModel(hit.models);
-    await writeAtomic(settingsPath, renderSettingsYaml(localServerSettings(hit, model)), 0o600);
+    await writeSettingsDoc(dshHome, localServerSettings(hit, model));
     await writeEnvVar(join(dshHome, ".env"), LOCAL_API_KEY_ENV, "local");
     io.write(`Found a local model server at ${hit.baseUrl}. Using model: ${model}\n`);
     if (io.isTTY) await askSearch(dshHome, io, opts);

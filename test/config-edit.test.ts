@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { configFiles, openInEditor, resolveEditor, type Spawner } from "../src/plugins/config-edit.js";
 
@@ -9,7 +9,10 @@ const homes: string[] = [];
 const home = (files: Record<string, string> = {}): string => {
   const dir = mkdtempSync(join(tmpdir(), "bruine-config-"));
   homes.push(dir);
-  for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text);
+  for (const [name, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, name)), { recursive: true });
+    writeFileSync(join(dir, name), text);
+  }
   return dir;
 };
 afterEach(() => { for (const h of homes.splice(0)) rmSync(h, { recursive: true, force: true }); });
@@ -22,8 +25,8 @@ const withPrograms = (...names: string[]) => ({
 
 describe("configFiles", () => {
   test("is the files that exist, settings first, and never .env", () => {
-    const dir = home({ "bruine.json": "{}", "settings.yaml": "x: 1", ".env": "KEY=secret" });
-    expect(configFiles(dir)).toEqual([join(dir, "settings.yaml"), join(dir, "bruine.json")]);
+    const dir = home({ "bruine.json": "{}", "profiles/bruine/cordis.patch.yml": "[]", "settings.yaml": "x: 1", ".env": "KEY=secret" });
+    expect(configFiles(dir)).toEqual([join(dir, "profiles", "bruine", "cordis.patch.yml"), join(dir, "bruine.json")]);
     expect(configFiles(home({ "bruine.json": "{}" }))).toEqual([expect.stringMatching(/bruine\.json$/)]);
     expect(configFiles(home())).toEqual([]);
   });

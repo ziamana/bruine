@@ -46,12 +46,11 @@ async function run(ctx: DshContext): Promise<number> {
   const selection = ctx.get("agentDefaultModel")?.currentSelection();
   if (agents === undefined || sessions === undefined || selection === undefined) throw new Error("agent services are unavailable");
 
-  const selectionRef = { current: selection, assembled: undefined };
   const handle = await agents.create({
     sessionId: SessionId(`session-${randomUUID()}`),
     meta: { cwd: process.cwd() },
     agentOptions: { provider: selection.provider, model: selection.model },
-    setup: (agentCtx: unknown) => { installModelSelection(agentCtx as any, selectionRef as any); },
+    setup: (agentCtx: unknown) => { installModelSelection(agentCtx as any); },
   });
   const { agent } = handle;
   modes.govern(agent);

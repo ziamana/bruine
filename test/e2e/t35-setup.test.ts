@@ -17,6 +17,7 @@ import { beforeAll, expect, test } from "vitest";
 import * as pty from "node-pty";
 import type { Terminal as TerminalType } from "@xterm/headless";
 import { build, root } from "./harness.js";
+import { readSettingsDoc } from "../../src/settings-store.js";
 
 // A first setup starts with every shipped skill on, remotion apart, even when the step is skipped.
 const DEFAULT_SKILLS = readdirSync(join(root, "skills")).filter((n) => n !== "remotion").sort();
@@ -235,13 +236,13 @@ test("T35: existing install → menu → Theme → light → Save and exit (only
     h.press("enter");
     await h.waitFor("bruine: configuration saved.");
 
-    const after = parseYaml(await readFile(join(home, "settings.yaml"), "utf8")) as Record<string, any>;
-    // settings.yaml: the route is byte-for-byte the same meaning.
+    // The 0.1 settings.yaml is now rows of the profile patch, and the route has the same meaning.
+    const after = readSettingsDoc(home) as Record<string, any>;
     expect(after["llm-pi-ai"]).toEqual(before["llm-pi-ai"]);
     expect(after["agent-default-model"]).toEqual(before["agent-default-model"]);
-    // The only settings.yaml change: the theme.
-    expect(after["ui-theme"]).toEqual({ preference: "light" });
-    expect(before["ui-theme"]).toBeUndefined();
+    // The only change: the theme, which bruine.json carries (dsh-base 0.2 has no ui-theme).
+    expect(JSON.parse(await readFile(join(home, "bruine.json"), "utf8")).theme).toBe("light");
+    expect(after["ui-theme"]).toBeUndefined();
 
     const bruine = JSON.parse(await readFile(join(home, "bruine.json"), "utf8")) as Record<string, any>;
     expect(bruine.theme).toBe("light");
@@ -393,7 +394,7 @@ test("T35: first install → s on Web search, Skills, Theme, Telemetry → defau
     expect(bruine.theme).toBe("dark");
     expect(bruine.telemetry).toBe(false);
     expect(bruine.permissionMode).toBe("auto");
-    const settings = parseYaml(await readFile(join(home, "settings.yaml"), "utf8")) as Record<string, any>;
+    const settings = readSettingsDoc(home) as Record<string, any>;
     expect(settings["agent-default-model"]).toEqual({ provider: "local", model: "e2e-model" });
     expect(settings["llm-pi-ai"].providers.local.models[0]).toMatchObject({
       id: "e2e-model",
@@ -496,7 +497,7 @@ test("first install → Groq from the catalog → model, key, saved as a catalog
     await h.until(() => /Main\s+groq/.test(h.text()), 15_000, "/Main\s+groq/");
     h.press("enter");
     await h.waitFor("bruine: configuration saved.");
-    const settings = parseYaml(await readFile(join(home, "settings.yaml"), "utf8")) as Record<string, any>;
+    const settings = readSettingsDoc(home) as Record<string, any>;
     expect(settings["agent-default-model"].provider).toBe("groq");
     expect(settings["llm-pi-ai"].providers.groq).toEqual({ apiKeyEnv: "GROQ_API_KEY" });
     expect(await readFile(join(home, ".env"), "utf8")).toContain("GROQ_API_KEY=gsk_e2e_secret");

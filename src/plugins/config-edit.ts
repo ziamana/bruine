@@ -2,9 +2,8 @@ import { appEnv, configReadPath } from "../compat.js";
 import { spawn, type SpawnOptions } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
+import { settingsPatchPath } from "../settings-store.js";
 
-/** The files `/config` opens, in the order a person edits them. `.env` holds keys and is never opened for you. */
-const CONFIG_FILES = ["settings.yaml", "bruine.json"] as const;
 
 /**
  * Editors that take over the terminal bruine is drawing in. Opening one from inside the
@@ -19,9 +18,13 @@ const TERMINAL_EDITORS = new Set([
 /** Graphical editors worth finding on their own, the one a desktop is likely to have first. */
 const GUI_EDITORS = ["kate", "kwrite", "gedit", "xed", "mousepad", "pluma", "code", "codium", "subl", "zed"] as const;
 
-/** The config files that exist under `home`, as absolute paths. */
+/**
+ * The config files that exist under `home`, as absolute paths, in the order a person edits them:
+ * the profile patch, which holds the routes and the default model since dsh 0.2, then bruine.json.
+ * `.env` holds keys and is never opened for you.
+ */
 export function configFiles(home: string, exists: (p: string) => boolean = existsSync): string[] {
-  return [join(home, "settings.yaml"), configReadPath(home)].filter((p) => exists(p));
+  return [settingsPatchPath(home), configReadPath(home)].filter((p) => exists(p));
 }
 
 /** How an editor is launched: the program, what goes before the files, and where the choice came from. */

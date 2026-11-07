@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { appHome, configReadPath } from "./compat.js";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { createInterface } from "node:readline";
 import os from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -13,9 +13,11 @@ import { simpleSetup, type SetupIO } from "./setup/simple.js";
 import { migrateAgentsSkills } from "./setup/skills.js";
 import { ensureDefaultSkills } from "./setup/default-skills.js";
 import { localDefaultRoute } from "./setup/discover.js";
+import { hasSettings, importLegacySettings, LEGACY_BACKUP, settingsPatchPath } from "./settings-store.js";
 import { ansi } from "./ui/theme.js";
 import { parseFlags } from "./flags.js";
 import { detectInstallKind, startUpdateCheck, updateCommand } from "./update.js";
+import { nodeIsSupported, oldNodeMessage } from "./platform/node-version.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { name: string; version: string };
@@ -301,6 +303,11 @@ async function main(): Promise<void> {
     console.log(USAGE);
     process.exit(0);
   }
+  // dsh 0.2 needs Node 24.9: on an older one it fails deep inside the session store.
+  if (!nodeIsSupported(process.versions.node)) {
+    console.error(oldNodeMessage(pkg.version, process.versions.node));
+    process.exit(1);
+  }
 
   const dshHome = appHome();
 
@@ -349,7 +356,16 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  if (!existsSync(join(dshHome, "settings.yaml"))) {
+  // dsh 0.2 keeps the settings in the profile patch: a settings.yaml from an
+  // earlier bruine is brought in here, before anything reads it.
+  try {
+    if (await importLegacySettings(dshHome)) {
+      console.error(`bruine: settings.yaml moved into ${settingsPatchPath(dshHome)} (your file is kept as ${LEGACY_BACKUP})`);
+    }
+  } catch (error) {
+    console.error(`bruine: settings.yaml could not be brought into the profile: ${(error as Error).message}`);
+  }
+  if (!hasSettings(dshHome)) {
     if (headless) {
       console.error("bruine: run `bruine setup` before using -p");
       process.exit(2);

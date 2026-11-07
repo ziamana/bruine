@@ -18,12 +18,13 @@ import type { TurnActivity } from "../ui/turn-activity.js";
 import { SessionSpend } from "../ui/spend.js";
 import { ansi } from "../ui/theme.js";
 import { TaskPanel, taskItems, type TaskItem } from "../ui/task-panel.js";
-import type { JobsLike } from "./tasks.js";
+import { jobCaller, type JobsLike } from "./tasks.js";
 import { readSettingsRoute } from "../ui/bruine-ui.js";
 import { appendErrorLog, describeLlmError, fetchAvailableModels, formatK } from "../ui/errors.js";
 import type { DshContext, BruineRepl } from "./ctx.js";
 import { retryCount, retryLine, type RetryEvent } from "../ui/retry.js";
 import { BRUINE_SILENCE_SERVICE, type BruineSilenceService } from "./silence.js";
+import { toolResultOf } from "./tool-result.js";
 
 /** Stable Cordis plugin name. */
 export const name = "bruine-render";
@@ -291,13 +292,11 @@ export function attachTui(
   });
 
   let backgroundTaskCount = 0;
-  const jobs = ctx.get("jobs") as (JobsLike & {
-    onJobsChanged?(listener: () => void): () => void;
-  }) | undefined;
+  const jobs = ctx.get("jobs") as JobsLike | undefined;
   const refreshBackgroundTasks = (): void => {
     let count = 0;
     try {
-      count = (jobs?.list(liveAgent()) ?? []).filter(job =>
+      count = (jobs?.list(jobCaller(liveAgent())) ?? []).filter(job =>
         job.kind !== "subagent" && (job.status === "running" || job.status === "stopping")).length;
     } catch {
       // An unavailable listing must not break the terminal UI.
@@ -307,7 +306,8 @@ export function attachTui(
     ui.footer.set({ backgroundTasks: count });
     ui.requestRender();
   };
-  const offJobsChanged = jobs?.onJobsChanged?.(refreshBackgroundTasks);
+  // dsh 0.2 records each job's start and end in the session (`job/registered`,
+  // `job/settled`): the session listener below refreshes the count on both.
   refreshBackgroundTasks();
 
   let subagentCount = 0;
@@ -482,6 +482,10 @@ export function attachTui(
   const offSession = ctx.on("session/event", (session: unknown, event: SessionEvent) => {
     if (session !== liveAgent().session) return;
     switch (event.type) {
+      case "job/registered":
+      case "job/settled":
+        refreshBackgroundTasks();
+        return;
       case "user/message": {
         // Only echo real user input; dsh injects reminders as plugin/system
         // user-messages that must not clutter the transcript. Mode announcements
@@ -525,14 +529,10 @@ export function attachTui(
         return;
       }
       case "tool/result": {
-        const block = event.data.message?.content?.[0];
-        if (block === undefined || block.type !== "tool-result") return;
-        if (todoToolIds.delete(String(block.toolCallId))) return;
-        const output = block.content
-          .filter((b: any) => b.type === "text")
-          .map((b: any) => b.text)
-          .join("\n");
-        tools.get(String(block.toolCallId))?.result(block.isError !== true, output);
+        const result = toolResultOf(event.data.message);
+        if (result === undefined) return;
+        if (todoToolIds.delete(result.id)) return;
+        tools.get(result.id)?.result(result.ok, result.output);
         ui.requestRender();
         return;
       }
@@ -767,7 +767,6 @@ export function attachTui(
     offAgentCreated();
     offAgentStatus();
     offAgentDisposed();
-    offJobsChanged?.();
     if (backgroundTaskCount > 0) { ui.footer.set({ backgroundTasks: 0 }); ui.requestRender(); }
     if (subagentCount > 0) { ui.footer.set({ subagents: 0 }); ui.requestRender(); }
     offStream();
@@ -860,15 +859,11 @@ export function attach(
         return;
       }
       case "tool/result": {
-        const block = event.data.message?.content?.[0];
-        if (block === undefined || block.type !== "tool-result") return;
-        if (todoToolIds.delete(String(block.toolCallId))) return;
-        const output = block.content
-          .filter((b: any) => b.type === "text")
-          .map((b: any) => b.text)
-          .join("\n");
-        ui.tools.result(String(block.toolCallId), block.isError !== true, output);
-        started.delete(String(block.toolCallId));
+        const result = toolResultOf(event.data.message);
+        if (result === undefined) return;
+        if (todoToolIds.delete(result.id)) return;
+        ui.tools.result(result.id, result.ok, result.output);
+        started.delete(result.id);
         return;
       }
       case "todo/write":

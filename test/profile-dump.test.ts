@@ -39,7 +39,8 @@ describe("profile composition (T15)", () => {
       // Identity (T15.1)
       expect(out).toContain("includeHarnessIdentity: false");
       expect(out).toContain("You are bruine");
-      expect(out).toContain("Your working directory is");
+      // dsh 0.2: the working directory comes from its own service, never `{{cwd}}`.
+      expect(out).not.toContain("{{cwd}}");
     // Plugins
     for (const needle of [
       "@ziamana/bruine/startup",
@@ -55,8 +56,8 @@ describe("profile composition (T15)", () => {
     expect(out).toContain("dsh-tool-web");
     expect(out).toContain("dsh-tool-ask-user");
     for (const id of [
-      "plan-mode", "tool-subagent-control", "tool-subagent-list-agents",
-      "tool-subagent-fork", "tool-workflow", "tool-goal", "tool-ralph",
+      "plan-mode", "tool-subagent-control",
+      "tool-subagent-fork", "tool-workflow", "tool-goal",
       "tool-str-replace-editor", "tool-present",
     ]) {
       const row = out.split(`- id: ${id}\n`)[1]?.split(/\n(?:# == |\- id: )/)[0];

@@ -1,3 +1,4 @@
+import { readSettingsDoc, settingsPatchPath } from "../src/settings-store.js";
 import { createServer } from "node:http";
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -168,7 +169,7 @@ describe("writeEnvVar", () => {
 });
 
 describe("simpleSetup", () => {
-  test("local server found → settings.yaml written, no questions", async () => {
+  test("local server found → the settings rows written, no questions", async () => {
     const home = await mkdtemp(join(tmpdir(), "bruine-setup-"));
     const { io, asked } = fakeIO();
     const outcome = await simpleSetup(home, io, {
@@ -184,7 +185,7 @@ describe("simpleSetup", () => {
     expect(asked[0]).toContain("Web search");
     const bruineJson = JSON.parse(await readFile(join(home, "bruine.json"), "utf8"));
     expect(bruineJson).toEqual({ mode: "simple", permissionMode: "auto", search: { provider: "none" } });
-    const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
+    const parsed = readSettingsDoc(home) as any;
     expect(parsed["agent-default-model"]).toEqual({ provider: "local", model: "llama3" });
     expect(parsed["llm-pi-ai"].providers.local.models).toEqual([{ id: "llama3", name: "llama3", reasoningEfforts: { off: null, low: "low" } }]);
     expect(parsed["llm-pi-ai"].providers.local.apiKeyEnv).toBe("BRUINE_LOCAL_API_KEY");
@@ -200,7 +201,7 @@ describe("simpleSetup", () => {
     expect(asked.length).toBe(2); // the menu, the web search
     expect(asked.some((q) => /key/i.test(q))).toBe(false);
     expect(secretsAsked).toEqual(["DeepSeek API key: "]);
-    const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
+    const parsed = readSettingsDoc(home) as any;
     expect(parsed["agent-default-model"]).toEqual({
       provider: "deepseek-official",
       model: "deepseek-flash",
@@ -214,7 +215,7 @@ describe("simpleSetup", () => {
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "openrouter" });
     expect(secretsAsked).toEqual(["OpenRouter API key: "]);
-    const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
+    const parsed = readSettingsDoc(home) as any;
     expect(parsed["agent-default-model"]).toEqual({ provider: "openrouter", model: "openrouter/auto" });
     expect(await readFile(join(home, ".env"), "utf8")).toBe("OPENROUTER_API_KEY=sk-or-1\n");
   });
@@ -225,7 +226,7 @@ describe("simpleSetup", () => {
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome.kind).toBe("cloud");
     expect(secretsAsked).toEqual(["Groq API key: "]);
-    const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
+    const parsed = readSettingsDoc(home) as any;
     expect(parsed["llm-pi-ai"].providers.groq).toEqual({ apiKeyEnv: "GROQ_API_KEY" });
     expect(parsed["agent-default-model"].provider).toBe("groq");
     expect(parsed["agent-default-model"].model).toBe((outcome as { model: string }).model);
@@ -246,6 +247,7 @@ describe("simpleSetup", () => {
     const { io } = fakeIO({ answers: ["2"], secrets: [""] });
     const outcome = await simpleSetup(home, io, { ports: [1], fetchImpl: deadFetch });
     expect(outcome).toEqual({ kind: "skipped" });
+    await expect(stat(settingsPatchPath(home))).rejects.toThrow();
     await expect(stat(join(home, "settings.yaml"))).rejects.toThrow();
   });
 
@@ -297,7 +299,7 @@ describe("simpleSetup", () => {
         baseUrl: `http://127.0.0.1:${port}/v1`,
         model: "model-b",
       });
-      const parsed = parseYaml(await readFile(join(home, "settings.yaml"), "utf8"));
+      const parsed = readSettingsDoc(home) as any;
       expect(parsed["llm-pi-ai"].providers.local.baseURL).toBe(`http://127.0.0.1:${port}/v1`);
       expect(parsed["agent-default-model"]).toEqual({ provider: "local", model: "model-b" });
       expect(await readFile(join(home, ".env"), "utf8")).toBe("BRUINE_LOCAL_API_KEY=local\n");

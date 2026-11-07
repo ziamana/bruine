@@ -191,7 +191,7 @@ describe("bench persona (T36: the model display name, not the file path)", () =>
     const persona = composePersona("Ornith 9B");
     expect(persona.personaPrefix).toContain("powered by Ornith 9B");
     expect(persona.personaPrefix).not.toContain("{{model}}");
-    expect(persona.personaSuffix).toBe("Your working directory is {{cwd}}.");
+    expect(persona.personaSuffix).toBe("");
   });
 
   test("a name with braces is refused rather than breaking dsh interpolation", () => {

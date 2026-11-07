@@ -2,7 +2,8 @@ import { createRequire } from "node:module";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
-import { parse as parseYaml } from "yaml";
+import { parseDocument, isMap, isSeq, type YAMLMap } from "yaml";
+import { PATCH_TEMPLATE, PERSONA_ROW_MARKER, readSettingsDoc, withRows } from "./settings-store.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { name: string; version: string };
@@ -42,7 +43,8 @@ async function exists(path: string): Promise<boolean> {
 
 async function writeAtomic(path: string, content: string): Promise<void> {
   const tmp = `${path}.tmp`;
-  await writeFile(tmp, content, "utf8");
+  // Owner-only: the patch carries the settings since dsh 0.2, as settings.yaml did.
+  await writeFile(tmp, content, { encoding: "utf8", mode: 0o600 });
   await rename(tmp, path);
 }
 
@@ -72,8 +74,15 @@ async function isLegacyProfile(packageJsonPath: string): Promise<boolean> {
  * without its directory and `.gguf` suffix — the same rule the footer uses), and
  * it is written into the profile's own patch layer, which is also where the
  * bruine-bench system-prompt variants land. One owner, one place.
+ *
+ * The suffix is empty since dsh 0.2: its working-directory service tells the model where it
+ * works, and the `{{cwd}}` variable the suffix used to name is gone (an unknown variable stops
+ * every request before it is sent).
  */
-export const PERSONA_SUFFIX = "Your working directory is {{cwd}}.";
+export const PERSONA_SUFFIX = "";
+
+/** The clause dsh 0.2 no longer resolves, wherever a persona suffix still carries it. */
+const CWD_CLAUSE = /\s*Your working directory is \{\{cwd\}\}\.\s*/g;
 
 /** The persona prefix, `%s` = model display name. */
 const PERSONA_PREFIX_TEMPLATE =
@@ -112,8 +121,9 @@ export function composePersona(modelName: string): Persona {
 }
 
 /**
- * The default route's display name from `$DSH_HOME/settings.yaml`; undefined
- * when there is no settings file, no default route, or no model id.
+ * The default route's display name from the settings (the profile patch, or a
+ * settings.yaml not imported yet); undefined when there are none, no default
+ * route, or no model id.
  */
 export function resolveModelDisplayName(
   dshHome: string,
@@ -121,7 +131,7 @@ export function resolveModelDisplayName(
   pathMod: typeof path = path,
 ): string | undefined {
   try {
-    const doc = parseYaml(read(pathMod.join(dshHome, "settings.yaml"))) as Record<string, any>;
+    const doc = readSettingsDoc(dshHome, read, pathMod) as Record<string, any> | undefined;
     const def = doc?.["agent-default-model"];
     const id = def?.model;
     if (typeof id !== "string" || id === "") return undefined;
@@ -134,12 +144,14 @@ export function resolveModelDisplayName(
   }
 }
 
-/** Marker that says the system-prompt row in the user patch is bruine's. */
-const PERSONA_ROW_MARKER = "# system-prompt row written by bruine (T36).";
-const PERSONA_PATCH_HEADER =
-  "# bruine user overrides. Edit this file, not cordis.yml.\n" +
-  `${PERSONA_ROW_MARKER}\n` +
-  "# Your own rows go after it; delete the marker to take the persona over.\n";
+/** The config of the system-prompt row bruine owns; an empty suffix is left out, as dsh asks. */
+export function personaConfig(persona: Persona): Record<string, unknown> {
+  return {
+    includeHarnessIdentity: false,
+    personaPrefix: persona.personaPrefix,
+    ...(persona.personaSuffix !== "" ? { personaSuffix: persona.personaSuffix } : {}),
+  };
+}
 
 /** The system-prompt row bruine owns, as patch-layer YAML (JSON-quoted text). */
 export function personaPatch(persona: Persona): string {
@@ -148,8 +160,33 @@ export function personaPatch(persona: Persona): string {
     "  config:\n" +
     "    includeHarnessIdentity: false\n" +
     `    personaPrefix: ${JSON.stringify(persona.personaPrefix)}\n` +
-    `    personaSuffix: ${JSON.stringify(persona.personaSuffix)}\n`
+    (persona.personaSuffix !== "" ? `    personaSuffix: ${JSON.stringify(persona.personaSuffix)}\n` : "")
   );
+}
+
+/**
+ * A patch whose system-prompt row is the user's, with the `{{cwd}}` clause taken out of its
+ * suffix (the rest of their text kept; a suffix left empty is removed). Unchanged otherwise.
+ */
+export function withoutCwdClause(text: string): string {
+  if (!text.includes("{{cwd}}")) return text;
+  const doc = parseDocument(text, { logLevel: "error" });
+  const seq = doc.contents;
+  if (!isSeq(seq)) return text;
+  let changed = false;
+  for (const item of seq.items) {
+    if (!isMap(item) || (item.get("id") as unknown) !== "system-prompt") continue;
+    const node = item.get("config") as unknown;
+    if (!isMap(node)) continue;
+    const config = node as YAMLMap<string, unknown>;
+    const suffix = config.get("personaSuffix") as unknown;
+    if (typeof suffix !== "string" || !suffix.includes("{{cwd}}")) continue;
+    const kept = suffix.replace(CWD_CLAUSE, " ").trim();
+    if (kept === "") config.delete("personaSuffix");
+    else config.set("personaSuffix", kept);
+    changed = true;
+  }
+  return changed ? doc.toString({ lineWidth: 0 }) : text;
 }
 
 /** Has the user taken the persona row over (marker gone or changed)? */
@@ -160,8 +197,10 @@ export function isManagedPersonaPatch(text: string): boolean {
 }
 
 /**
- * Write (or refresh) the persona row in the profile's user patch. A patch the
- * user took over is never rewritten; a broken persona must not stop the boot.
+ * Write (or refresh) the persona row in the profile's user patch, and only that
+ * row: the settings rows and the user's own rows stay as they are. A persona the
+ * user took over is not rewritten, only freed of the `{{cwd}}` clause dsh 0.2
+ * refuses; a broken persona must not stop the boot.
  */
 async function writePersonaPatch(
   patchYml: string,
@@ -169,16 +208,15 @@ async function writePersonaPatch(
   pathMod: typeof path = path,
 ): Promise<void> {
   try {
-    if (existsSync(patchYml) && !isManagedPersonaPatch(await readFile(patchYml, "utf8"))) return;
-    const modelName = resolveModelDisplayName(
-      dshHome,
-      (p) => readFileSync(p, "utf8"),
-      pathMod,
-    );
-    const persona = composePersona(modelName ?? "");
-    const next = `${PERSONA_PATCH_HEADER}${personaPatch(persona)}`;
-    const current = existsSync(patchYml) ? await readFile(patchYml, "utf8") : "";
-    if (current === next) return;
+    const current = existsSync(patchYml) ? await readFile(patchYml, "utf8") : PATCH_TEMPLATE;
+    let next: string;
+    if (isManagedPersonaPatch(current)) {
+      const modelName = resolveModelDisplayName(dshHome, (p) => readFileSync(p, "utf8"), pathMod);
+      next = withRows(current, { "system-prompt": personaConfig(composePersona(modelName ?? "")) });
+    } else {
+      next = withoutCwdClause(current);
+    }
+    if (existsSync(patchYml) && current === next) return;
     await writeAtomic(patchYml, next);
   } catch {
     // the persona is a nicety; dsh's own default stays in place
@@ -205,9 +243,15 @@ export async function ensureProfile(
       return { created: false, dir };
     }
     // T20.3 migration: a profile generated before the package rename is
-    // regenerated — only the profile directory. settings.yaml, .env,
-    // bruine.json and sessions/ live outside it and are never touched.
+    // regenerated — only the profile directory. .env, bruine.json and
+    // sessions/ live outside it and are never touched; the patch, which holds
+    // the settings since dsh 0.2, is carried over.
+    const keptPatch = existsSync(p.patchYml) ? await readFile(p.patchYml, "utf8") : undefined;
     await rm(dir, { recursive: true, force: true });
+    if (keptPatch !== undefined) {
+      await mkdir(dir, { recursive: true });
+      await writeAtomic(p.patchYml, keptPatch);
+    }
   }
 
   await mkdir(dir, { recursive: true });
@@ -227,10 +271,9 @@ export async function ensureProfile(
   };
 
   await writeAtomic(p.packageJson, `${JSON.stringify(packageJson, null, 2)}\n`);
-  await writeAtomic(
-    p.patchYml,
-    "# bruine user overrides. Edit this file, not cordis.yml.\n[]\n",
-  );
+  // The setup can write the settings rows before the profile exists: a patch
+  // that is already there is kept.
+  if (!existsSync(p.patchYml)) await writeAtomic(p.patchYml, PATCH_TEMPLATE);
   await writeAtomic(
     p.cordisYml,
     "# managed by dsh, do not edit\n[]\n",

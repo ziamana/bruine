@@ -7,7 +7,7 @@ An audit of paths, keys, colours, glyphs, clipboard and shells for Windows Termi
 Windows console, PowerShell, macOS Terminal and iTerm2, against the product constraints in
 [ARCHITECTURE.md](ARCHITECTURE.md). It was done by reading the code, with every fix pinned by a
 unit test that runs on Linux with the other platform's inputs (`path.win32`, a `win32` platform,
-a Windows release string). The CI matrix (ubuntu, windows, macos × Node 22 and 24) runs those
+a Windows release string). The CI matrix (ubuntu, windows, macos × Node 24 and 26) runs those
 tests for real on each system.
 
 ## Known open: three terminal tests on Windows

@@ -12,6 +12,13 @@ import { BRUINE_MCP_SERVICE, type BruineMcpService } from "./mcp.js";
 import { toolPrefix } from "../mcp/config.js";
 import { readAvailableSkills } from "../setup/skills.js";
 
+// dsh 0.2 has no shared `plugin` source: each producer declares its own kind.
+declare module "@deepseek-ai/dsh-llm" {
+  interface MessageSourceMap {
+    "bruine-modes": { kind: "bruine-modes" };
+  }
+}
+
 /** The gate's view of an MCP tool: is its server read-only, is the tool on its alwaysAllow list. */
 export function mcpPolicy(service: BruineMcpService | undefined, tool: string): { readOnly: boolean; allowed: boolean } | undefined {
   const server = service?.serverOf(tool);
@@ -344,7 +351,7 @@ export function apply(ctx: DshContext): void {
     const route = judgeRoute(ctx);
     const message = createUserMessage({
       content: [{ type: "text", text: judgePrompt(`${toolName} ${summary}`) }],
-      source: { kind: "plugin", plugin: "bruine-modes" },
+      source: { kind: "bruine-modes" },
     });
     return askJudge(llm, route, [message]);
   };

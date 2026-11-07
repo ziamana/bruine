@@ -68,7 +68,13 @@ export function standaloneInstruction(lastUser: string, answerExcerpt: string): 
   return `${SUGGEST_INSTRUCTION}\n\nLast user prompt: ${lastUser}\nLast answer (excerpt): ${answerExcerpt}`;
 }
 
-const SOURCE = { kind: "plugin", plugin: "bruine-suggest" } as const;
+// dsh 0.2 has no shared `plugin` source: each producer declares its own kind.
+declare module "@deepseek-ai/dsh-llm" {
+  interface MessageSourceMap {
+    "bruine-suggest": { kind: "bruine-suggest" };
+  }
+}
+const SOURCE = { kind: "bruine-suggest" } as const;
 
 export interface SuggestionRequest {
   provider: string;

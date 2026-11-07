@@ -570,7 +570,7 @@ test("keys: ctrl+c clears typed text first, and quits only on an empty editor", 
   });
 });
 
-test.skipIf(process.platform === "win32")("/config opens settings.yaml and bruine.json in the editor the user chose", async () => {
+test.skipIf(process.platform === "win32")("/config opens the settings patch and bruine.json in the editor the user chose", async () => {
   await scenario("config-open", [], async (h) => {
     // The editor is a script that records what it was asked to open: bruine.json says which.
     const recorder = join(h.project, "fake-editor.sh");
@@ -582,10 +582,10 @@ test.skipIf(process.platform === "win32")("/config opens settings.yaml and bruin
 
     h.type("/config");
     h.press("enter");
-    await h.waitFor("Opened settings.yaml and bruine.json in fake-editor.sh");
+    await h.waitFor("Opened cordis.patch.yml and bruine.json in fake-editor.sh");
     await h.until(() => existsSync(record), 3000, "the editor ran");
     const opened = readFileSync(record, "utf8").trim().split("\n");
-    expect(opened).toEqual([join(h.home, "settings.yaml"), join(h.home, "bruine.json")]);
+    expect(opened).toEqual([join(h.home, "profiles", "bruine", "cordis.patch.yml"), join(h.home, "bruine.json")]);
     // The screen says what to do next, and bruine is still running.
     expect(h.screen().join("\n")).toContain("/reload");
     expect(h.exit).toBeUndefined();
@@ -596,6 +596,8 @@ test.skipIf(process.platform === "win32")("/tasks lists a real background comman
   await scenario("tasks-bg", [
     toolScript("bash", { command: "sleep 120", description: "wait in the background", run_in_background: true }, "bg1"),
     textScript("BG_STARTED"),
+    // dsh 0.2 tells the model a job was stopped, and that opens a turn.
+    textScript("BG_STOP_SEEN"),
   ], async (h) => {
     await h.prompt("Run it in the background");
     await h.waitFor("BG_STARTED");
@@ -604,12 +606,14 @@ test.skipIf(process.platform === "win32")("/tasks lists a real background comman
     h.press("enter");
     await h.waitFor("Background tasks (1 running)");
     const listed = h.screen().join("\n");
-    expect(listed).toMatch(/bash-1 +running .*sleep 120/);
+    // dsh 0.2 names a job `bash-<hex>` (it was `bash-1`): the id is read off the list.
+    const id = /(bash-[0-9a-z]+) +running .*sleep 120/.exec(listed)?.[1];
+    expect(id, listed).toBeDefined();
     expect(listed).toContain("/tasks kill <id> stops one.");
 
-    h.type("/tasks kill bash-1");
+    h.type(`/tasks kill ${id!}`);
     h.press("enter");
-    await h.waitFor("Stopping bash-1.");
+    await h.waitFor(`Stopping ${id!}.`);
 
     // The job settles as killed, and the list says so rather than still running.
     let killed = false;
@@ -618,10 +622,11 @@ test.skipIf(process.platform === "win32")("/tasks lists a real background comman
       h.type("/tasks");
       h.press("enter");
       await delay(400);
-      killed = /bash-1 +killed/.test(h.screen().join("\n"));
+      killed = new RegExp(`${id!} +killed`).test(h.screen().join("\n"));
     }
     expect(killed, h.screen().join("\n")).toBe(true);
     expect(h.screen().join("\n")).toContain("Background tasks (0 running)");
+    await h.waitFor("BG_STOP_SEEN");
   }, false, "full");
 }, 60_000);
 
@@ -669,7 +674,7 @@ test("a file being written shows its first ten lines, then only a line count tha
   }, false, "full");
 }, 60_000);
 
-test("lean catalog: a background sub-agent is a plain job the model can read, not a persistent child it cannot follow", async () => {
+test("lean catalog: a sub-agent's answer comes back as a notice, and nothing to follow a persistent child is mounted", async () => {
   await scenario("subagent-lean", [textScript("HI_SUB")], async (h) => {
     await h.prompt("hello");
     await h.waitFor("HI_SUB");
@@ -685,9 +690,12 @@ test("lean catalog: a background sub-agent is a plain job the model can read, no
     // Persistent children are followed with these two, and the lean catalog does not mount them.
     expect(names).not.toContain("send_message");
     expect(names).not.toContain("list_agents");
-    // Background stays available as an option on the call, as a job.
+    // dsh 0.2: every delegation returns at once and the child's answer comes back as a
+    // completion notice, so the call has no background switch for a small model to get wrong.
     const sub = (body.tools ?? []).find((t) => t.function?.name === "subagent");
-    expect(Object.keys(sub?.function?.parameters?.properties ?? {})).toContain("run_in_background");
+    const props = Object.keys(sub?.function?.parameters?.properties ?? {});
+    expect(props).toContain("prompt");
+    expect(props).not.toContain("run_in_background");
   });
 });
 
@@ -832,7 +840,7 @@ test("/config path lists the files without opening anything", async () => {
     h.press("enter");
     await h.waitFor("Config files:");
     const screen = h.screen().join("\n");
-    expect(screen).toContain("settings.yaml");
+    expect(screen).toContain("cordis.patch.yml");
     expect(screen).toContain("bruine.json");
     expect(screen).not.toContain(".env");
   });
@@ -1722,7 +1730,8 @@ test("/model <route> sets directly and /provider lists them all (T37, T39)", asy
       await h.waitFor("Providers (2):");
       await h.waitFor("Local Server [local] (current route)");
       await h.waitFor("BRUINE_LOCAL_API_KEY");
-      await h.waitFor("+ 39 more bruine can add");
+      // How many more there are follows pi-ai's catalog, which grows with every release.
+      await h.until(() => /\+ \d+ more bruine can add/.test(h.screen().join("\n")), 15_000, "the count of providers bruine can add");
       await h.waitFor("In use: local/e2e-model");
       await h.dump("t37-provider-list");
 

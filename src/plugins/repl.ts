@@ -69,9 +69,9 @@ export const BRUINE_COMMANDS: Array<{ name: string; description?: string }> = [
   { name: "/skills", description: "List available skills" },
   { name: "/plugins", description: "List the plugins this session loaded" },
   { name: "/update", description: "Install the latest bruine (asks first)" },
-  { name: "/config", description: "Open settings.yaml and bruine.json in your editor" },
+  { name: "/config", description: "Open the settings (cordis.patch.yml) and bruine.json in your editor" },
   { name: "/tasks", description: "List background tasks (commands and sub-agents); /tasks kill <id> stops one" },
-  { name: "/reload", description: "Re-read settings.yaml and the terminal background" },
+  { name: "/reload", description: "Re-read the settings and the terminal background" },
   { name: "/mouse", description: "Turn mouse selection on or off (the wheel scrolls while off)" },
   { name: "/effect", description: "Choose bruine, pluie, foudre, auto (on), or off" },
   { name: "/mcp", description: "List MCP servers and their tools; /mcp enable|disable <name>" },
@@ -381,15 +381,9 @@ async function createAgent(ctx: DshContext, resumeSessionId?: string): Promise<{
   const defaultModel = ctx.get("agentDefaultModel");
   if (agents === undefined || defaultModel === undefined) return undefined;
   const selection = defaultModel.currentSelection();
-  // T34: the holder dsh reads per request; bruine-effort replaces .current to
-  // change the reasoning effort of the NEXT request only.
-  const selectionRef: {
-    current: { provider: string; model: string; reasoningEffort?: string } | undefined;
-    assembled: unknown;
-  } = { current: selection, assembled: undefined };
   const setup = (agentCtx: unknown): void => {
     // Returning the disposer would be treated as a setup commit object.
-    installModelSelection(agentCtx as any, selectionRef as any);
+    installModelSelection(agentCtx as any);
   };
   const handle = resumeSessionId === undefined ? await agents.create({
     sessionId: SessionId(`session-${randomUUID()}`),
@@ -403,7 +397,28 @@ async function createAgent(ctx: DshContext, resumeSessionId?: string): Promise<{
   });
   const { agent } = handle;
   await agent.whenIdle();
-  return { agent, dispose: () => handle.dispose(), selection, selectionRef };
+  return { agent, dispose: () => handle.dispose(), selection, selectionRef: modelHolder(agent, selection) };
+}
+
+type Selection = { provider: string; model: string; reasoningEffort?: string };
+
+/**
+ * T34/T37: the holder bruine-effort and `/model` change to steer the NEXT request only. Up to
+ * dsh 0.1 it was the ref dsh read per request; since 0.2 the agent owns its selection
+ * (`agent.model`, recorded in the session log), so reading `.current` asks the agent and
+ * assigning it records the choice there. An effort-only change adds no notice; a route
+ * switch gets dsh's own `[model changed: …]` one, as before.
+ */
+export function modelHolder(agent: any, fallback: Selection): { current: Selection | undefined; assembled: unknown } {
+  return {
+    assembled: undefined,
+    get current(): Selection | undefined {
+      return (agent?.model?.current?.() as Selection | undefined) ?? fallback;
+    },
+    set current(next: Selection | undefined) {
+      if (next !== undefined) agent?.model?.select?.(next);
+    },
+  };
 }
 
 /**
@@ -676,9 +691,9 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
           "/skills  List available skills (or /skills <name>)",
           "/plugins  List the plugins this session loaded",
           "/update  Install the latest version of bruine (asks first)",
-          "/config  Open settings.yaml and bruine.json in your editor (/config path lists them)",
+          "/config  Open the settings (cordis.patch.yml) and bruine.json in your editor (/config path lists them)",
           "/tasks  List background tasks; /tasks kill <id> stops one",
-          "/reload  Re-read settings.yaml and the terminal background",
+          "/reload  Re-read the settings and the terminal background",
           "/effect  Weather: bruine, pluie, foudre, auto (also on), off",
           "/mcp  MCP servers and their tools; /mcp enable|disable <name> for the next session",
           "/help  Show commands and keys",
@@ -757,7 +772,7 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
         return;
       }
       const names = files.map((f) => f.split(/[\\/]/).pop()).join(" and ");
-      reply(`Opened ${names} in ${result.editor}. Save, then /reload re-reads settings.yaml; bruine.json is read when bruine starts.`);
+      reply(`Opened ${names} in ${result.editor}. Save, then /reload re-reads the settings; bruine.json is read when bruine starts.`);
       return;
     }
     if (cmd === "/reload") {
@@ -770,9 +785,9 @@ async function runRepl(ctx: DshContext, exit: (code: number) => void): Promise<v
       const report = await ui.reload();
       const lines = [`Reloaded. Route still ${report.live}.`];
       if (report.route === "moved" && report.moved !== undefined) {
-        lines.push(`settings.yaml now points at ${report.moved}. This session is still on ${report.live}: /model to switch.`);
+        lines.push(`The settings now point at ${report.moved}. This session is still on ${report.live}: /model to switch.`);
       } else if (report.route === "unreadable") {
-        lines.push("settings.yaml could not be read; kept what this session started with.");
+        lines.push("The settings could not be read; kept what this session started with.");
       }
       lines.push(
         report.background === "read"

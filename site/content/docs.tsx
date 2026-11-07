@@ -56,7 +56,7 @@ const en: DocSection[] = [
     title: "Install",
     body: (
       <>
-        <p>bruine needs Node 22 or newer, on Windows, macOS or Linux.</p>
+        <p>bruine needs Node 24.9 or newer, on Windows, macOS or Linux.</p>
         <pre>
           <code>{"npm install -g @ziamana/bruine\nbruine"}</code>
         </pre>
@@ -178,7 +178,7 @@ const en: DocSection[] = [
           caption="Past the budget, the request is retried, and the transcript says so."
         />
         <p>
-          The route's <code>streamIdleTimeoutMs</code> in <code>settings.yaml</code> stays the hard ceiling. <code>BRUINE_SILENCE=off</code> keeps the fixed timeout.
+          The route's <code>streamIdleTimeoutMs</code> in its settings (<code>~/.bruine/profiles/bruine/cordis.patch.yml</code>) stays the hard ceiling. <code>BRUINE_SILENCE=off</code> keeps the fixed timeout.
         </p>
       </>
     ),
@@ -234,7 +234,7 @@ const fr: DocSection[] = [
     title: "Installer",
     body: (
       <>
-        <p>bruine demande Node 22 ou plus récent, sous Windows, macOS ou Linux.</p>
+        <p>bruine demande Node 24.9 ou plus récent, sous Windows, macOS ou Linux.</p>
         <pre>
           <code>{"npm install -g @ziamana/bruine\nbruine"}</code>
         </pre>
@@ -359,7 +359,7 @@ const fr: DocSection[] = [
           caption="Passé le budget, la requête est relancée, et la conversation le dit."
         />
         <p>
-          Le <code>streamIdleTimeoutMs</code> de la route dans <code>settings.yaml</code> reste le plafond. <code>BRUINE_SILENCE=off</code> garde le délai fixe.
+          Le <code>streamIdleTimeoutMs</code> de la route dans ses réglages (<code>~/.bruine/profiles/bruine/cordis.patch.yml</code>) reste le plafond. <code>BRUINE_SILENCE=off</code> garde le délai fixe.
         </p>
       </>
     ),

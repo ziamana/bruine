@@ -15,6 +15,15 @@ export interface JobSnapshotLike {
   finishedAt?: number;
 }
 
+/**
+ * Who asks the job registry. dsh 0.2 fences a job to its owner by the agent's id
+ * (`jobs.list(agent.id)`, as its own job tools call it); dsh 0.1 took the agent itself.
+ */
+export function jobCaller(agent: unknown): unknown {
+  const id = (agent as { id?: unknown } | null | undefined)?.id;
+  return id !== undefined ? id : agent;
+}
+
 export interface JobsLike {
   list(caller?: unknown): JobSnapshotLike[];
   kill(id: string, caller?: unknown, reason?: string): "requested" | "already-finished";
@@ -70,7 +79,7 @@ export async function listTasks(
 ): Promise<TaskRow[]> {
   const rows: TaskRow[] = [];
   try {
-    for (const job of services.jobs?.list(agent) ?? []) {
+    for (const job of services.jobs?.list(jobCaller(agent)) ?? []) {
       rows.push({
         id: job.id,
         source: "job",
@@ -155,7 +164,7 @@ export async function stopTask(
   }
   try {
     if (row.source === "job") {
-      const outcome = services.jobs?.kill(row.id, agent, "stopped by the user");
+      const outcome = services.jobs?.kill(row.id, jobCaller(agent), "stopped by the user");
       return outcome === "already-finished" ? `${row.id} had already finished.` : `Stopping ${row.id}.`;
     }
     if (services.subagents === undefined || sessionId === undefined || row.sessionId === undefined) {

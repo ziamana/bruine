@@ -49,7 +49,9 @@ describe("ensureProfile", () => {
     // T36: the persona row is bruine's, not the bare `[]` placeholder.
     expect(patch).toContain("- id: system-prompt");
     expect(patch).toContain("includeHarnessIdentity: false");
-    expect(patch).toContain("Your working directory is {{cwd}}.");
+    // dsh 0.2 resolves no `{{cwd}}`: the suffix is left out, and dsh says where the model works.
+    expect(patch).not.toContain("{{cwd}}");
+    expect(patch).not.toContain("personaSuffix");
 
     const managed = await readFile(join(result.dir, "cordis.yml"), "utf8");
     expect(managed).toContain("# managed by dsh, do not edit");

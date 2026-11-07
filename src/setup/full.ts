@@ -64,7 +64,7 @@ import {
   type SetupIO,
 } from "./simple.js";
 import { readBruineJsonDoc, readUpdateCheckChoice, setUpdateCheck } from "../update.js";
-import { parse as parseYaml } from "yaml";
+import { readSettingsDoc } from "../settings-store.js";
 import { appEnv } from "../compat.js";
 import { terminalMotionAllowed } from "../ui/logo-motion.js";
 import { CenteredPanel, SetupFrame } from "./frame.js";
@@ -141,16 +141,6 @@ interface SettingsYamlShape {
   [k: string]: unknown;
 }
 
-function parseSettingsYaml(text: string): SettingsYamlShape | undefined {
-  try {
-    const doc = parseYaml(text) as SettingsYamlShape;
-    if (doc === null || typeof doc !== "object") return undefined;
-    return doc;
-  } catch {
-    return undefined;
-  }
-}
-
 /** T35: does this prefill come from an existing install (menu, not wizard)? */
 export function isExistingInstall(prefill: SetupAnswers | undefined): boolean {
   const doc = prefill?.settingsOrig as Record<string, any> | undefined;
@@ -180,7 +170,7 @@ export function loadPrefill(dshHome: string): SetupAnswers | undefined {
   }
   let settingsDoc: SettingsYamlShape | undefined;
   try {
-    settingsDoc = parseSettingsYaml(readFileSync(join(dshHome, "settings.yaml"), "utf8"));
+    settingsDoc = readSettingsDoc(dshHome) as SettingsYamlShape | undefined;
   } catch {
     settingsDoc = undefined;
   }

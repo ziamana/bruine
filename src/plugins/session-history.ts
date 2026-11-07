@@ -6,6 +6,7 @@ import type { QuestionAnswer } from "../ui/questions.js";
 import { ansi } from "../ui/theme.js";
 import { ToolCallComponent, type ChatToolCall } from "../ui/tool-call-component.js";
 import { stripReminders } from "./ui-skills.js";
+import { toolResultOf } from "./tool-result.js";
 
 /** Project-scoped choices for the REPL's resume picker. */
 export interface RecentSession {
@@ -139,12 +140,11 @@ export function replaySession(session: { snapshotEvents?(): unknown }, ui: Repla
         break;
       }
       case "tool/result": {
-        const block = data.message?.content?.[0];
-        const call = block?.type === "tool-result" ? calls.get(String(block.toolCallId)) : undefined;
-        if (call === undefined) break;
+        const result = toolResultOf(data.message);
+        const call = result === undefined ? undefined : calls.get(result.id);
+        if (call === undefined || result === undefined) break;
         call.clock.t = time;
-        const output = textOf(block.content);
-        const ok = block.isError !== true;
+        const { output, ok } = result;
         const answers = call.name === "ask_user_question" ? answersIn(output) : undefined;
         if (answers !== undefined && call.comp instanceof QuestionCallComponent) call.comp.answer(answers);
         else call.comp.result(ok, output);

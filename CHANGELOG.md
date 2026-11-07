@@ -3,6 +3,36 @@
 Every version that reaches npm, newest first. bruine checks for a new one once a day and offers
 `/update` in the session (or `bruine update` from a shell).
 
+## 0.2.0
+
+### Changed
+
+- **bruine runs on dsh 0.2 and pi-ai 1.5, and needs Node 24.9 or newer.** dsh 0.2 asks for it. The
+  catalog the setup offers is pi-ai's of November: the Claude 5.5 family, GPT-6.1, Grok 4.7, Kimi K3.1,
+  GLM-5.3 and the rest of what came out since September (34 providers). On Node 22,
+  `npm install -g @ziamana/bruine@0.1` keeps the 0.1 line.
+- **The settings live in the profile now.** dsh 0.2 no longer reads `settings.yaml`. At its first start
+  bruine moves `~/.bruine/settings.yaml` into `~/.bruine/profiles/bruine/cordis.patch.yml`, one row per
+  section with the same content, and keeps your file as `settings.yaml.pre-0.2`. The setup, `/model` and
+  `/config` use the new file. The theme stays in `bruine.json`, where it already was.
+- **A sub-agent always returns at once**, and its answer comes back as a notice when it is done. The
+  call has no `run_in_background` any more: dsh 0.2 runs every delegation that way.
+- **dsh tells the model its working directory.** The persona no longer ends with "Your working
+  directory is {{cwd}}.": dsh 0.2 refuses that variable, and a persona you wrote yourself loses that one
+  sentence, the rest of it kept.
+
+### Fixed
+
+- **Compaction leaves room for small windows.** dsh 0.2 keeps 65,536 tokens of headroom by default,
+  which a model with a window of 64k or less does not have: every request on a 32k local model failed
+  before it was sent. bruine sets 8,192.
+
+### Removed
+
+- **The "DeepSeek Account" route dsh 0.2 adds is not mounted.** It signs in with a DeepSeek account,
+  and bruine has no sign-in, so it only sat in `/provider` with no models. The API-key route
+  (`deepseek-official`) stays.
+
 ## 0.1.8
 
 ### Removed

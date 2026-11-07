@@ -10,6 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { toolResultOf } from "../../src/plugins/tool-result.js";
 
 export interface RunMetrics {
   /** Output tokens the provider reported, summed over assistant messages. */
@@ -120,12 +121,8 @@ export function metricsFromRows(rows: Row[]): RunMetrics {
       }
     }
     if (type === "tool/result") {
-      const parts: unknown = data?.message?.content;
-      if (Array.isArray(parts)) {
-        for (const part of parts) {
-          if (part?.isError === true && editIds.has(part?.toolCallId)) editErrors += 1;
-        }
-      }
+      const result = toolResultOf(data?.message);
+      if (result !== undefined && !result.ok && editIds.has(result.id)) editErrors += 1;
     }
     if (type === "turn/end") {
       const reason = data?.reason;

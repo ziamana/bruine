@@ -36,43 +36,41 @@ for (const icons of [UNICODE_ICONS, ASCII_ICONS]) test.each([100, 60, 30])("back
   expect(footer.render(width).map(strip).join("\n")).not.toContain("task ");
 });
 
-test("background jobs update their count, follow the current owner, and unsubscribe", () => {
-  const root = { session: { id: "root" } };
-  const other = { session: { id: "other" } };
+test("background jobs update their count on the session's job events, follow the current owner, and stop on detach", () => {
+  // dsh 0.2: the registry is asked with the agent's id, and a job's start and end are
+  // `job/registered` and `job/settled` events of the owner's session.
+  const root = { id: "agent-root", session: { id: "root" } };
+  const other = { id: "agent-other", session: { id: "other" } };
   let current = root;
-  let changed: (() => void) | undefined;
-  const unsubscribe = vi.fn(() => { changed = undefined; });
   const jobs = [
-    { owner: root, kind: "bash", status: "running" },
-    { owner: root, kind: "bash", status: "completed" },
-    { owner: root, kind: "subagent", status: "running" },
-    { owner: other, kind: "bash", status: "running" },
+    { owner: "agent-root", kind: "bash", status: "running" },
+    { owner: "agent-root", kind: "bash", status: "completed" },
+    { owner: "agent-root", kind: "subagent", status: "running" },
+    { owner: "agent-other", kind: "bash", status: "running" },
   ];
-  const fake = fakeCtx({ jobs: {
-    list: (owner: unknown) => jobs.filter(job => job.owner === owner),
-    onJobsChanged: (listener: () => void) => { changed = listener; return unsubscribe; },
-  } });
+  const fake = fakeCtx({ jobs: { list: (caller: unknown) => jobs.filter(job => job.owner === caller) } });
   const footer = new FooterComponent(UNICODE_ICONS, { cwd: "/tmp" });
   const repaint = vi.fn();
   const ui = { footer, icons: UNICODE_ICONS, requestRender: repaint, addChat() {} };
   const detach = attachTui(fake.ctx, root, ui as never, {}, () => current);
+  const jobEvent = (type: "job/registered" | "job/settled") => fake.emit("session/event", current.session, { type, data: {} });
   try {
     expect(footer.state.backgroundTasks).toBe(1);
-    jobs[1]!.status = "running"; changed?.();
+    jobs[1]!.status = "running"; jobEvent("job/registered");
     expect(footer.state.backgroundTasks).toBe(2);
-    jobs[0]!.status = "stopping"; changed?.();
+    jobs[0]!.status = "stopping"; jobEvent("job/settled");
     expect(footer.state.backgroundTasks).toBe(2);
-    jobs[0]!.status = "killed"; changed?.();
+    jobs[0]!.status = "killed"; jobEvent("job/settled");
     expect(footer.state.backgroundTasks).toBe(1);
-    jobs[1]!.status = "failed"; changed?.();
+    jobs[1]!.status = "failed"; jobEvent("job/settled");
     expect(footer.state.backgroundTasks).toBe(0);
     current = other;
     fake.emit("session/event", current.session, { type: "turn/start", data: {} });
     expect(footer.state.backgroundTasks).toBe(1);
   } finally { detach(); }
   expect(footer.state.backgroundTasks).toBe(0);
-  expect(unsubscribe).toHaveBeenCalledOnce();
-  expect(changed).toBeUndefined();
+  jobs[3]!.status = "running"; jobEvent("job/registered");
+  expect(footer.state.backgroundTasks).toBe(0);
 });
 
 test("agent lifecycle counts owned running children, ignores other sessions, and cleans up", () => {

@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { parse as parseYaml } from "yaml";
+import { legacySettingsPath, readSettingsDoc, settingsPatchPath } from "../settings-store.js";
 import { appEnv, runtimeHome } from "../compat.js";
 import { silenceBudget, watchSilence, type SilenceState, type StreamChunk } from "../llm/silence.js";
 import { currentEffortName } from "../ui/rain.js";
@@ -29,17 +28,18 @@ export interface BruineSilenceService {
 }
 
 /**
- * The route's `streamIdleTimeoutMs`, the adapter's hard ceiling, from settings.yaml (re-read when
- * the file changes, since dsh hot-reloads it too).
+ * The route's `streamIdleTimeoutMs`, the adapter's hard ceiling, from the settings (re-read when
+ * the profile patch changes, since dsh hot-reloads it too).
  */
 function ceilingReader(home: () => string): (provider: string | undefined) => number {
   let cache: { mtime: number; doc: any } | undefined;
   return (provider) => {
     try {
-      const file = join(home(), "settings.yaml");
-      if (!existsSync(file)) return ADAPTER_DEFAULT_CEILING_MS;
-      const mtime = statSync(file).mtimeMs;
-      if (cache?.mtime !== mtime) cache = { mtime, doc: parseYaml(readFileSync(file, "utf8")) };
+      const dir = home();
+      const stamp = (p: string): number => (existsSync(p) ? statSync(p).mtimeMs : 0);
+      const mtime = stamp(settingsPatchPath(dir)) + stamp(legacySettingsPath(dir));
+      if (mtime === 0) return ADAPTER_DEFAULT_CEILING_MS;
+      if (cache?.mtime !== mtime) cache = { mtime, doc: readSettingsDoc(dir, (p) => readFileSync(p, "utf8")) };
       const doc = cache.doc;
       const value = provider === undefined ? undefined : (doc?.["llm-pi-ai"]?.providers?.[provider]?.streamIdleTimeoutMs ?? doc?.["llm-deepseek"]?.streamIdleTimeoutMs);
       return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : ADAPTER_DEFAULT_CEILING_MS;

@@ -9,9 +9,10 @@ import { setTimeout as delay } from "node:timers/promises";
 import * as pty from "node-pty";
 import type { Terminal as TerminalType } from "@xterm/headless";
 import { ensureProfile } from "../../src/profile.js";
-import { localServerSettings, renderSettingsYaml } from "../../src/setup/simple.js";
+import { localServerSettings } from "../../src/setup/simple.js";
 import type { TemplateCaps } from "../../src/setup/discover.js";
 import { startServer, type Script, type ServerOptions } from "./sse-server.js";
+import { writeSettingsDoc } from "../../src/settings-store.js";
 
 const require = createRequire(import.meta.url);
 const { Terminal } = require("@xterm/headless") as { Terminal: typeof TerminalType };
@@ -119,7 +120,9 @@ export class Harness {
         provider.models[0].contextWindow = 100000;
         if (opts.imageInput === true) provider.models[0].input = ["text", "image"];
         if (extraModel !== undefined) provider.models.push({ id: extraModel, contextWindow: 50000 });
-        await writeFile(join(home, "settings.yaml"), renderSettingsYaml(doc));
+        // The settings as bruine 0.2 keeps them: rows of the profile patch (dsh 0.2 no longer
+        // reads settings.yaml; `legacy` above still writes one, which bruine then imports).
+        await writeSettingsDoc(home, doc);
       }
       await writeFile(join(home, ".env"), "BRUINE_LOCAL_API_KEY=e2e\n");
       await writeFile(
@@ -268,6 +271,11 @@ export class Harness {
     await this.server.close();
     await this.flush();
     this.term.dispose();
+    // BRUINE_E2E_KEEP=1 keeps the home (logs/, the profile patch, sessions/) to look at a failure.
+    if (process.env.BRUINE_E2E_KEEP === "1") {
+      console.error(`e2e home kept: ${this.home}`);
+      return;
+    }
     await rm(this.home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     await rm(this.project, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     if (this.userHome !== undefined) await rm(this.userHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

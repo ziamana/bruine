@@ -84,33 +84,35 @@
 
 # Keep the model-facing catalog fixed for each session. The launcher reads
 # bruine.json before dsh starts; an absent tools setting selects lean.
+# (dsh 0.2 registers list_agents with send_message in tool-subagent-control.)
 - id: plan-mode
   disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 - id: tool-subagent-control
   disabled: !!js process.env.BRUINE_TOOLS !== 'full'
-- id: tool-subagent-list-agents
-  disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 - id: tool-subagent-fork
   disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 
-# A sub-agent run in the background is a plain job in the lean catalog: job_output
-# reads it, job_kill stops it and /tasks lists it. The persistent mode needs
-# send_message and list_agents, which only the full catalog mounts; with them off a
-# model has no way to follow the child and polls job_output with an id the job
-# registry has never heard of ("unknown job"), then does the work itself. One-shot
-# also waits for the child by default, which is what a small model expects.
-# (A config here replaces the base row's whole config, so the provider and the tool
-# name are repeated.)
-- id: tool-subagent
+# dsh 0.2 adds a DeepSeek route that signs in with a DeepSeek account (a login token
+# set from dsh's web app). bruine has no sign-in, so it would only sit in /provider
+# with no models: it is not mounted. The API-key route (deepseek-official) stays.
+- id: llm-deepseek-account
+  disabled: true
+
+# dsh 0.2's compaction keeps 65,536 tokens of headroom by default, which a model with
+# a window of 64k or less does not have: every request on a 32k local model failed
+# before it was sent ("leaving no pressure budget"). 8,192 fits a 16k window and still
+# leaves the summary room to be written.
+- id: compaction-basic
   config:
-    provider: spawn
-    toolName: subagent
-    backgroundMode: !!js (process.env.BRUINE_TOOLS === 'full' && 'continuable') || 'one-shot'
+    headroomTokens: 8192
+
+# The sub-agent tool keeps dsh-base's row. Since dsh 0.2 every delegation returns
+# at once and the child's answer comes back to the parent as a completion notice,
+# so the lean catalog needs no way to follow it: send_message and list_agents
+# (tool-subagent-control) stay in the full catalog only.
 - id: tool-workflow
   disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 - id: tool-goal
-  disabled: !!js process.env.BRUINE_TOOLS !== 'full'
-- id: tool-ralph
   disabled: !!js process.env.BRUINE_TOOLS !== 'full'
 
 - insert:

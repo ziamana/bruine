@@ -8,6 +8,8 @@ import { configReadPath, configWritePath } from "../compat.js";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { cloudKeyEnv } from "./cloud.js";
+import { parse as parseYaml } from "yaml";
+import { writeSettingsDoc } from "../settings-store.js";
 import {
   renderSettingsYaml,
   writeEnvVar,
@@ -505,10 +507,10 @@ export interface SetupPlan {
   skills: { homeSkillsDir: string; bundledRoot: string; chosen: string[] };
 }
 
-/** Writes the plan: settings.yaml + bruine.json atomically, .env merged, skills synced. */
+/** Writes the plan: the settings rows of the profile patch + bruine.json atomically, .env merged, skills synced. */
 export async function commitPlan(dshHome: string, plan: SetupPlan): Promise<void> {
   if (plan.env.some(([name]) => name === undefined)) throw new Error("bad env entry");
-  await writeAtom(join(dshHome, "settings.yaml"), plan.settingsYaml, 0o600);
+  await writeSettingsDoc(dshHome, parseYaml(plan.settingsYaml) as Record<string, unknown>);
   // T34: per-model effort levels are runtime state (bruine-effort owns them);
   // a wizard Save rewrites bruine.json but must not forget the user's choices.
   let bruineJson = plan.bruineJson;

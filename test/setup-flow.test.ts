@@ -1,3 +1,4 @@
+import { settingsPatchPath } from "../src/settings-store.js";
 import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -67,6 +68,7 @@ describe("SetupFlow step machine (T21)", () => {
     await expect(
       flow.save({ dshHome: home, bundledSkillsRoot: join(home, "none"), bundledSkills: [] }),
     ).rejects.toThrow(/canceled/);
+    await expect(stat(settingsPatchPath(home))).rejects.toThrow();
     await expect(stat(join(home, "settings.yaml"))).rejects.toThrow();
     await expect(stat(join(home, "bruine.json"))).rejects.toThrow();
   });
@@ -184,7 +186,7 @@ describe("Save + prefill round-trip (T21)", () => {
     flow.submit({ theme: "light" });
     flow.submit({ telemetry: false });
     await flow.save({ dshHome: home, bundledSkillsRoot: "/no/skills", bundledSkills: [] });
-    expect(await readFile(join(home, "settings.yaml"), "utf8")).toContain("contextWindow: 100096");
+    expect(await readFile(settingsPatchPath(home), "utf8")).toContain("contextWindow: 100096");
     const pre = loadPrefill(home);
     expect(pre).toBeDefined();
     const a = pre as SetupAnswers;

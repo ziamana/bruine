@@ -792,7 +792,9 @@ test.skipIf(process.platform === "win32")("the logo comes in with an effect in t
       if (rows.length === 3 && rows.map((r) => r.trimEnd()).join("|") !== plain.join("|") && h.screen().some((l) => /^[╭┌+]/.test(l.trim()) && /─|-/.test(l))) promptDuring = true;
       await delay(40);
     }
-    expect(frames.size, h.screen().join("\n")).toBeGreaterThanOrEqual(4);
+    // Three different marks (the plain one among them) is two frames of the effect: an
+    // animation. A slow macOS runner is often halfway through it when sampling starts.
+    expect(frames.size, h.screen().join("\n")).toBeGreaterThanOrEqual(3);
     expect(promptDuring, h.screen().join("\n")).toBe(true);
     // Once it is over, the mark is the plain one, exactly.
     await h.waitStable(300, 4000);
@@ -840,7 +842,8 @@ test("/config path lists the files without opening anything", async () => {
     h.press("enter");
     await h.waitFor("Config files:");
     const screen = h.screen().join("\n");
-    expect(screen).toContain("cordis.patch.yml");
+    // macOS's long temp path wraps `…/profiles/bruine/cordis.patch.yml` across two rows.
+    expect(screen.replace(/\s+/g, "")).toContain("profiles/bruine/cordis.patch.yml");
     expect(screen).toContain("bruine.json");
     expect(screen).not.toContain(".env");
   });

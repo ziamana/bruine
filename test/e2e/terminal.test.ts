@@ -281,14 +281,19 @@ test("todo_write uses the task panel and collapses to one completion line", asyn
 });
 
 test("a command left running in the background shows as `task 1` in the footer, and goes when it ends", async () => {
-  await scenario("background-task", [
-    toolScript("bash", { command: "sleep 12", description: "wait in the background", run_in_background: true }, "bg_1"), textScript("BG_STARTED"),
-  ], async (h) => {
+  // On Windows dsh mounts `pwsh` in place of `bash`. When the job ends, dsh opens a turn on
+  // the idle session to say so (tool-jobs' default `wakeup` delivery): that is the third
+  // request, and the test waits for its answer so it never lands on a closed server.
+  const shell = process.platform === "win32"
+    ? toolScript("pwsh", { command: "Start-Sleep -Seconds 12", description: "wait in the background", run_in_background: true }, "bg_1")
+    : toolScript("bash", { command: "sleep 12", description: "wait in the background", run_in_background: true }, "bg_1");
+  await scenario("background-task", [shell, textScript("BG_STARTED"), textScript("BG_ENDED")], async (h) => {
     await h.prompt("Start something in the background");
     await h.waitFor("BG_STARTED");
     await h.until(() => h.screen().some((line) => /task 1\s*$/.test(line.trimEnd())), 15_000, "task 1 in the footer");
     expect(h.screen().join("\n")).not.toContain("subagents");
     await h.until(() => !h.screen().some((line) => /task \d/.test(line)), 30_000, "the footer without a task once the command ends");
+    await h.waitFor("BG_ENDED", 30_000);
   }, false, "full");
 });
 

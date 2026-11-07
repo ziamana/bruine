@@ -842,8 +842,9 @@ test("/config path lists the files without opening anything", async () => {
     h.press("enter");
     await h.waitFor("Config files:");
     const screen = h.screen().join("\n");
-    // macOS's long temp path wraps `…/profiles/bruine/cordis.patch.yml` across two rows.
-    expect(screen.replace(/\s+/g, "")).toContain("profiles/bruine/cordis.patch.yml");
+    // macOS's long temp path wraps `…/profiles/bruine/cordis.patch.yml` across two rows, and
+    // Windows writes it with backslashes.
+    expect(screen.replace(/\s+/g, "")).toMatch(/profiles[\\/]bruine[\\/]cordis\.patch\.yml/);
     expect(screen).toContain("bruine.json");
     expect(screen).not.toContain(".env");
   });

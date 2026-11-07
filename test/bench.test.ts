@@ -615,7 +615,7 @@ describe("bench exec", () => {
     expect(unknown.passed).toBeNull();
     expect(unknown.exitCode).toBe(70);
     await rm(dir, { recursive: true, force: true });
-  });
+  }, 20_000); // four `sh` starts: over a second each on a Windows runner
 });
 
 describe("bench end to end (fake bruine)", () => {
